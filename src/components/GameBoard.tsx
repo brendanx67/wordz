@@ -7,6 +7,7 @@ interface GameBoardProps {
   selectedSquare: { row: number; col: number } | null
   onSquareClick: (row: number, col: number) => void
   onDrop: (row: number, col: number, tile: Tile) => void
+  onPickupTile: (row: number, col: number) => void
   placedTiles: Map<string, Tile>
   direction: 'across' | 'down'
 }
@@ -33,7 +34,7 @@ function bonusClasses(bonus: string | null): string {
   }
 }
 
-export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop, placedTiles, direction }: GameBoardProps) {
+export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop, onPickupTile, placedTiles, direction }: GameBoardProps) {
   const handleDragOver = (e: React.DragEvent) => {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
@@ -42,10 +43,28 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
   const handleDrop = (e: React.DragEvent, row: number, col: number) => {
     e.preventDefault()
     const tileData = e.dataTransfer.getData('application/json')
-    if (tileData) {
-      const tile = JSON.parse(tileData) as Tile
-      onDrop(row, col, tile)
+    if (!tileData) return
+
+    const parsed = JSON.parse(tileData) as Tile & { fromBoard?: string }
+
+    // If the tile is being moved from another board position, remove it from the old spot
+    if (parsed.fromBoard) {
+      onPickupTile(
+        parseInt(parsed.fromBoard.split(',')[0]),
+        parseInt(parsed.fromBoard.split(',')[1])
+      )
     }
+
+    // Strip the fromBoard metadata before placing
+    const { fromBoard: _, ...tile } = parsed
+    onDrop(row, col, tile as Tile)
+  }
+
+  const handleDragStartFromBoard = (e: React.DragEvent, row: number, col: number, tile: Tile) => {
+    // Tag the tile with its board origin so the drop handler can remove it
+    const data = { ...tile, fromBoard: `${row},${col}` }
+    e.dataTransfer.setData('application/json', JSON.stringify(data))
+    e.dataTransfer.effectAllowed = 'move'
   }
 
   return (
@@ -63,23 +82,34 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
             const bonus = getBonusType(row, col)
             const isSelected = selectedSquare?.row === row && selectedSquare?.col === col
             const isNewlyPlaced = !!placedTile
+            const isCommitted = !!tile
 
             return (
               <div
                 key={`${row}-${col}`}
-                onClick={() => onSquareClick(row, col)}
+                draggable={isNewlyPlaced}
+                onDragStart={isNewlyPlaced ? (e) => handleDragStartFromBoard(e, row, col, placedTile!) : undefined}
+                onClick={() => {
+                  if (isNewlyPlaced) {
+                    // Click a placed tile to pick it up (return to rack)
+                    onPickupTile(row, col)
+                  } else {
+                    onSquareClick(row, col)
+                  }
+                }}
                 onDragOver={handleDragOver}
                 onDrop={(e) => handleDrop(e, row, col)}
                 className={cn(
                   'w-[30px] h-[30px] sm:w-[34px] sm:h-[34px] md:w-[38px] md:h-[38px] flex items-center justify-center rounded-[2px] cursor-pointer transition-all relative select-none',
                   displayTile
                     ? isNewlyPlaced
-                      ? 'bg-gradient-to-br from-amber-200 to-amber-300 shadow-md ring-2 ring-amber-400'
+                      ? 'bg-gradient-to-br from-amber-200 to-amber-300 shadow-md ring-2 ring-amber-400 cursor-grab active:cursor-grabbing hover:ring-red-400/60'
                       : 'bg-gradient-to-br from-amber-100 to-amber-200'
                     : bonusClasses(bonus),
                   isSelected && !displayTile && 'ring-2 ring-white/80 scale-105',
-                  !displayTile && 'hover:brightness-110'
+                  !displayTile && !isCommitted && 'hover:brightness-110'
                 )}
+                title={isNewlyPlaced ? 'Click to return to rack, or drag to reposition' : undefined}
               >
                 {displayTile ? (
                   <>

@@ -193,6 +193,17 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
     setSelectedSquare(null)
   }
 
+  const handlePickupTile = useCallback((row: number, col: number) => {
+    const key = `${row},${col}`
+    if (placedTiles.has(key)) {
+      setPlacedTiles(prev => {
+        const next = new Map(prev)
+        next.delete(key)
+        return next
+      })
+    }
+  }, [placedTiles])
+
   const handleSubmitMove = async () => {
     if (!game || !isMyTurn || placedTiles.size === 0) return
     setSubmitting(true)
@@ -721,6 +732,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
             selectedSquare={selectedSquare}
             onSquareClick={handleSquareClick}
             onDrop={handleDrop}
+            onPickupTile={handlePickupTile}
             placedTiles={placedTiles}
             direction={direction}
           />
