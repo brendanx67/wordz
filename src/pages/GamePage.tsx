@@ -14,7 +14,6 @@ import { ArrowLeft, RotateCcw, Send, Flag, RefreshCw, Shuffle, Play } from 'luci
 import { cn } from '@/lib/utils'
 import { useGameRealtime } from '@/hooks/useGameRealtime'
 import { useComputerPlayer } from '@/hooks/useComputerPlayer'
-import type { Difficulty } from '@/lib/moveGenerator'
 
 interface GamePageProps {
   gameId: string
@@ -29,8 +28,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   const startGame = useStartGame()
   useGameRealtime(gameId)
 
-  const computerDifficulty = (game?.computer_difficulty ?? 'medium') as Difficulty
-  const { playComputerTurn } = useComputerPlayer(gameId, computerDifficulty)
+  const { playComputerTurn } = useComputerPlayer(gameId)
 
   const [placedTiles, setPlacedTiles] = useState<Map<string, Tile>>(new Map())
   const [selectedSquare, setSelectedSquare] = useState<{ row: number; col: number } | null>(null)
@@ -52,40 +50,13 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   const board = (game?.board ?? []) as BoardCell[][]
   const isFirstMove = board.every(row => row.every(cell => !cell.tile))
 
-  // Trigger computer's turn automatically
+  // Trigger computer's turn automatically via Edge Function
   useEffect(() => {
     if (!game || !isActive || !isComputerTurn || !game.has_computer) return
 
     const timer = setTimeout(() => {
-      const computerRack = (game.computer_rack ?? []) as Tile[]
-      const tileBag = (game.tile_bag ?? []) as Tile[]
-      const turnOrder = game.turn_order as string[]
-
-      // Build player list for scoring
-      const allPlayers = [
-        ...game.game_players.map(p => ({
-          player_id: p.player_id,
-          score: p.score,
-          rack: (p.rack ?? []) as Tile[],
-        })),
-        {
-          player_id: 'computer-player',
-          score: game.computer_score,
-          rack: computerRack,
-        },
-      ]
-
-      playComputerTurn(
-        board,
-        computerRack,
-        tileBag,
-        turnOrder,
-        game.turn_index,
-        game.consecutive_passes,
-        game.computer_score,
-        allPlayers
-      )
-    }, 1500) // Small delay so it feels like the computer is "thinking"
+      playComputerTurn()
+    }, 1500)
 
     return () => clearTimeout(timer)
   // eslint-disable-next-line react-hooks/exhaustive-deps
