@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { useGame, useGameMoves } from '@/hooks/useGames'
+import { useGame, useGameMoves, useStartGame } from '@/hooks/useGames'
 import { supabase } from '@/lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import { validateAndScoreMove } from '@/lib/scoring'
@@ -10,7 +10,7 @@ import type { Tile, BoardCell, PlacedTile } from '@/lib/gameConstants'
 import GameBoard from '@/components/GameBoard'
 import TileRack from '@/components/TileRack'
 import { toast } from 'sonner'
-import { ArrowLeft, RotateCcw, Send, Flag, RefreshCw, Shuffle } from 'lucide-react'
+import { ArrowLeft, RotateCcw, Send, Flag, RefreshCw, Shuffle, Play } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useGameRealtime } from '@/hooks/useGameRealtime'
 
@@ -24,6 +24,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   const { data: game, isLoading } = useGame(gameId)
   const { data: moves } = useGameMoves(gameId)
   const queryClient = useQueryClient()
+  const startGame = useStartGame()
   useGameRealtime(gameId)
 
   const [placedTiles, setPlacedTiles] = useState<Map<string, Tile>>(new Map())
@@ -650,8 +651,32 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
         <div className="flex flex-col items-center gap-4">
           {/* Game status */}
           {game.status === 'waiting' && (
-            <div className="text-amber-400 bg-amber-900/20 px-4 py-2 rounded-lg text-sm">
-              Waiting for players to join... ({players.length}/4)
+            <div className="flex flex-col items-center gap-3 bg-amber-900/20 px-6 py-4 rounded-lg">
+              <div className="text-amber-400 text-sm">
+                {players.length}/4 players joined
+              </div>
+              {game.created_by === userId && players.length >= 2 ? (
+                <Button
+                  onClick={async () => {
+                    try {
+                      await startGame.mutateAsync(gameId)
+                      toast.success('Game started!')
+                      queryClient.invalidateQueries({ queryKey: ['game', gameId] })
+                    } catch {
+                      toast.error('Failed to start game')
+                    }
+                  }}
+                  disabled={startGame.isPending}
+                  className="bg-green-700 hover:bg-green-600 text-white font-semibold px-8 py-5 text-lg"
+                >
+                  <Play className="h-5 w-5 mr-2" />
+                  {startGame.isPending ? 'Starting...' : 'Start Game!'}
+                </Button>
+              ) : game.created_by === userId ? (
+                <div className="text-amber-500/70 text-xs">Need at least 2 players to start</div>
+              ) : (
+                <div className="text-amber-500/70 text-xs">Waiting for the game creator to start...</div>
+              )}
             </div>
           )}
           {game.status === 'finished' && (
