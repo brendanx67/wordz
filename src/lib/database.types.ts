@@ -107,10 +107,14 @@ export type Database = {
       games: {
         Row: {
           board: Json
+          computer_difficulty: string | null
+          computer_rack: Json
+          computer_score: number
           consecutive_passes: number
           created_at: string | null
           created_by: string
           current_turn: string | null
+          has_computer: boolean
           id: string
           last_move: Json | null
           status: string
@@ -122,10 +126,14 @@ export type Database = {
         }
         Insert: {
           board?: Json
+          computer_difficulty?: string | null
+          computer_rack?: Json
+          computer_score?: number
           consecutive_passes?: number
           created_at?: string | null
           created_by: string
           current_turn?: string | null
+          has_computer?: boolean
           id?: string
           last_move?: Json | null
           status?: string
@@ -137,10 +145,14 @@ export type Database = {
         }
         Update: {
           board?: Json
+          computer_difficulty?: string | null
+          computer_rack?: Json
+          computer_score?: number
           consecutive_passes?: number
           created_at?: string | null
           created_by?: string
           current_turn?: string | null
+          has_computer?: boolean
           id?: string
           last_move?: Json | null
           status?: string

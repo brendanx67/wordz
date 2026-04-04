@@ -1,9 +1,10 @@
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useOpenGames, useMyGames, useCreateGame, useJoinGame, useStartGame } from '@/hooks/useGames'
+import { useOpenGames, useMyGames, useCreateGame, useCreateComputerGame, useJoinGame, useStartGame } from '@/hooks/useGames'
 import { useGameHistory } from '@/hooks/useGameHistory'
-import { LogOut, Plus, Play, Users, Clock, Trophy, History } from 'lucide-react'
+import { useState } from 'react'
+import { LogOut, Plus, Play, Users, Clock, Trophy, History, Bot } from 'lucide-react'
 import { toast } from 'sonner'
 
 // Supabase returns profiles as array or object depending on the relation; normalize it
@@ -25,8 +26,10 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
   const { data: myGames, isLoading: loadingMine } = useMyGames(userId)
   const { data: gameHistory, isLoading: loadingHistory } = useGameHistory(userId)
   const createGame = useCreateGame()
+  const createComputerGame = useCreateComputerGame()
   const joinGame = useJoinGame()
   const startGame = useStartGame()
+  const [showDifficulty, setShowDifficulty] = useState(false)
 
   const handleCreate = async () => {
     try {
@@ -76,15 +79,52 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
 
       <main className="container mx-auto px-4 py-8 max-w-4xl space-y-8">
         {/* Create Game */}
-        <div className="text-center">
+        <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
           <Button
             onClick={handleCreate}
             disabled={createGame.isPending}
             className="bg-amber-700 hover:bg-amber-600 text-amber-50 font-semibold text-lg px-8 py-6"
           >
             <Plus className="h-5 w-5 mr-2" />
-            {createGame.isPending ? 'Creating...' : 'Create New Game'}
+            {createGame.isPending ? 'Creating...' : 'Create Multiplayer Game'}
           </Button>
+          <div className="relative">
+            <Button
+              onClick={() => setShowDifficulty(!showDifficulty)}
+              disabled={createComputerGame.isPending}
+              className="bg-emerald-700 hover:bg-emerald-600 text-emerald-50 font-semibold text-lg px-8 py-6"
+            >
+              <Bot className="h-5 w-5 mr-2" />
+              {createComputerGame.isPending ? 'Creating...' : 'Play vs Computer'}
+            </Button>
+            {showDifficulty && (
+              <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-amber-950 border border-amber-700/40 rounded-lg p-3 shadow-xl z-20 flex gap-2">
+                {(['easy', 'medium', 'hard'] as const).map((diff) => (
+                  <Button
+                    key={diff}
+                    size="sm"
+                    onClick={async () => {
+                      setShowDifficulty(false)
+                      try {
+                        const gameId = await createComputerGame.mutateAsync({ userId, difficulty: diff })
+                        toast.success(`Game started vs Computer (${diff})!`)
+                        onOpenGame(gameId)
+                      } catch {
+                        toast.error('Failed to create game')
+                      }
+                    }}
+                    className={
+                      diff === 'easy' ? 'bg-green-700 hover:bg-green-600 text-white' :
+                      diff === 'medium' ? 'bg-amber-600 hover:bg-amber-500 text-white' :
+                      'bg-red-700 hover:bg-red-600 text-white'
+                    }
+                  >
+                    {diff.charAt(0).toUpperCase() + diff.slice(1)}
+                  </Button>
+                ))}
+              </div>
+            )}
+          </div>
         </div>
 
         {/* My Active Games */}

@@ -13,6 +13,8 @@ import { toast } from 'sonner'
 import { ArrowLeft, RotateCcw, Send, Flag, RefreshCw, Shuffle, Play } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useGameRealtime } from '@/hooks/useGameRealtime'
+import { useComputerPlayer } from '@/hooks/useComputerPlayer'
+import type { Difficulty } from '@/lib/moveGenerator'
 
 interface GamePageProps {
   gameId: string
@@ -26,6 +28,9 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   const queryClient = useQueryClient()
   const startGame = useStartGame()
   useGameRealtime(gameId)
+
+  const computerDifficulty = (game?.computer_difficulty ?? 'medium') as Difficulty
+  const { playComputerTurn } = useComputerPlayer(gameId, computerDifficulty)
 
   const [placedTiles, setPlacedTiles] = useState<Map<string, Tile>>(new Map())
   const [selectedSquare, setSelectedSquare] = useState<{ row: number; col: number } | null>(null)
@@ -42,9 +47,49 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   const rackTiles = fullRack.filter(t => !placedTileIds.has(t.id))
 
   const isMyTurn = game?.current_turn === userId
+  const isComputerTurn = game?.current_turn === 'computer-player'
   const isActive = game?.status === 'active'
   const board = (game?.board ?? []) as BoardCell[][]
   const isFirstMove = board.every(row => row.every(cell => !cell.tile))
+
+  // Trigger computer's turn automatically
+  useEffect(() => {
+    if (!game || !isActive || !isComputerTurn || !game.has_computer) return
+
+    const timer = setTimeout(() => {
+      const computerRack = (game.computer_rack ?? []) as Tile[]
+      const tileBag = (game.tile_bag ?? []) as Tile[]
+      const turnOrder = game.turn_order as string[]
+
+      // Build player list for scoring
+      const allPlayers = [
+        ...game.game_players.map(p => ({
+          player_id: p.player_id,
+          score: p.score,
+          rack: (p.rack ?? []) as Tile[],
+        })),
+        {
+          player_id: 'computer-player',
+          score: game.computer_score,
+          rack: computerRack,
+        },
+      ]
+
+      playComputerTurn(
+        board,
+        computerRack,
+        tileBag,
+        turnOrder,
+        game.turn_index,
+        game.consecutive_passes,
+        game.computer_score,
+        allPlayers
+      )
+    }, 1500) // Small delay so it feels like the computer is "thinking"
+
+    return () => clearTimeout(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game?.current_turn, game?.status])
 
   const handleSquareClick = useCallback((row: number, col: number) => {
     // If there's already a committed tile, ignore
@@ -636,6 +681,30 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                 </span>
               </div>
             ))}
+            {/* Computer player in scoreboard */}
+            {game.has_computer && (
+              <div
+                className={cn(
+                  'flex items-center justify-between py-2 px-3 rounded-lg transition-colors',
+                  game.current_turn === 'computer-player' && 'bg-amber-800/20 ring-1 ring-amber-600/30'
+                )}
+              >
+                <div>
+                  <div className={cn(
+                    'font-medium text-sm',
+                    game.current_turn === 'computer-player' ? 'text-amber-200' : 'text-amber-400/70'
+                  )}>
+                    Computer ({game.computer_difficulty})
+                  </div>
+                  {game.current_turn === 'computer-player' && isActive && (
+                    <div className="text-[10px] text-green-400 animate-pulse">Thinking...</div>
+                  )}
+                </div>
+                <span className="text-xl font-bold text-amber-300" style={{ fontFamily: "'Playfair Display', serif" }}>
+                  {game.computer_score}
+                </span>
+              </div>
+            )}
           </CardContent>
 
           {/* Move history */}
@@ -698,9 +767,14 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
               </div>
             </div>
           )}
-          {isActive && !isMyTurn && (
+          {isActive && !isMyTurn && !isComputerTurn && (
             <div className="text-amber-500/70 text-sm">
               Waiting for {currentTurnPlayer?.profiles.display_name} to play...
+            </div>
+          )}
+          {isActive && isComputerTurn && (
+            <div className="text-amber-400 text-sm font-medium animate-pulse">
+              Computer is thinking...
             </div>
           )}
           {isActive && isMyTurn && (

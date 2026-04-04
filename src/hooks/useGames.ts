@@ -14,6 +14,10 @@ export interface GameRow {
   turn_index: number
   last_move: unknown
   consecutive_passes: number
+  has_computer: boolean
+  computer_difficulty: 'easy' | 'medium' | 'hard' | null
+  computer_rack: Tile[]
+  computer_score: number
   winner: string | null
   created_at: string
   game_players: {
@@ -98,6 +102,56 @@ export function useCreateGame() {
           game_id: game.id,
           player_id: userId,
           rack: drawn,
+        })
+      if (playerErr) throw playerErr
+
+      return game.id
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['games'] })
+    },
+  })
+}
+
+export function useCreateComputerGame() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ userId, difficulty }: { userId: string; difficulty: 'easy' | 'medium' | 'hard' }) => {
+      const bag = createTileBag()
+      const { drawn: humanTiles, remaining: bag2 } = drawTiles(bag, RACK_SIZE)
+      const { drawn: computerTiles, remaining: finalBag } = drawTiles(bag2, RACK_SIZE)
+
+      // Random who goes first
+      const humanFirst = Math.random() < 0.5
+      const turnOrder = humanFirst
+        ? [userId, 'computer-player']
+        : ['computer-player', userId]
+
+      const { data: game, error: gameErr } = await supabase
+        .from('games')
+        .insert({
+          created_by: userId,
+          status: 'active',
+          board: createEmptyBoard(),
+          tile_bag: finalBag,
+          turn_order: turnOrder,
+          turn_index: 0,
+          current_turn: turnOrder[0],
+          has_computer: true,
+          computer_difficulty: difficulty,
+          computer_rack: computerTiles,
+          computer_score: 0,
+        })
+        .select('id')
+        .single()
+      if (gameErr) throw gameErr
+
+      const { error: playerErr } = await supabase
+        .from('game_players')
+        .insert({
+          game_id: game.id,
+          player_id: userId,
+          rack: humanTiles,
         })
       if (playerErr) throw playerErr
 
