@@ -194,7 +194,48 @@ export type Database = {
       }
     }
     Views: {
-      [_ in never]: never
+      game_players_safe: {
+        Row: {
+          game_id: string | null
+          id: string | null
+          joined_at: string | null
+          player_id: string | null
+          rack: Json | null
+          score: number | null
+        }
+        Insert: {
+          game_id?: string | null
+          id?: string | null
+          joined_at?: string | null
+          player_id?: string | null
+          rack?: never
+          score?: number | null
+        }
+        Update: {
+          game_id?: string | null
+          id?: string | null
+          joined_at?: string | null
+          player_id?: string | null
+          rack?: never
+          score?: number | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "game_players_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "game_players_player_id_fkey"
+            columns: ["player_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Functions: {
       [_ in never]: never

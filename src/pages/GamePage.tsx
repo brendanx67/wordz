@@ -251,15 +251,53 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
       if (gameErr) throw gameErr
 
       // Update player score and rack
+      const myNewScore = (myPlayer?.score ?? 0) + result.totalScore
       const { error: playerErr } = await supabase
         .from('game_players')
         .update({
-          score: (myPlayer?.score ?? 0) + result.totalScore,
+          score: myNewScore,
           rack: newRack,
         })
         .eq('game_id', gameId)
         .eq('player_id', userId)
       if (playerErr) throw playerErr
+
+      // Check if game is over: player emptied rack and bag is empty
+      const gameOver = newRack.length === 0 && remaining.length === 0
+      if (gameOver) {
+        // End-game scoring: deduct remaining tile values from other players, add to this player
+        let bonusFromOthers = 0
+        const otherPlayers = players.filter(p => p.player_id !== userId)
+        for (const op of otherPlayers) {
+          const opRack = (op.rack ?? []) as Tile[]
+          const rackValue = opRack.reduce((sum, t) => sum + t.value, 0)
+          bonusFromOthers += rackValue
+          await supabase.from('game_players').update({
+            score: Math.max(0, op.score - rackValue),
+          }).eq('game_id', gameId).eq('player_id', op.player_id)
+        }
+
+        const finalScore = myNewScore + bonusFromOthers
+        await supabase.from('game_players').update({ score: finalScore })
+          .eq('game_id', gameId).eq('player_id', userId)
+
+        // Find winner (highest score)
+        const allScores = [
+          { id: userId, score: finalScore },
+          ...otherPlayers.map(op => {
+            const opRack = (op.rack ?? []) as Tile[]
+            const rackValue = opRack.reduce((sum, t) => sum + t.value, 0)
+            return { id: op.player_id, score: Math.max(0, op.score - rackValue) }
+          }),
+        ]
+        const winner = allScores.reduce((best, p) => p.score > best.score ? p : best)
+
+        await supabase.from('games').update({
+          status: 'finished',
+          winner: winner.id,
+          updated_at: new Date().toISOString(),
+        }).eq('id', gameId)
+      }
 
       // Record move
       await supabase.from('game_moves').insert({
@@ -271,7 +309,11 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
         score: result.totalScore,
       })
 
-      toast.success(`${result.words.map(w => w.word).join(', ')} \u2014 ${result.totalScore} points!`)
+      if (gameOver) {
+        toast.success(`Game over! You played out — ${result.words.map(w => w.word).join(', ')} for ${result.totalScore} points!`)
+      } else {
+        toast.success(`${result.words.map(w => w.word).join(', ')} \u2014 ${result.totalScore} points!`)
+      }
       setPlacedTiles(new Map())
       setSelectedSquare(null)
       queryClient.invalidateQueries({ queryKey: ['game', gameId] })

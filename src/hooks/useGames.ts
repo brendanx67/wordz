@@ -187,16 +187,21 @@ export function useGame(gameId: string | undefined) {
     queryKey: ['game', gameId],
     enabled: !!gameId,
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('games')
-        .select(`
-          *,
-          game_players(player_id, score, rack, profiles(display_name))
-        `)
-        .eq('id', gameId!)
-        .single()
-      if (error) throw error
-      return data as unknown as GameRow
+      // Fetch game and players separately so we can use the safe view for racks
+      const [gameRes, playersRes] = await Promise.all([
+        supabase.from('games').select('*').eq('id', gameId!).single(),
+        supabase.from('game_players_safe').select('player_id, score, rack, profiles:player_id(display_name)').eq('game_id', gameId!),
+      ])
+      if (gameRes.error) throw gameRes.error
+      if (playersRes.error) throw playersRes.error
+
+      return {
+        ...gameRes.data,
+        game_players: playersRes.data.map(p => ({
+          ...p,
+          profiles: Array.isArray(p.profiles) ? p.profiles[0] : p.profiles,
+        })),
+      } as unknown as GameRow
     },
     refetchInterval: 3000,
   })
