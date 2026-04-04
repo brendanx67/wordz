@@ -406,12 +406,22 @@ async function getWordList(): Promise<string> {
   return wordList;
 }
 
+// ─── TYPES FOR MULTI-COMPUTER ──────────────────────────────────────────────────
+interface ComputerPlayer {
+  id: string;
+  name: string;
+  difficulty: Difficulty;
+  rack: Tile[];
+  score: number;
+}
+
 // ─── MAIN HANDLER ──────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
 
   try {
-    const { game_id } = await req.json() as { game_id: string };
+    const body = await req.json() as { game_id: string; player_id?: string };
+    const { game_id, player_id } = body;
     if (!game_id) {
       return new Response(JSON.stringify({ error: "Missing game_id" }), {
         status: 400, headers: { ...cors, "Content-Type": "application/json" },
@@ -423,7 +433,6 @@ Deno.serve(async (req) => {
       Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
     );
 
-    // Fetch game state
     const { data: game, error: gErr } = await supabase
       .from("games")
       .select("*")
@@ -435,14 +444,44 @@ Deno.serve(async (req) => {
       });
     }
 
-    if (game.current_turn !== "computer-player") {
-      return new Response(JSON.stringify({ error: "Not computer's turn" }), {
+    if (game.status !== "active") {
+      return new Response(JSON.stringify({ error: "Game not active" }), {
         status: 400, headers: { ...cors, "Content-Type": "application/json" },
       });
     }
 
-    if (game.status !== "active") {
-      return new Response(JSON.stringify({ error: "Game not active" }), {
+    const currentTurn = game.current_turn as string;
+    // Validate it's a computer player's turn
+    if (!currentTurn.startsWith("computer-")) {
+      return new Response(JSON.stringify({ error: "Not a computer's turn" }), {
+        status: 400, headers: { ...cors, "Content-Type": "application/json" },
+      });
+    }
+
+    // If player_id specified, validate it matches
+    if (player_id && player_id !== currentTurn) {
+      return new Response(JSON.stringify({ error: "Not this computer's turn" }), {
+        status: 400, headers: { ...cors, "Content-Type": "application/json" },
+      });
+    }
+
+    // Find the computer player in the computer_players array
+    const computerPlayers = (game.computer_players || []) as ComputerPlayer[];
+    let cpuPlayer = computerPlayers.find(cp => cp.id === currentTurn);
+
+    // Fallback for legacy single-computer games
+    if (!cpuPlayer && currentTurn === "computer-player") {
+      cpuPlayer = {
+        id: "computer-player",
+        name: `Computer (${game.computer_difficulty || "medium"})`,
+        difficulty: (game.computer_difficulty || "medium") as Difficulty,
+        rack: game.computer_rack as Tile[],
+        score: game.computer_score as number,
+      };
+    }
+
+    if (!cpuPlayer) {
+      return new Response(JSON.stringify({ error: "Computer player not found" }), {
         status: 400, headers: { ...cors, "Content-Type": "application/json" },
       });
     }
@@ -452,14 +491,12 @@ Deno.serve(async (req) => {
     const trie = buildTrie(wl);
 
     const board = game.board as BoardCell[][];
-    const computerRack = game.computer_rack as Tile[];
     const tileBag = game.tile_bag as Tile[];
     const turnOrder = game.turn_order as string[];
-    const difficulty = (game.computer_difficulty || "medium") as Difficulty;
 
     // Generate and select a move
-    const moves = generateAllMoves(board, computerRack, trie);
-    const selected = selectMove(moves, difficulty);
+    const moves = generateAllMoves(board, cpuPlayer.rack, trie);
+    const selected = selectMove(moves, cpuPlayer.difficulty);
 
     if (!selected) {
       // No valid moves — pass
@@ -467,11 +504,22 @@ Deno.serve(async (req) => {
       const newPasses = game.consecutive_passes + 1;
       const isGameOver = newPasses >= turnOrder.length * 2;
 
+      // Record move in history
+      const moveHistory = (game.move_history || []) as unknown[];
+      moveHistory.push({
+        player_id: cpuPlayer.id,
+        player_name: cpuPlayer.name,
+        type: "pass",
+        board_snapshot: board,
+        timestamp: new Date().toISOString(),
+      });
+
       const updates: Record<string, unknown> = {
         current_turn: turnOrder[nextIndex],
         turn_index: nextIndex,
         consecutive_passes: newPasses,
-        last_move: { player_id: "computer-player", type: "pass" },
+        last_move: { player_id: cpuPlayer.id, type: "pass" },
+        move_history: moveHistory,
         updated_at: new Date().toISOString(),
       };
 
@@ -481,7 +529,7 @@ Deno.serve(async (req) => {
           .from("game_players").select("player_id, score").eq("game_id", game_id);
         const allScores = [
           ...(players || []).map((p: { player_id: string; score: number }) => ({ id: p.player_id, score: p.score })),
-          { id: "computer-player", score: game.computer_score },
+          ...computerPlayers.map(cp => ({ id: cp.id, score: cp.score })),
         ];
         const winner = allScores.reduce((best, p) => p.score > best.score ? p : best);
         updates.winner = winner.id;
@@ -489,7 +537,11 @@ Deno.serve(async (req) => {
 
       await supabase.from("games").update(updates).eq("id", game_id);
 
-      return new Response(JSON.stringify({ action: "pass", game_over: isGameOver }), {
+      return new Response(JSON.stringify({
+        action: "pass",
+        player_name: cpuPlayer.name,
+        game_over: isGameOver,
+      }), {
         headers: { ...cors, "Content-Type": "application/json" },
       });
     }
@@ -505,14 +557,34 @@ Deno.serve(async (req) => {
     }
 
     const { drawn, remaining } = drawTiles(tileBag, selected.tiles.length);
-    const newRack = computerRack.filter(
+    const newRack = cpuPlayer.rack.filter(
       (t: Tile) => !selected.tiles.some(pt => pt.tile.id === t.id)
     );
     newRack.push(...drawn);
 
     const nextIndex = (game.turn_index + 1) % turnOrder.length;
     const gameOver = newRack.length === 0 && remaining.length === 0;
-    let newScore = game.computer_score + selected.totalScore;
+    let newScore = cpuPlayer.score + selected.totalScore;
+
+    // Update this computer player in the array
+    const updatedCpuPlayers = computerPlayers.map(cp =>
+      cp.id === cpuPlayer!.id
+        ? { ...cp, rack: newRack, score: newScore }
+        : cp
+    );
+
+    // Record move in history
+    const moveHistory = (game.move_history || []) as unknown[];
+    moveHistory.push({
+      player_id: cpuPlayer.id,
+      player_name: cpuPlayer.name,
+      type: "play",
+      tiles: selected.tiles,
+      words: selected.words,
+      score: selected.totalScore,
+      board_snapshot: newBoard,
+      timestamp: new Date().toISOString(),
+    });
 
     const gameUpdates: Record<string, unknown> = {
       board: newBoard,
@@ -520,15 +592,15 @@ Deno.serve(async (req) => {
       current_turn: turnOrder[nextIndex],
       turn_index: nextIndex,
       consecutive_passes: 0,
-      computer_rack: newRack,
-      computer_score: newScore,
+      computer_players: updatedCpuPlayers,
       last_move: {
-        player_id: "computer-player",
+        player_id: cpuPlayer.id,
         type: "play",
         tiles: selected.tiles,
         words: selected.words,
         score: selected.totalScore,
       },
+      move_history: moveHistory,
       updated_at: new Date().toISOString(),
     };
 
@@ -543,8 +615,20 @@ Deno.serve(async (req) => {
         await supabase.from("game_players").update({ score: Math.max(0, p.score - rackVal) })
           .eq("game_id", game_id).eq("player_id", p.player_id);
       }
+      // Also deduct from other computer players' racks
+      for (const otherCp of updatedCpuPlayers) {
+        if (otherCp.id !== cpuPlayer.id) {
+          const rackVal = otherCp.rack.reduce((s: number, t: Tile) => s + t.value, 0);
+          bonus += rackVal;
+          otherCp.score = Math.max(0, otherCp.score - rackVal);
+        }
+      }
       newScore += bonus;
-      gameUpdates.computer_score = newScore;
+      // Update the winning computer's score in the array
+      const finalCpuPlayers = updatedCpuPlayers.map(cp =>
+        cp.id === cpuPlayer!.id ? { ...cp, score: newScore } : cp
+      );
+      gameUpdates.computer_players = finalCpuPlayers;
       gameUpdates.status = "finished";
 
       const allScores = [
@@ -552,7 +636,7 @@ Deno.serve(async (req) => {
           const rv = ((p.rack || []) as Tile[]).reduce((s: number, t: Tile) => s + t.value, 0);
           return { id: p.player_id, score: Math.max(0, p.score - rv) };
         }),
-        { id: "computer-player", score: newScore },
+        ...finalCpuPlayers.map(cp => ({ id: cp.id, score: cp.score })),
       ];
       const winner = allScores.reduce((best, p) => p.score > best.score ? p : best);
       gameUpdates.winner = winner.id;
@@ -562,6 +646,7 @@ Deno.serve(async (req) => {
 
     return new Response(JSON.stringify({
       action: "play",
+      player_name: cpuPlayer.name,
       words: selected.words.map(w => w.word),
       score: selected.totalScore,
       total_score: newScore,

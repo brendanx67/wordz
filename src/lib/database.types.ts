@@ -107,7 +107,9 @@ export type Database = {
       games: {
         Row: {
           board: Json
+          computer_delay: number
           computer_difficulty: string | null
+          computer_players: Json
           computer_rack: Json
           computer_score: number
           consecutive_passes: number
@@ -117,6 +119,7 @@ export type Database = {
           has_computer: boolean
           id: string
           last_move: Json | null
+          move_history: Json
           status: string
           tile_bag: Json
           turn_index: number
@@ -126,7 +129,9 @@ export type Database = {
         }
         Insert: {
           board?: Json
+          computer_delay?: number
           computer_difficulty?: string | null
+          computer_players?: Json
           computer_rack?: Json
           computer_score?: number
           consecutive_passes?: number
@@ -136,6 +141,7 @@ export type Database = {
           has_computer?: boolean
           id?: string
           last_move?: Json | null
+          move_history?: Json
           status?: string
           tile_bag?: Json
           turn_index?: number
@@ -145,7 +151,9 @@ export type Database = {
         }
         Update: {
           board?: Json
+          computer_delay?: number
           computer_difficulty?: string | null
+          computer_players?: Json
           computer_rack?: Json
           computer_score?: number
           consecutive_passes?: number
@@ -155,6 +163,7 @@ export type Database = {
           has_computer?: boolean
           id?: string
           last_move?: Json | null
+          move_history?: Json
           status?: string
           tile_bag?: Json
           turn_index?: number
@@ -166,20 +175,6 @@ export type Database = {
           {
             foreignKeyName: "games_created_by_fkey"
             columns: ["created_by"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "games_current_turn_fkey"
-            columns: ["current_turn"]
-            isOneToOne: false
-            referencedRelation: "profiles"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "games_winner_fkey"
-            columns: ["winner"]
             isOneToOne: false
             referencedRelation: "profiles"
             referencedColumns: ["id"]
@@ -209,7 +204,6 @@ export type Database = {
       game_players_safe: {
         Row: {
           game_id: string | null
-          id: string | null
           joined_at: string | null
           player_id: string | null
           rack: Json | null
@@ -217,7 +211,6 @@ export type Database = {
         }
         Insert: {
           game_id?: string | null
-          id?: string | null
           joined_at?: string | null
           player_id?: string | null
           rack?: never
@@ -225,7 +218,6 @@ export type Database = {
         }
         Update: {
           game_id?: string | null
-          id?: string | null
           joined_at?: string | null
           player_id?: string | null
           rack?: never

@@ -1,13 +1,15 @@
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useOpenGames, useMyGames, useCreateGame, useCreateComputerGame, useJoinGame, useStartGame } from '@/hooks/useGames'
+import { useOpenGames, useMyGames, useCreateConfiguredGame, useJoinGame, useStartGame } from '@/hooks/useGames'
+import type { ComputerPlayer } from '@/hooks/useGames'
 import { useGameHistory } from '@/hooks/useGameHistory'
 import { useState } from 'react'
-import { LogOut, Plus, Play, Users, Clock, Trophy, History, Bot } from 'lucide-react'
+import { LogOut, Plus, Play, Users, Clock, Trophy, History, Eye } from 'lucide-react'
 import { toast } from 'sonner'
+import CreateGameForm from '@/components/CreateGameForm'
+import type { GameConfig } from '@/components/CreateGameForm'
 
-// Supabase returns profiles as array or object depending on the relation; normalize it
 function getDisplayName(profiles: { display_name: string } | { display_name: string }[] | null): string {
   if (!profiles) return 'Unknown'
   if (Array.isArray(profiles)) return profiles[0]?.display_name ?? 'Unknown'
@@ -25,16 +27,16 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
   const { data: openGames, isLoading: loadingOpen } = useOpenGames()
   const { data: myGames, isLoading: loadingMine } = useMyGames(userId)
   const { data: gameHistory, isLoading: loadingHistory } = useGameHistory(userId)
-  const createGame = useCreateGame()
-  const createComputerGame = useCreateComputerGame()
+  const createConfiguredGame = useCreateConfiguredGame()
   const joinGame = useJoinGame()
   const startGame = useStartGame()
-  const [showDifficulty, setShowDifficulty] = useState(false)
+  const [showCreateForm, setShowCreateForm] = useState(false)
 
-  const handleCreate = async () => {
+  const handleCreateGame = async (config: GameConfig) => {
     try {
-      const gameId = await createGame.mutateAsync(userId)
-      toast.success('Game created! Waiting for players to join...')
+      const gameId = await createConfiguredGame.mutateAsync({ userId, config })
+      setShowCreateForm(false)
+      toast.success('Game created!')
       onOpenGame(gameId)
     } catch {
       toast.error('Failed to create game')
@@ -79,53 +81,23 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
 
       <main className="container mx-auto px-4 py-8 max-w-4xl space-y-8">
         {/* Create Game */}
-        <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-          <Button
-            onClick={handleCreate}
-            disabled={createGame.isPending}
-            className="bg-amber-700 hover:bg-amber-600 text-amber-50 font-semibold text-lg px-8 py-6"
-          >
-            <Plus className="h-5 w-5 mr-2" />
-            {createGame.isPending ? 'Creating...' : 'Create Multiplayer Game'}
-          </Button>
-          <div className="relative">
+        {showCreateForm ? (
+          <CreateGameForm
+            onCreateGame={handleCreateGame}
+            onCancel={() => setShowCreateForm(false)}
+            isPending={createConfiguredGame.isPending}
+          />
+        ) : (
+          <div className="flex justify-center">
             <Button
-              onClick={() => setShowDifficulty(!showDifficulty)}
-              disabled={createComputerGame.isPending}
-              className="bg-emerald-700 hover:bg-emerald-600 text-emerald-50 font-semibold text-lg px-8 py-6"
+              onClick={() => setShowCreateForm(true)}
+              className="bg-amber-700 hover:bg-amber-600 text-amber-50 font-semibold text-lg px-8 py-6"
             >
-              <Bot className="h-5 w-5 mr-2" />
-              {createComputerGame.isPending ? 'Creating...' : 'Play vs Computer'}
+              <Plus className="h-5 w-5 mr-2" />
+              New Game
             </Button>
-            {showDifficulty && (
-              <div className="absolute top-full mt-2 left-1/2 -translate-x-1/2 bg-amber-950 border border-amber-700/40 rounded-lg p-3 shadow-xl z-20 flex gap-2">
-                {(['easy', 'medium', 'hard'] as const).map((diff) => (
-                  <Button
-                    key={diff}
-                    size="sm"
-                    onClick={async () => {
-                      setShowDifficulty(false)
-                      try {
-                        const gameId = await createComputerGame.mutateAsync({ userId, difficulty: diff })
-                        toast.success(`Game started vs Computer (${diff})!`)
-                        onOpenGame(gameId)
-                      } catch {
-                        toast.error('Failed to create game')
-                      }
-                    }}
-                    className={
-                      diff === 'easy' ? 'bg-green-700 hover:bg-green-600 text-white' :
-                      diff === 'medium' ? 'bg-amber-600 hover:bg-amber-500 text-white' :
-                      'bg-red-700 hover:bg-red-600 text-white'
-                    }
-                  >
-                    {diff.charAt(0).toUpperCase() + diff.slice(1)}
-                  </Button>
-                ))}
-              </div>
-            )}
           </div>
-        </div>
+        )}
 
         {/* My Active Games */}
         <Card className="border-amber-900/30 bg-amber-950/30">
@@ -147,9 +119,18 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
               <div className="space-y-3">
                 {myGames.map((game) => {
                   const players = game.game_players ?? []
+                  const computerPlayers = (game.computer_players ?? []) as ComputerPlayer[]
                   const isCreator = game.created_by === userId
                   const isWaiting = game.status === 'waiting'
                   const isMyTurn = game.current_turn === userId
+                  const isPlayer = players.some((p: { player_id: string }) => p.player_id === userId)
+                  const isSpectator = !isPlayer && isCreator
+
+                  // Build display names including computer players
+                  const allNames: string[] = [
+                    ...players.map((p: { profiles: unknown }) => getDisplayName(p.profiles as { display_name: string })),
+                    ...computerPlayers.map(cp => cp.name),
+                  ]
 
                   return (
                     <div
@@ -157,14 +138,14 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
                       className="flex items-center justify-between p-4 rounded-lg bg-amber-950/40 border border-amber-900/20 hover:border-amber-700/40 transition-colors"
                     >
                       <div className="flex-1">
-                        <div className="flex items-center gap-3">
+                        <div className="flex items-center gap-3 flex-wrap">
                           <span className="text-amber-200 font-medium">
-                            {players.map((p: { profiles: unknown }) => getDisplayName(p.profiles as { display_name: string })).join(' vs ')}
+                            {allNames.join(' vs ')}
                           </span>
                           {isWaiting && (
                             <span className="text-xs px-2 py-0.5 rounded-full bg-amber-800/40 text-amber-400">
                               <Clock className="h-3 w-3 inline mr-1" />
-                              Waiting ({players.length}/4)
+                              Waiting
                             </span>
                           )}
                           {isMyTurn && (
@@ -172,12 +153,19 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
                               Your Turn!
                             </span>
                           )}
+                          {isSpectator && (
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-800/40 text-blue-400">
+                              <Eye className="h-3 w-3 inline mr-1" />
+                              Spectating
+                            </span>
+                          )}
                         </div>
                         {!isWaiting && (
                           <div className="text-xs text-amber-600/60 mt-1">
-                            Scores: {players.map((p: { profiles: unknown; score: number }) =>
+                            {players.map((p: { profiles: unknown; score: number }) =>
                               `${getDisplayName(p.profiles as { display_name: string })}: ${p.score}`
                             ).join(' | ')}
+                            {computerPlayers.map(cp => ` | ${cp.name}: ${cp.score}`).join('')}
                           </div>
                         )}
                       </div>
@@ -198,7 +186,9 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
                           onClick={() => onOpenGame(game.id)}
                           className="border-amber-700/40 text-amber-300 hover:bg-amber-800/30"
                         >
-                          {isWaiting ? 'View' : 'Play'}
+                          {isSpectator ? (
+                            <><Eye className="h-4 w-4 mr-1" /> Watch</>
+                          ) : isWaiting ? 'View' : 'Play'}
                         </Button>
                       </div>
                     </div>
@@ -297,7 +287,7 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
                         </div>
                         <div className="text-xs text-amber-600/50 mt-1">
                           {new Date(game.updated_at).toLocaleDateString()} —
-                          Winner: {winnerName ? getDisplayName((winnerName as { profiles: unknown }).profiles as { display_name: string }) : 'Unknown'}
+                          Winner: {winnerName ? getDisplayName((winnerName as { profiles: unknown }).profiles as { display_name: string }) : (game.winner?.startsWith('computer-') ? game.winner : 'Unknown')}
                         </div>
                       </div>
                       <Button

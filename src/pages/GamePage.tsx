@@ -1,7 +1,8 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { useGame, useGameMoves, useStartGame } from '@/hooks/useGames'
+import { useGame, useGameMoves, useStartGame, isComputerPlayerId } from '@/hooks/useGames'
+import type { ComputerPlayer } from '@/hooks/useGames'
 import { supabase } from '@/lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import { validateAndScoreMove } from '@/lib/scoring'
@@ -10,7 +11,9 @@ import type { Tile, BoardCell, PlacedTile } from '@/lib/gameConstants'
 import GameBoard from '@/components/GameBoard'
 import TileRack from '@/components/TileRack'
 import { toast } from 'sonner'
-import { ArrowLeft, RotateCcw, Send, Flag, RefreshCw, Shuffle, Play } from 'lucide-react'
+import { ArrowLeft, RotateCcw, Send, Flag, RefreshCw, Shuffle, Play, History } from 'lucide-react'
+import { createEmptyBoard } from '@/lib/gameConstants'
+import GameHistoryViewer from '@/components/GameHistoryViewer'
 import { cn } from '@/lib/utils'
 import { useGameRealtime } from '@/hooks/useGameRealtime'
 import { useComputerPlayer } from '@/hooks/useComputerPlayer'
@@ -37,6 +40,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   const [exchangeSelection, setExchangeSelection] = useState<Set<string>>(new Set())
   const [submitting, setSubmitting] = useState(false)
   const [blankTileTarget, setBlankTileTarget] = useState<{ row: number; col: number; tile: Tile } | null>(null)
+  const [showHistory, setShowHistory] = useState(false)
 
   // Rack tiles for current user (excluding placed tiles)
   const myPlayer = game?.game_players?.find(p => p.player_id === userId)
@@ -45,18 +49,24 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   const rackTiles = fullRack.filter(t => !placedTileIds.has(t.id))
 
   const isMyTurn = game?.current_turn === userId
-  const isComputerTurn = game?.current_turn === 'computer-player'
+  const isComputerTurn = game?.current_turn ? isComputerPlayerId(game.current_turn) : false
+  const computerPlayers = (game?.computer_players ?? []) as ComputerPlayer[]
+  const currentComputerPlayer = isComputerTurn && game?.current_turn
+    ? computerPlayers.find(cp => cp.id === game.current_turn)
+    : null
   const isActive = game?.status === 'active'
   const board = (game?.board ?? []) as BoardCell[][]
   const isFirstMove = board.every(row => row.every(cell => !cell.tile))
 
   // Trigger computer's turn automatically via Edge Function
   useEffect(() => {
-    if (!game || !isActive || !isComputerTurn || !game.has_computer) return
+    if (!game || !isActive || !isComputerTurn) return
+    const cpId = game.current_turn as string
+    const delay = Math.max(1500, (game.computer_delay ?? 0) * 1000)
 
     const timer = setTimeout(() => {
-      playComputerTurn()
-    }, 1500)
+      playComputerTurn(cpId)
+    }, delay)
 
     return () => clearTimeout(timer)
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -257,6 +267,19 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
       const nextIndex = (game.turn_index + 1) % turnOrder.length
       const nextPlayer = turnOrder[nextIndex]
 
+      // Build move history entry
+      const moveHistoryEntry = {
+        player_id: userId,
+        player_name: myPlayer?.profiles?.display_name ?? 'Player',
+        type: 'play',
+        tiles: placed,
+        words: result.words,
+        score: result.totalScore,
+        board_snapshot: newBoard,
+        timestamp: new Date().toISOString(),
+      }
+      const updatedHistory = [...(game.move_history ?? []), moveHistoryEntry]
+
       // Update game state
       const { error: gameErr } = await supabase
         .from('games')
@@ -273,6 +296,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
             words: result.words,
             score: result.totalScore,
           },
+          move_history: updatedHistory,
           updated_at: new Date().toISOString(),
         })
         .eq('id', gameId)
@@ -422,10 +446,19 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
       // Check if game should end (all players passed consecutively)
       const isGameOver = newConsecutivePasses >= turnOrder.length * 2
 
+      const passHistoryEntry = {
+        player_id: userId,
+        player_name: myPlayer?.profiles?.display_name ?? 'Player',
+        type: 'pass',
+        board_snapshot: board,
+        timestamp: new Date().toISOString(),
+      }
+
       const updates: Record<string, unknown> = {
         current_turn: turnOrder[nextIndex],
         turn_index: nextIndex,
         consecutive_passes: newConsecutivePasses,
+        move_history: [...(game.move_history ?? []), passHistoryEntry],
         updated_at: new Date().toISOString(),
       }
 
@@ -652,34 +685,35 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                 </span>
               </div>
             ))}
-            {/* Computer player in scoreboard */}
-            {game.has_computer && (
+            {/* Computer players in scoreboard */}
+            {computerPlayers.map((cp) => (
               <div
+                key={cp.id}
                 className={cn(
                   'flex items-center justify-between py-2 px-3 rounded-lg transition-colors',
-                  game.current_turn === 'computer-player' && 'bg-amber-800/20 ring-1 ring-amber-600/30'
+                  game.current_turn === cp.id && 'bg-amber-800/20 ring-1 ring-amber-600/30'
                 )}
               >
                 <div>
                   <div className={cn(
                     'font-medium text-sm',
-                    game.current_turn === 'computer-player' ? 'text-amber-200' : 'text-amber-400/70'
+                    game.current_turn === cp.id ? 'text-amber-200' : 'text-amber-400/70'
                   )}>
-                    Computer ({game.computer_difficulty})
+                    {cp.name}
                   </div>
-                  {game.current_turn === 'computer-player' && isActive && (
+                  {game.current_turn === cp.id && isActive && (
                     <div className="text-[10px] text-green-400 animate-pulse">Thinking...</div>
                   )}
                 </div>
                 <span className="text-xl font-bold text-amber-300" style={{ fontFamily: "'Playfair Display', serif" }}>
-                  {game.computer_score}
+                  {cp.score}
                 </span>
               </div>
-            )}
+            ))}
           </CardContent>
 
-          {/* Move history */}
-          {moves && moves.length > 0 && (
+          {/* Recent moves */}
+          {moves && moves.length > 0 && !showHistory && (
             <CardContent className="px-4 pb-4 border-t border-amber-900/20 pt-3">
               <p className="text-amber-400/60 text-xs font-medium mb-2">Recent Moves</p>
               <div className="space-y-1 max-h-40 overflow-y-auto">
@@ -696,7 +730,38 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
               </div>
             </CardContent>
           )}
+
+          {/* History toggle */}
+          <CardContent className="px-4 pb-4 border-t border-amber-900/20 pt-3">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => setShowHistory(!showHistory)}
+              className="w-full text-amber-400/70 hover:text-amber-300 hover:bg-amber-900/20 text-xs"
+            >
+              <History className="h-3 w-3 mr-1" />
+              {showHistory ? 'Hide History' : 'Game History'}
+            </Button>
+          </CardContent>
         </Card>
+
+        {/* Game History Viewer */}
+        {showHistory && (
+          <Card className="border-amber-900/30 bg-amber-950/30 w-full lg:w-56 shrink-0">
+            <CardHeader className="py-3 px-4">
+              <CardTitle className="text-amber-300 text-sm flex items-center gap-2">
+                <History className="h-4 w-4" />
+                Game Replay
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="px-4 pb-4">
+              <GameHistoryViewer
+                moveHistory={(game.move_history ?? []) as { player_id: string; player_name: string; type: 'play' | 'pass' | 'exchange'; words?: { word: string; score: number }[]; score?: number; board_snapshot: BoardCell[][]; timestamp: string }[]}
+                emptyBoard={createEmptyBoard()}
+              />
+            </CardContent>
+          </Card>
+        )}
 
         {/* Board + Rack */}
         <div className="flex flex-col items-center gap-4">
@@ -734,7 +799,11 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
             <div className="text-amber-200 bg-amber-800/30 px-6 py-3 rounded-lg text-center">
               <div className="text-lg font-bold" style={{ fontFamily: "'Playfair Display', serif" }}>Game Over!</div>
               <div className="text-sm mt-1">
-                Winner: {players.find(p => p.player_id === game.winner)?.profiles.display_name ?? 'Unknown'}
+                Winner: {
+                  players.find(p => p.player_id === game.winner)?.profiles.display_name
+                  ?? computerPlayers.find(cp => cp.id === game.winner)?.name
+                  ?? 'Unknown'
+                }
               </div>
             </div>
           )}
@@ -743,9 +812,9 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
               Waiting for {currentTurnPlayer?.profiles.display_name} to play...
             </div>
           )}
-          {isActive && isComputerTurn && (
+          {isActive && isComputerTurn && currentComputerPlayer && (
             <div className="text-amber-400 text-sm font-medium animate-pulse">
-              Computer is thinking...
+              {currentComputerPlayer.name} is thinking...
             </div>
           )}
           {isActive && isMyTurn && (
