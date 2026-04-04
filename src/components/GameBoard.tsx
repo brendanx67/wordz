@@ -130,7 +130,13 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
                   !displayTile && !isCommitted && 'hover:brightness-110',
                   isDragTarget && 'ring-2 ring-white scale-110 brightness-125 z-10'
                 )}
-                title={isNewlyPlaced ? 'Click to return to rack, or drag to reposition' : undefined}
+                title={
+                  isNewlyPlaced
+                    ? 'Click to return to rack, or drag to reposition'
+                    : isSelected
+                      ? `Type letters to place ${direction}. Click again to change direction.`
+                      : undefined
+                }
               >
                 {displayTile ? (
                   <>
@@ -142,13 +148,18 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
                     </span>
                   </>
                 ) : (
-                  <span className="text-[5px] sm:text-[6px] md:text-[7px] font-semibold text-center leading-tight opacity-80">
+                  <span className={cn(
+                    'text-[5px] sm:text-[6px] md:text-[7px] font-semibold text-center leading-tight opacity-80',
+                    isSelected && 'opacity-0'
+                  )}>
                     {bonusLabel(bonus)}
                   </span>
                 )}
                 {isSelected && !displayTile && (
-                  <div className="absolute inset-0 flex items-center justify-center">
-                    <span className="text-white/60 text-[10px]">{direction === 'across' ? '\u2192' : '\u2193'}</span>
+                  <div className="absolute inset-0 flex items-center justify-center rounded-[2px] bg-white/20">
+                    <span className="text-white font-bold text-[16px] sm:text-[18px] md:text-[20px] drop-shadow-md">
+                      {direction === 'across' ? '\u2192' : '\u2193'}
+                    </span>
                   </div>
                 )}
               </div>
