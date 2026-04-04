@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import { BOARD_SIZE, getBonusType } from '@/lib/gameConstants'
 import type { BoardCell, Tile } from '@/lib/gameConstants'
 import { cn } from '@/lib/utils'
@@ -35,13 +36,28 @@ function bonusClasses(bonus: string | null): string {
 }
 
 export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop, onPickupTile, placedTiles, direction }: GameBoardProps) {
-  const handleDragOver = (e: React.DragEvent) => {
+  const [dragOverSquare, setDragOverSquare] = useState<string | null>(null)
+
+  const handleDragOver = (e: React.DragEvent, row: number, col: number) => {
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
+    const key = `${row},${col}`
+    if (dragOverSquare !== key) {
+      setDragOverSquare(key)
+    }
+  }
+
+  const handleDragLeave = (e: React.DragEvent) => {
+    // Only clear if we're actually leaving the square (not entering a child)
+    const relatedTarget = e.relatedTarget as HTMLElement | null
+    if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
+      setDragOverSquare(null)
+    }
   }
 
   const handleDrop = (e: React.DragEvent, row: number, col: number) => {
     e.preventDefault()
+    setDragOverSquare(null)
     const tileData = e.dataTransfer.getData('application/json')
     if (!tileData) return
 
@@ -61,14 +77,17 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
   }
 
   const handleDragStartFromBoard = (e: React.DragEvent, row: number, col: number, tile: Tile) => {
-    // Tag the tile with its board origin so the drop handler can remove it
     const data = { ...tile, fromBoard: `${row},${col}` }
     e.dataTransfer.setData('application/json', JSON.stringify(data))
     e.dataTransfer.effectAllowed = 'move'
   }
 
+  const handleDragEnd = () => {
+    setDragOverSquare(null)
+  }
+
   return (
-    <div className="inline-block p-1.5 rounded-lg bg-amber-950/80 border-2 border-amber-900/60 shadow-xl">
+    <div className="inline-block p-1.5 rounded-lg bg-amber-950/80 border-2 border-amber-900/60 shadow-xl" onDragEnd={handleDragEnd}>
       <div
         className="grid gap-px"
         style={{ gridTemplateColumns: `repeat(${BOARD_SIZE}, minmax(0, 1fr))` }}
@@ -83,6 +102,7 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
             const isSelected = selectedSquare?.row === row && selectedSquare?.col === col
             const isNewlyPlaced = !!placedTile
             const isCommitted = !!tile
+            const isDragTarget = dragOverSquare === `${row},${col}` && !isCommitted && !isNewlyPlaced
 
             return (
               <div
@@ -91,13 +111,13 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
                 onDragStart={isNewlyPlaced ? (e) => handleDragStartFromBoard(e, row, col, placedTile!) : undefined}
                 onClick={() => {
                   if (isNewlyPlaced) {
-                    // Click a placed tile to pick it up (return to rack)
                     onPickupTile(row, col)
                   } else {
                     onSquareClick(row, col)
                   }
                 }}
-                onDragOver={handleDragOver}
+                onDragOver={(e) => handleDragOver(e, row, col)}
+                onDragLeave={handleDragLeave}
                 onDrop={(e) => handleDrop(e, row, col)}
                 className={cn(
                   'w-[30px] h-[30px] sm:w-[34px] sm:h-[34px] md:w-[38px] md:h-[38px] flex items-center justify-center rounded-[2px] cursor-pointer transition-all relative select-none',
@@ -107,7 +127,8 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
                       : 'bg-gradient-to-br from-amber-100 to-amber-200'
                     : bonusClasses(bonus),
                   isSelected && !displayTile && 'ring-2 ring-white/80 scale-105',
-                  !displayTile && !isCommitted && 'hover:brightness-110'
+                  !displayTile && !isCommitted && 'hover:brightness-110',
+                  isDragTarget && 'ring-2 ring-white scale-110 brightness-125 z-10'
                 )}
                 title={isNewlyPlaced ? 'Click to return to rack, or drag to reposition' : undefined}
               >
