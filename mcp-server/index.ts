@@ -27,8 +27,8 @@ function loadCredentials(): Credentials {
     if (existsSync(p)) {
       try {
         return JSON.parse(readFileSync(p, "utf-8")) as Credentials;
-      } catch {
-        // Ignore parse errors, try next
+      } catch (err) {
+        console.error(`Warning: Failed to parse ${p}: ${(err as Error).message}`);
       }
     }
   }
