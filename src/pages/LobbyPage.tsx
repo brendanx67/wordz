@@ -388,16 +388,17 @@ function ApiSetupSection({ userId }: { userId: string }) {
   const deleteKey = useDeleteApiKey()
   const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/game-api`
 
+  const credentialsJson = JSON.stringify({
+    api_url: apiUrl,
+    api_key: "your-api-key-here",
+    game_id: "paste-game-id-here"
+  }, null, 2)
+
   const mcpConfig = JSON.stringify({
     mcpServers: {
       wordz: {
         command: "npx",
-        args: ["tsx", "~/.wordz-mcp/index.ts"],
-        env: {
-          WORDZ_API_URL: apiUrl,
-          WORDZ_API_KEY: "your-api-key-here",
-          WORDZ_GAME_ID: "paste-game-id-here"
-        }
+        args: ["tsx", "~/.wordz-mcp/index.ts"]
       }
     }
   }, null, 2)
@@ -546,43 +547,84 @@ function ApiSetupSection({ userId }: { userId: string }) {
             <h3 className="text-purple-200 font-semibold">How it works</h3>
             <ol className="text-amber-400/70 space-y-2 list-decimal pl-4">
               <li>Create an API key above and copy it</li>
-              <li>Create a new game and add an <strong className="text-purple-300">API Player (LLM)</strong> slot</li>
-              <li>Configure your AI assistant with the key and the game ID</li>
-              <li>The AI uses the key to check game state and play moves</li>
+              <li>
+                <a href="/wordz-mcp.zip" download className="text-purple-400 hover:text-purple-300 underline font-semibold">
+                  Download the MCP server
+                </a>{' '}
+                and extract to <code className="text-purple-300 bg-purple-950/60 px-1 rounded">~/.wordz-mcp</code>
+              </li>
+              <li>Run <code className="text-purple-300 bg-purple-950/60 px-1 rounded">cd ~/.wordz-mcp && npm install</code></li>
+              <li>Create <code className="text-purple-300 bg-purple-950/60 px-1 rounded">~/.wordz-mcp/credentials.json</code> with your key</li>
+              <li>Add the MCP server to Claude</li>
             </ol>
           </div>
 
-          {/* MCP Setup */}
+          {/* Credentials */}
           <div className="space-y-3 border-t border-purple-800/20 pt-4">
-            <h3 className="text-purple-200 font-semibold">Claude Desktop (MCP)</h3>
+            <h3 className="text-purple-200 font-semibold">credentials.json</h3>
             <p className="text-amber-400/60">
-              <a
-                href="/wordz-mcp.zip"
-                download
-                className="text-purple-400 hover:text-purple-300 underline font-semibold"
-              >
-                Download the MCP server
-              </a>{' '}
-              and extract to <code className="text-purple-300 bg-purple-950/60 px-1 rounded">~/.wordz-mcp</code>. Then install dependencies:
+              Create this file at <code className="text-purple-300 bg-purple-950/60 px-1 rounded">~/.wordz-mcp/credentials.json</code>:
             </p>
-            <div className="bg-purple-950/60 border border-purple-800/30 rounded-lg p-3 font-mono text-xs text-purple-200/80">
-              cd ~/.wordz-mcp && npm install
-            </div>
             <div className="relative">
               <pre className="bg-purple-950/60 border border-purple-800/30 rounded-lg p-3 text-purple-200/80 font-mono text-xs overflow-x-auto whitespace-pre">
-                {mcpConfig}
+                {credentialsJson}
               </pre>
               <Button
                 size="sm"
                 onClick={() => {
-                  navigator.clipboard.writeText(mcpConfig)
-                  toast.success('Config copied!')
+                  navigator.clipboard.writeText(credentialsJson)
+                  toast.success('Copied!')
                 }}
                 className="absolute top-2 right-2 bg-purple-800/60 hover:bg-purple-700/70 text-purple-200 h-7 px-2"
               >
                 <Copy className="h-3 w-3 mr-1" />
                 Copy
               </Button>
+            </div>
+          </div>
+
+          {/* Claude Code / Desktop setup */}
+          <div className="space-y-3 border-t border-purple-800/20 pt-4">
+            <h3 className="text-purple-200 font-semibold">Add to Claude</h3>
+            <div className="space-y-2">
+              <p className="text-amber-400/60">
+                <strong className="text-purple-300">Claude Code:</strong>
+              </p>
+              <div className="relative">
+                <div className="bg-purple-950/60 border border-purple-800/30 rounded-lg p-3 font-mono text-xs text-purple-200/80 pr-16">
+                  claude mcp add wordz -- npx tsx ~/.wordz-mcp/index.ts
+                </div>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText('claude mcp add wordz -- npx tsx ~/.wordz-mcp/index.ts')
+                    toast.success('Command copied!')
+                  }}
+                  className="absolute top-2 right-2 bg-purple-800/60 hover:bg-purple-700/70 text-purple-200 h-7 px-2"
+                >
+                  <Copy className="h-3 w-3 mr-1" />
+                  Copy
+                </Button>
+              </div>
+              <p className="text-amber-400/60 pt-2">
+                <strong className="text-purple-300">Claude Desktop:</strong> Add to config file
+              </p>
+              <div className="relative">
+                <pre className="bg-purple-950/60 border border-purple-800/30 rounded-lg p-3 text-purple-200/80 font-mono text-xs overflow-x-auto whitespace-pre">
+                  {mcpConfig}
+                </pre>
+                <Button
+                  size="sm"
+                  onClick={() => {
+                    navigator.clipboard.writeText(mcpConfig)
+                    toast.success('Config copied!')
+                  }}
+                  className="absolute top-2 right-2 bg-purple-800/60 hover:bg-purple-700/70 text-purple-200 h-7 px-2"
+                >
+                  <Copy className="h-3 w-3 mr-1" />
+                  Copy
+                </Button>
+              </div>
             </div>
           </div>
 

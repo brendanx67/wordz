@@ -2,19 +2,55 @@
 import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { z } from "zod";
+import { readFileSync, existsSync } from "fs";
+import { join, dirname } from "path";
+import { fileURLToPath } from "url";
+import { homedir } from "os";
 
-// Configuration — set via environment variables
-const API_URL = process.env.WORDZ_API_URL || "";
-const API_KEY = process.env.WORDZ_API_KEY || "";
-const DEFAULT_GAME_ID = process.env.WORDZ_GAME_ID || "";
+// ─── CONFIGURATION ───────────────────────────────────────────────────────────
+// Priority: env vars > credentials.json next to this script > ~/.wordz-mcp/credentials.json
+
+interface Credentials {
+  api_url?: string;
+  api_key?: string;
+  game_id?: string;
+}
+
+function loadCredentials(): Credentials {
+  // Check next to the script first, then ~/.wordz-mcp/
+  const scriptDir = dirname(fileURLToPath(import.meta.url));
+  const paths = [
+    join(scriptDir, "credentials.json"),
+    join(homedir(), ".wordz-mcp", "credentials.json"),
+  ];
+
+  for (const p of paths) {
+    if (existsSync(p)) {
+      try {
+        return JSON.parse(readFileSync(p, "utf-8")) as Credentials;
+      } catch {
+        // Ignore parse errors, try next
+      }
+    }
+  }
+  return {};
+}
+
+const creds = loadCredentials();
+const API_URL = process.env.WORDZ_API_URL || creds.api_url || "";
+const API_KEY = process.env.WORDZ_API_KEY || creds.api_key || "";
+const DEFAULT_GAME_ID = process.env.WORDZ_GAME_ID || creds.game_id || "";
 
 if (!API_URL || !API_KEY) {
   console.error(
-    "Missing WORDZ_API_URL or WORDZ_API_KEY environment variables.\n" +
-      "Set them before starting:\n" +
-      "  WORDZ_API_URL=https://your-project.supabase.co/functions/v1/game-api\n" +
-      "  WORDZ_API_KEY=your-api-key-here\n" +
-      "  WORDZ_GAME_ID=game-uuid (optional, can pass per tool call)"
+    "Wordz MCP: No credentials found.\n\n" +
+      "Create ~/.wordz-mcp/credentials.json:\n" +
+      '  {\n' +
+      '    "api_url": "https://your-project.supabase.co/functions/v1/game-api",\n' +
+      '    "api_key": "your-api-key-here",\n' +
+      '    "game_id": "optional-game-uuid"\n' +
+      '  }\n\n' +
+      "Or set environment variables: WORDZ_API_URL, WORDZ_API_KEY, WORDZ_GAME_ID"
   );
   process.exit(1);
 }
