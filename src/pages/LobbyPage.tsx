@@ -182,9 +182,8 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
                         )}
                         <Button
                           size="sm"
-                          variant="outline"
                           onClick={() => onOpenGame(game.id)}
-                          className="border-amber-700/40 text-amber-300 hover:bg-amber-800/30"
+                          className="bg-amber-900/60 hover:bg-amber-800/70 text-amber-200 border border-amber-700/40 font-semibold"
                         >
                           {isSpectator ? (
                             <><Eye className="h-4 w-4 mr-1" /> Watch</>
@@ -305,14 +304,13 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
                           </span>
                         </div>
                         <div className="text-xs text-amber-600/50 mt-1">
-                          {new Date(game.updated_at).toLocaleDateString()} — Winner: {winnerDisplay}
+                          {new Date(game.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} {new Date(game.updated_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })} — Winner: {winnerDisplay}
                         </div>
                       </div>
                       <Button
                         size="sm"
-                        variant="outline"
                         onClick={() => onOpenGame(game.id)}
-                        className="border-amber-700/40 text-amber-300 hover:bg-amber-800/30"
+                        className="bg-amber-900/60 hover:bg-amber-800/70 text-amber-200 border border-amber-700/40 font-semibold"
                       >
                         Review
                       </Button>
