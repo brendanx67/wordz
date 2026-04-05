@@ -930,6 +930,21 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
               )}
             </div>
           )}
+
+          {/* Show computer rack when it's a computer's turn */}
+          {isActive && isComputerTurn && currentComputerPlayer && (
+            <div className="space-y-2">
+              <div className="text-center text-xs text-amber-500/60">
+                {currentComputerPlayer.name}&apos;s rack:
+              </div>
+              <TileRack
+                tiles={currentComputerPlayer.rack}
+                onTileClick={() => {}}
+                selectedTiles={new Set()}
+                isExchangeMode={false}
+              />
+            </div>
+          )}
         </div>
       </main>
     </div>
