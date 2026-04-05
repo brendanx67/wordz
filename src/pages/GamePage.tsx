@@ -697,6 +697,18 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
             WORDZ
           </h1>
           <div className="flex items-center gap-3">
+            {computerPlayers.some(cp => cp.id.startsWith('api-')) && (
+              <button
+                onClick={() => {
+                  navigator.clipboard.writeText(gameId)
+                  toast.success('Game ID copied!')
+                }}
+                className="text-[10px] text-purple-400/50 hover:text-purple-300 font-mono cursor-pointer"
+                title="Click to copy game ID for API/MCP use"
+              >
+                ID: {gameId.slice(0, 8)}...
+              </button>
+            )}
             <span className="text-xs text-amber-600/60">
               {tileBag.length} tiles left
             </span>

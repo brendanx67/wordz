@@ -262,20 +262,50 @@ function getServiceClient() {
 
 // ─── AUTH HELPER ──────────────────────────────────────────────────────────────
 async function authenticateApiKey(
-  req: Request
-): Promise<{ gameId: string; playerId: string; playerName: string } | null> {
+  req: Request,
+  gameIdOverride?: string
+): Promise<{ userId: string; gameId: string; playerId: string; playerName: string } | null> {
   const apiKey = req.headers.get("x-api-key");
   if (!apiKey) return null;
 
   const supabase = getServiceClient();
-  const { data, error } = await supabase
+
+  // Look up user-level API key
+  const { data: keyData, error: keyErr } = await supabase
     .from("api_keys")
-    .select("game_id, player_id, player_name")
+    .select("user_id")
     .eq("api_key", apiKey)
     .single();
 
-  if (error || !data) return null;
-  return { gameId: data.game_id, playerId: data.player_id, playerName: data.player_name };
+  if (keyErr || !keyData) return null;
+
+  // Get game_id from query param, body, or override
+  const url = new URL(req.url);
+  const gameId = gameIdOverride || url.searchParams.get("game_id");
+  if (!gameId) return null;
+
+  // Find the API player slot in this game that belongs to this user
+  const { data: game, error: gameErr } = await supabase
+    .from("games")
+    .select("computer_players")
+    .eq("id", gameId)
+    .single();
+
+  if (gameErr || !game) return null;
+
+  const cpPlayers = (game.computer_players ?? []) as (ApiPlayer & { owner_id?: string })[];
+  const myApiPlayer = cpPlayers.find(
+    (p) => p.id.startsWith("api-") && p.owner_id === keyData.user_id
+  );
+
+  if (!myApiPlayer) return null;
+
+  return {
+    userId: keyData.user_id,
+    gameId,
+    playerId: myApiPlayer.id,
+    playerName: myApiPlayer.name,
+  };
 }
 
 // ─── ROUTE HANDLERS ───────────────────────────────────────────────────────────
@@ -400,15 +430,16 @@ async function handleGetGame(req: Request): Promise<Response> {
 }
 
 async function handlePlayMove(req: Request): Promise<Response> {
-  const auth = await authenticateApiKey(req);
-  if (!auth) return jsonError("Invalid or missing API key", 401);
-
   const body = await req.json();
-  const { action, tiles, tile_ids } = body as {
+  const { action, tiles, tile_ids, game_id } = body as {
     action: "play" | "pass" | "exchange";
     tiles?: { row: number; col: number; letter: string; is_blank?: boolean }[];
     tile_ids?: string[]; // for exchange
+    game_id?: string;
   };
+
+  const auth = await authenticateApiKey(req, game_id);
+  if (!auth) return jsonError("Invalid or missing API key, or no API player slot in this game", 401);
 
   if (!action) return jsonError("Missing action field", 400);
 

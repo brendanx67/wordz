@@ -130,7 +130,7 @@ export function useCreateConfiguredGame() {
       })
 
       // Create API players (stored alongside computer players)
-      const apiPlayers: { id: string; name: string; rack: Tile[]; score: number; strategyLevel?: string }[] = apiSlots.map((slot, i) => {
+      const apiPlayers: { id: string; name: string; rack: Tile[]; score: number; strategyLevel?: string; owner_id: string }[] = apiSlots.map((slot, i) => {
         const { drawn, remaining } = drawTiles(bag, RACK_SIZE)
         bag = remaining
         const name = slot.apiPlayerName || 'Claude'
@@ -140,6 +140,7 @@ export function useCreateConfiguredGame() {
           rack: drawn,
           score: 0,
           strategyLevel: slot.strategyLevel || 'master',
+          owner_id: userId,
         }
       })
 
@@ -216,24 +217,7 @@ export function useCreateConfiguredGame() {
         if (playerErr) throw playerErr
       }
 
-      // Generate API keys for API players
-      const apiKeys: { playerName: string; playerId: string; apiKey: string; strategyLevel: string }[] = []
-      for (const ap of apiPlayers) {
-        const { data: keyRow, error: keyErr } = await supabase
-          .from('api_keys')
-          .insert({
-            game_id: game.id,
-            player_id: ap.id,
-            player_name: ap.name,
-            created_by: userId,
-          })
-          .select('api_key')
-          .single()
-        if (keyErr) throw keyErr
-        apiKeys.push({ playerName: ap.name, playerId: ap.id, apiKey: keyRow.api_key, strategyLevel: ap.strategyLevel || 'master' })
-      }
-
-      return { gameId: game.id, apiKeys }
+      return { gameId: game.id }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['games'] })
@@ -399,6 +383,57 @@ export function isComputerPlayerId(playerId: string): boolean {
 // Helper to check if a player ID is an API player
 export function isApiPlayerId(playerId: string): boolean {
   return playerId.startsWith('api-')
+}
+
+// ─── API Key Management ──────────────────────────────────────────────────────
+
+export function useApiKeys(userId: string) {
+  return useQuery({
+    queryKey: ['api_keys', userId],
+    queryFn: async () => {
+      const { data, error } = await supabase
+        .from('api_keys')
+        .select('id, name, created_at')
+        .eq('user_id', userId)
+        .order('created_at', { ascending: false })
+      if (error) throw error
+      return data
+    },
+  })
+}
+
+export function useCreateApiKey() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({ userId, name }: { userId: string; name: string }) => {
+      const { data, error } = await supabase
+        .from('api_keys')
+        .insert({ user_id: userId, name })
+        .select('id, api_key, name, created_at')
+        .single()
+      if (error) throw error
+      return data
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['api_keys'] })
+    },
+  })
+}
+
+export function useDeleteApiKey() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (keyId: string) => {
+      const { error } = await supabase
+        .from('api_keys')
+        .delete()
+        .eq('id', keyId)
+      if (error) throw error
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['api_keys'] })
+    },
+  })
 }
 
 export function useCancelGame() {

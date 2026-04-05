@@ -6,29 +6,42 @@ import { z } from "zod";
 // Configuration — set via environment variables
 const API_URL = process.env.WORDZ_API_URL || "";
 const API_KEY = process.env.WORDZ_API_KEY || "";
+const DEFAULT_GAME_ID = process.env.WORDZ_GAME_ID || "";
 
 if (!API_URL || !API_KEY) {
   console.error(
     "Missing WORDZ_API_URL or WORDZ_API_KEY environment variables.\n" +
       "Set them before starting:\n" +
       "  WORDZ_API_URL=https://your-project.supabase.co/functions/v1/game-api\n" +
-      "  WORDZ_API_KEY=your-api-key-here"
+      "  WORDZ_API_KEY=your-api-key-here\n" +
+      "  WORDZ_GAME_ID=game-uuid (optional, can pass per tool call)"
   );
   process.exit(1);
+}
+
+function resolveGameId(gameId?: string): string {
+  const id = gameId || DEFAULT_GAME_ID;
+  if (!id) throw new Error("No game_id provided and WORDZ_GAME_ID not set. Pass game_id or set WORDZ_GAME_ID env var.");
+  return id;
 }
 
 async function apiCall(
   path: string,
   method: "GET" | "POST" = "GET",
-  body?: unknown
+  body?: unknown,
+  gameId?: string,
 ): Promise<unknown> {
-  const res = await fetch(`${API_URL}/${path}`, {
+  const gid = resolveGameId(gameId);
+  const url = method === "GET"
+    ? `${API_URL}/${path}?game_id=${gid}`
+    : `${API_URL}/${path}`;
+  const res = await fetch(url, {
     method,
     headers: {
       "x-api-key": API_KEY,
       "Content-Type": "application/json",
     },
-    body: body ? JSON.stringify(body) : undefined,
+    body: body ? JSON.stringify({ ...(body as Record<string, unknown>), game_id: gid }) : undefined,
   });
   const data = await res.json();
   if (!res.ok) {
@@ -345,9 +358,11 @@ function buildContextBriefing(level: "master" | "club" | "social"): string {
 server.tool(
   "get_game_state",
   "Get the current state of the Wordz game: board, your rack, scores, whose turn it is, and recent moves",
-  {},
-  async () => {
-    const state = (await apiCall("state")) as GameState;
+  {
+    game_id: z.string().optional().describe("Game ID (optional if WORDZ_GAME_ID env var is set)"),
+  },
+  async ({ game_id }) => {
+    const state = (await apiCall("state", "GET", undefined, game_id)) as GameState;
 
     const boardText = renderBoard(state.tiles_on_board);
     const rackText = state.your_rack
@@ -461,6 +476,7 @@ server.tool(
   "play_word",
   "Play tiles on the board. Each tile needs row (1-15), col (A-O), and letter. All words formed must be valid. The first move must cross the center square (row 8, col H).",
   {
+    game_id: z.string().optional().describe("Game ID (optional if WORDZ_GAME_ID env var is set)"),
     tiles: z
       .array(
         z.object({
@@ -476,7 +492,7 @@ server.tool(
       .min(1)
       .describe("Tiles to place on the board"),
   },
-  async ({ tiles }) => {
+  async ({ game_id, tiles }) => {
     // Convert column letters to numbers (A=0, B=1, ... O=14)
     const apiTiles = tiles.map((t) => ({
       row: t.row - 1, // Convert 1-indexed to 0-indexed
@@ -489,7 +505,7 @@ server.tool(
       const result = (await apiCall("move", "POST", {
         action: "play",
         tiles: apiTiles,
-      })) as {
+      }, game_id)) as {
         success: boolean;
         words: { word: string; score: number }[];
         total_score: number;
@@ -536,12 +552,14 @@ server.tool(
 server.tool(
   "pass_turn",
   "Pass your turn without playing any tiles",
-  {},
-  async () => {
+  {
+    game_id: z.string().optional().describe("Game ID (optional if WORDZ_GAME_ID env var is set)"),
+  },
+  async ({ game_id }) => {
     try {
       const result = (await apiCall("move", "POST", {
         action: "pass",
-      })) as { success: boolean; message: string };
+      }, game_id)) as { success: boolean; message: string };
       return { content: [{ type: "text", text: result.message }] };
     } catch (err) {
       return {
@@ -556,17 +574,18 @@ server.tool(
   "exchange_tiles",
   "Exchange tiles from your rack for new ones from the bag. Specify the tile IDs to exchange (from get_game_state rack info).",
   {
+    game_id: z.string().optional().describe("Game ID (optional if WORDZ_GAME_ID env var is set)"),
     tile_ids: z
       .array(z.string())
       .min(1)
       .describe("IDs of tiles to exchange from your rack"),
   },
-  async ({ tile_ids }) => {
+  async ({ game_id, tile_ids }) => {
     try {
       const result = (await apiCall("move", "POST", {
         action: "exchange",
         tile_ids,
-      })) as { success: boolean; message: string };
+      }, game_id)) as { success: boolean; message: string };
       return { content: [{ type: "text", text: result.message }] };
     } catch (err) {
       return {

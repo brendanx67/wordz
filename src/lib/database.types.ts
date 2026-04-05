@@ -18,39 +18,25 @@ export type Database = {
         Row: {
           api_key: string
           created_at: string | null
-          created_by: string
-          game_id: string
           id: string
-          player_id: string
-          player_name: string
+          name: string
+          user_id: string
         }
         Insert: {
           api_key?: string
           created_at?: string | null
-          created_by: string
-          game_id: string
           id?: string
-          player_id: string
-          player_name?: string
+          name: string
+          user_id: string
         }
         Update: {
           api_key?: string
           created_at?: string | null
-          created_by?: string
-          game_id?: string
           id?: string
-          player_id?: string
-          player_name?: string
+          name?: string
+          user_id?: string
         }
-        Relationships: [
-          {
-            foreignKeyName: "api_keys_game_id_fkey"
-            columns: ["game_id"]
-            isOneToOne: false
-            referencedRelation: "games"
-            referencedColumns: ["id"]
-          },
-        ]
+        Relationships: []
       }
       game_moves: {
         Row: {

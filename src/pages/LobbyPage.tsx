@@ -1,12 +1,11 @@
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useOpenGames, useMyGames, useCreateConfiguredGame, useJoinGame, useStartGame, useCancelGame } from '@/hooks/useGames'
+import { useOpenGames, useMyGames, useCreateConfiguredGame, useJoinGame, useStartGame, useCancelGame, useApiKeys, useCreateApiKey, useDeleteApiKey } from '@/hooks/useGames'
 import type { ComputerPlayer } from '@/hooks/useGames'
 import { useGameHistory } from '@/hooks/useGameHistory'
 import { useState, useCallback } from 'react'
-import { LogOut, Plus, Play, Users, Clock, Trophy, History, Eye, X, Sparkles, Bot, Copy, ChevronDown, ChevronUp } from 'lucide-react'
-import { Label } from '@/components/ui/label'
+import { LogOut, Plus, Play, Users, Clock, Trophy, History, Eye, X, Bot, Copy, ChevronDown, ChevronUp } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import CreateGameForm from '@/components/CreateGameForm'
@@ -50,19 +49,12 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
     })
   }, [])
 
-  const [apiKeysToShow, setApiKeysToShow] = useState<{ gameId: string; keys: { playerName: string; playerId: string; apiKey: string; strategyLevel: string }[] } | null>(null)
-
   const handleCreateGame = async (config: GameConfig) => {
     try {
       const result = await createConfiguredGame.mutateAsync({ userId, config, displayName })
       setShowCreateForm(false)
-      if (result.apiKeys.length > 0) {
-        setApiKeysToShow({ gameId: result.gameId, keys: result.apiKeys })
-        toast.success('Game created! Copy the API keys below.')
-      } else {
-        toast.success('Game created!')
-        onOpenGame(result.gameId)
-      }
+      toast.success('Game created!')
+      onOpenGame(result.gameId)
     } catch {
       toast.error('Failed to create game')
     }
@@ -105,72 +97,6 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
       </header>
 
       <main className="container mx-auto px-4 py-8 max-w-4xl space-y-8">
-        {/* API Keys Display */}
-        {apiKeysToShow && (
-          <Card className="border-purple-700/40 bg-purple-950/30 w-full max-w-lg mx-auto">
-            <CardHeader className="pb-3">
-              <CardTitle className="text-purple-300 text-lg flex items-center gap-2">
-                <Sparkles className="h-5 w-5" />
-                API Keys for LLM Players
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <p className="text-amber-400/70 text-sm">
-                Copy these API keys and use them to connect an LLM to this game. Each key is shown only once.
-              </p>
-              {apiKeysToShow.keys.map((ak) => (
-                <div key={ak.playerId} className="space-y-1.5">
-                  <Label className="text-purple-300/80 text-xs">
-                    {ak.playerName}
-                    <span className="ml-2 text-amber-400/60">
-                      {ak.strategyLevel === 'master' ? '\u2605\u2605\u2605 Master' : ak.strategyLevel === 'club' ? '\u2605\u2605 Club' : '\u2605 Social'}
-                    </span>
-                  </Label>
-                  <div className="flex gap-2">
-                    <Input
-                      readOnly
-                      value={ak.apiKey}
-                      className="bg-purple-950/60 border-purple-800/30 text-purple-200 font-mono text-xs"
-                      onClick={(e) => (e.target as HTMLInputElement).select()}
-                    />
-                    <Button
-                      size="sm"
-                      onClick={() => {
-                        navigator.clipboard.writeText(ak.apiKey)
-                        toast.success('API key copied!')
-                      }}
-                      className="bg-purple-800/60 hover:bg-purple-700/70 text-purple-200 shrink-0"
-                    >
-                      Copy
-                    </Button>
-                  </div>
-                </div>
-              ))}
-              <div className="pt-2 space-y-2">
-                <p className="text-amber-500/60 text-xs">
-                  API endpoint: <code className="text-amber-300/70">{import.meta.env.VITE_SUPABASE_URL}/functions/v1/game-api</code>
-                </p>
-                <p className="text-amber-500/60 text-xs">
-                  Use header: <code className="text-amber-300/70">x-api-key: {'<key>'}</code>
-                </p>
-                <p className="text-amber-500/60 text-xs">
-                  Tell the AI to call <code className="text-purple-300/70">game_context</code> with level <code className="text-purple-300/70">{apiKeysToShow.keys[0]?.strategyLevel || 'master'}</code> first
-                </p>
-              </div>
-              <Button
-                onClick={() => {
-                  const gid = apiKeysToShow.gameId
-                  setApiKeysToShow(null)
-                  onOpenGame(gid)
-                }}
-                className="w-full bg-amber-700 hover:bg-amber-600 text-amber-50 font-semibold"
-              >
-                Continue to Game
-              </Button>
-            </CardContent>
-          </Card>
-        )}
-
         {/* Create Game */}
         {showCreateForm ? (
           <CreateGameForm
@@ -447,14 +373,19 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
           </CardContent>
         </Card>
         {/* API & MCP Setup */}
-        <ApiSetupSection />
+        <ApiSetupSection userId={userId} />
       </main>
     </div>
   )
 }
 
-function ApiSetupSection() {
+function ApiSetupSection({ userId }: { userId: string }) {
   const [expanded, setExpanded] = useState(false)
+  const [newKeyName, setNewKeyName] = useState('')
+  const [justCreatedKey, setJustCreatedKey] = useState<string | null>(null)
+  const { data: apiKeys, isLoading } = useApiKeys(userId)
+  const createKey = useCreateApiKey()
+  const deleteKey = useDeleteApiKey()
   const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/game-api`
 
   const mcpConfig = JSON.stringify({
@@ -464,11 +395,35 @@ function ApiSetupSection() {
         args: ["tsx", "~/.wordz-mcp/index.ts"],
         env: {
           WORDZ_API_URL: apiUrl,
-          WORDZ_API_KEY: "your-api-key-here"
+          WORDZ_API_KEY: "your-api-key-here",
+          WORDZ_GAME_ID: "paste-game-id-here"
         }
       }
     }
   }, null, 2)
+
+  const handleCreateKey = async () => {
+    const name = newKeyName.trim()
+    if (!name) return
+    try {
+      const result = await createKey.mutateAsync({ userId, name })
+      setJustCreatedKey(result.api_key)
+      setNewKeyName('')
+      toast.success('API key created! Copy it now — it won\'t be shown again.')
+    } catch {
+      toast.error('Failed to create API key')
+    }
+  }
+
+  const handleDeleteKey = async (keyId: string, keyName: string) => {
+    if (!confirm(`Revoke "${keyName}"? Any MCP server or integration using this key will stop working.`)) return
+    try {
+      await deleteKey.mutateAsync(keyId)
+      toast.success('API key revoked')
+    } catch {
+      toast.error('Failed to revoke key')
+    }
+  }
 
   return (
     <Card className="border-purple-900/30 bg-purple-950/20">
@@ -479,22 +434,126 @@ function ApiSetupSection() {
         <CardTitle className="text-purple-300 flex items-center gap-2">
           <Bot className="h-5 w-5" />
           Connect an AI (API & MCP)
+          {apiKeys && apiKeys.length > 0 && (
+            <span className="text-xs px-2 py-0.5 rounded-full bg-purple-800/40 text-purple-300 font-normal">
+              {apiKeys.length} key{apiKeys.length !== 1 ? 's' : ''}
+            </span>
+          )}
           {expanded ? <ChevronUp className="h-4 w-4 ml-auto" /> : <ChevronDown className="h-4 w-4 ml-auto" />}
         </CardTitle>
       </CardHeader>
       {expanded && (
         <CardContent className="space-y-6 text-sm">
+          {/* API Key Management */}
           <div className="space-y-3">
+            <h3 className="text-purple-200 font-semibold">Your API Keys</h3>
+            <p className="text-amber-400/60 text-xs">
+              Create a named API key to connect any AI assistant. One key works across all your games.
+            </p>
+
+            {/* Create new key */}
+            <div className="flex gap-2">
+              <Input
+                value={newKeyName}
+                onChange={(e) => setNewKeyName(e.target.value)}
+                placeholder="Key name (e.g. Claude Desktop, ChatGPT)"
+                className="bg-purple-950/60 border-purple-800/30 text-purple-200 h-9 text-sm"
+                onKeyDown={(e) => e.key === 'Enter' && handleCreateKey()}
+              />
+              <Button
+                size="sm"
+                onClick={handleCreateKey}
+                disabled={!newKeyName.trim() || createKey.isPending}
+                className="bg-purple-700 hover:bg-purple-600 text-purple-100 shrink-0 h-9"
+              >
+                <Plus className="h-4 w-4 mr-1" />
+                Create
+              </Button>
+            </div>
+
+            {/* Just-created key (show once) */}
+            {justCreatedKey && (
+              <div className="bg-green-950/40 border border-green-700/40 rounded-lg p-3 space-y-2">
+                <p className="text-green-300 text-xs font-semibold">
+                  Copy this key now — it will never be shown again!
+                </p>
+                <div className="flex gap-2">
+                  <Input
+                    readOnly
+                    value={justCreatedKey}
+                    className="bg-green-950/60 border-green-800/30 text-green-200 font-mono text-xs"
+                    onClick={(e) => (e.target as HTMLInputElement).select()}
+                  />
+                  <Button
+                    size="sm"
+                    onClick={() => {
+                      navigator.clipboard.writeText(justCreatedKey)
+                      toast.success('API key copied!')
+                    }}
+                    className="bg-green-700 hover:bg-green-600 text-green-100 shrink-0"
+                  >
+                    <Copy className="h-3 w-3 mr-1" />
+                    Copy
+                  </Button>
+                </div>
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  onClick={() => setJustCreatedKey(null)}
+                  className="text-green-400/60 hover:text-green-300 text-xs h-7"
+                >
+                  I've saved it — dismiss
+                </Button>
+              </div>
+            )}
+
+            {/* Existing keys */}
+            {isLoading ? (
+              <Skeleton className="h-10 bg-purple-900/20" />
+            ) : apiKeys && apiKeys.length > 0 ? (
+              <div className="space-y-2">
+                {apiKeys.map((key) => (
+                  <div
+                    key={key.id}
+                    className="flex items-center justify-between p-2.5 rounded-lg bg-purple-950/40 border border-purple-800/20"
+                  >
+                    <div>
+                      <span className="text-purple-200 text-sm font-medium">{key.name}</span>
+                      <span className="text-purple-500/50 text-xs ml-2">
+                        Created {new Date(key.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+                      </span>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={() => handleDeleteKey(key.id, key.name)}
+                      disabled={deleteKey.isPending}
+                      className="text-red-400/60 hover:text-red-300 hover:bg-red-900/30 h-7 px-2"
+                    >
+                      <X className="h-3 w-3 mr-1" />
+                      Revoke
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            ) : !justCreatedKey ? (
+              <p className="text-purple-500/50 text-xs text-center py-2">No API keys yet. Create one to get started.</p>
+            ) : null}
+          </div>
+
+          {/* How it works */}
+          <div className="space-y-3 border-t border-purple-800/20 pt-4">
             <h3 className="text-purple-200 font-semibold">How it works</h3>
             <ol className="text-amber-400/70 space-y-2 list-decimal pl-4">
+              <li>Create an API key above and copy it</li>
               <li>Create a new game and add an <strong className="text-purple-300">API Player (LLM)</strong> slot</li>
-              <li>Copy the API key shown after creating the game</li>
-              <li>Configure your AI assistant with the key using one of the methods below</li>
-              <li>The AI will play on its turn automatically when you ask it to check the game</li>
+              <li>Configure your AI assistant with the key and the game ID</li>
+              <li>The AI uses the key to check game state and play moves</li>
             </ol>
           </div>
 
-          <div className="space-y-3">
+          {/* MCP Setup */}
+          <div className="space-y-3 border-t border-purple-800/20 pt-4">
             <h3 className="text-purple-200 font-semibold">Claude Desktop (MCP)</h3>
             <p className="text-amber-400/60">
               <a
@@ -504,7 +563,7 @@ function ApiSetupSection() {
               >
                 Download the MCP server
               </a>{' '}
-              and extract it to <code className="text-purple-300 bg-purple-950/60 px-1 rounded">~/.wordz-mcp</code>. Then install dependencies:
+              and extract to <code className="text-purple-300 bg-purple-950/60 px-1 rounded">~/.wordz-mcp</code>. Then install dependencies:
             </p>
             <div className="bg-purple-950/60 border border-purple-800/30 rounded-lg p-3 font-mono text-xs text-purple-200/80">
               cd ~/.wordz-mcp && npm install
@@ -527,31 +586,32 @@ function ApiSetupSection() {
             </div>
           </div>
 
-          <div className="space-y-3">
+          {/* REST API */}
+          <div className="space-y-3 border-t border-purple-800/20 pt-4">
             <h3 className="text-purple-200 font-semibold">REST API (ChatGPT, other LLMs)</h3>
             <p className="text-amber-400/60">
-              Any HTTP client can use the REST API directly. Include your API key in the header.
+              Any HTTP client can use the REST API directly. Include your API key and the game ID.
             </p>
             <div className="space-y-2">
               <div className="bg-purple-950/60 border border-purple-800/30 rounded-lg p-3 font-mono text-xs">
                 <p className="text-purple-400/60 mb-1"># Get game state</p>
-                <p className="text-purple-200/80">
+                <p className="text-purple-200/80 break-all">
                   curl -H "x-api-key: YOUR_KEY" \
                 </p>
                 <p className="text-purple-200/80 pl-4 break-all">
-                  {apiUrl}/state
+                  {apiUrl}/state?game_id=GAME_ID
                 </p>
               </div>
               <div className="bg-purple-950/60 border border-purple-800/30 rounded-lg p-3 font-mono text-xs">
                 <p className="text-purple-400/60 mb-1"># Play a word (0-indexed rows/cols)</p>
-                <p className="text-purple-200/80">
+                <p className="text-purple-200/80 break-all">
                   curl -X POST -H "x-api-key: YOUR_KEY" \
                 </p>
                 <p className="text-purple-200/80 pl-4">
                   -H "Content-Type: application/json" \
                 </p>
                 <p className="text-purple-200/80 pl-4 break-all">
-                  -d '{`{"action":"play","tiles":[{"row":7,"col":7,"letter":"H"},{"row":7,"col":8,"letter":"I"}]}`}' \
+                  -d '{`{"game_id":"GAME_ID","action":"play","tiles":[...]}`}' \
                 </p>
                 <p className="text-purple-200/80 pl-4 break-all">
                   {apiUrl}/move
