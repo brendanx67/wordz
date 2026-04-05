@@ -1,11 +1,11 @@
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { useOpenGames, useMyGames, useCreateConfiguredGame, useJoinGame, useStartGame } from '@/hooks/useGames'
+import { useOpenGames, useMyGames, useCreateConfiguredGame, useJoinGame, useStartGame, useCancelGame } from '@/hooks/useGames'
 import type { ComputerPlayer } from '@/hooks/useGames'
 import { useGameHistory } from '@/hooks/useGameHistory'
 import { useState } from 'react'
-import { LogOut, Plus, Play, Users, Clock, Trophy, History, Eye } from 'lucide-react'
+import { LogOut, Plus, Play, Users, Clock, Trophy, History, Eye, X } from 'lucide-react'
 import { toast } from 'sonner'
 import CreateGameForm from '@/components/CreateGameForm'
 import type { GameConfig } from '@/components/CreateGameForm'
@@ -30,6 +30,7 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
   const createConfiguredGame = useCreateConfiguredGame()
   const joinGame = useJoinGame()
   const startGame = useStartGame()
+  const cancelGame = useCancelGame()
   const [showCreateForm, setShowCreateForm] = useState(false)
 
   const handleCreateGame = async (config: GameConfig) => {
@@ -188,6 +189,24 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
                           {isSpectator ? (
                             <><Eye className="h-4 w-4 mr-1" /> Watch</>
                           ) : isWaiting ? 'View' : 'Play'}
+                        </Button>
+                        <Button
+                          size="sm"
+                          onClick={async () => {
+                            const label = isWaiting ? 'Cancel' : 'Resign'
+                            if (!confirm(`${label} this game?`)) return
+                            try {
+                              const result = await cancelGame.mutateAsync({ gameId: game.id, userId })
+                              toast.success(result.deleted ? 'Game deleted' : 'Game resigned')
+                            } catch {
+                              toast.error('Failed to cancel game')
+                            }
+                          }}
+                          disabled={cancelGame.isPending}
+                          className="bg-red-900/50 hover:bg-red-800/60 text-red-300 border border-red-700/30 font-semibold"
+                        >
+                          <X className="h-4 w-4 mr-1" />
+                          {isWaiting ? 'Cancel' : 'Resign'}
                         </Button>
                       </div>
                     </div>

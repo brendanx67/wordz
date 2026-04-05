@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { useGame, useStartGame, isComputerPlayerId } from '@/hooks/useGames'
+import { useGame, useStartGame, isComputerPlayerId, useCancelGame } from '@/hooks/useGames'
 import type { ComputerPlayer } from '@/hooks/useGames'
 import { supabase } from '@/lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
@@ -11,7 +11,7 @@ import type { Tile, BoardCell, PlacedTile } from '@/lib/gameConstants'
 import GameBoard from '@/components/GameBoard'
 import TileRack from '@/components/TileRack'
 import { toast } from 'sonner'
-import { ArrowLeft, RotateCcw, Send, Flag, RefreshCw, Play, History } from 'lucide-react'
+import { ArrowLeft, RotateCcw, Send, Flag, RefreshCw, Play, History, LogOut } from 'lucide-react'
 import { createEmptyBoard } from '@/lib/gameConstants'
 import GameHistoryViewer from '@/components/GameHistoryViewer'
 import { cn } from '@/lib/utils'
@@ -31,6 +31,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   useGameRealtime(gameId)
 
   const { playComputerTurn } = useComputerPlayer(gameId)
+  const cancelGame = useCancelGame()
 
   const [placedTiles, setPlacedTiles] = useState<Map<string, Tile>>(new Map())
   const [selectedSquare, setSelectedSquare] = useState<{ row: number; col: number } | null>(null)
@@ -691,8 +692,31 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
           <h1 className="text-lg font-bold tracking-widest text-amber-400" style={{ fontFamily: "'Playfair Display', serif" }}>
             WORDZ
           </h1>
-          <div className="text-xs text-amber-600/60">
-            {tileBag.length} tiles left
+          <div className="flex items-center gap-3">
+            <span className="text-xs text-amber-600/60">
+              {tileBag.length} tiles left
+            </span>
+            {isActive && myPlayer && (
+              <Button
+                variant="ghost"
+                size="sm"
+                onClick={async () => {
+                  if (!confirm('Resign this game?')) return
+                  try {
+                    await cancelGame.mutateAsync({ gameId, userId })
+                    toast.success('Game resigned')
+                    onBack()
+                  } catch {
+                    toast.error('Failed to resign')
+                  }
+                }}
+                disabled={cancelGame.isPending}
+                className="text-red-400/60 hover:text-red-300 hover:bg-red-900/20 text-xs"
+              >
+                <LogOut className="h-3 w-3 mr-1" />
+                Resign
+              </Button>
+            )}
           </div>
         </div>
       </header>
