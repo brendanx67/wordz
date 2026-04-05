@@ -50,7 +50,7 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
     })
   }, [])
 
-  const [apiKeysToShow, setApiKeysToShow] = useState<{ gameId: string; keys: { playerName: string; playerId: string; apiKey: string }[] } | null>(null)
+  const [apiKeysToShow, setApiKeysToShow] = useState<{ gameId: string; keys: { playerName: string; playerId: string; apiKey: string; strategyLevel: string }[] } | null>(null)
 
   const handleCreateGame = async (config: GameConfig) => {
     try {
@@ -120,7 +120,12 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
               </p>
               {apiKeysToShow.keys.map((ak) => (
                 <div key={ak.playerId} className="space-y-1.5">
-                  <Label className="text-purple-300/80 text-xs">{ak.playerName}</Label>
+                  <Label className="text-purple-300/80 text-xs">
+                    {ak.playerName}
+                    <span className="ml-2 text-amber-400/60">
+                      {ak.strategyLevel === 'master' ? '\u2605\u2605\u2605 Master' : ak.strategyLevel === 'club' ? '\u2605\u2605 Club' : '\u2605 Social'}
+                    </span>
+                  </Label>
                   <div className="flex gap-2">
                     <Input
                       readOnly
@@ -147,6 +152,9 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
                 </p>
                 <p className="text-amber-500/60 text-xs">
                   Use header: <code className="text-amber-300/70">x-api-key: {'<key>'}</code>
+                </p>
+                <p className="text-amber-500/60 text-xs">
+                  Tell the AI to call <code className="text-purple-300/70">game_context</code> with level <code className="text-purple-300/70">{apiKeysToShow.keys[0]?.strategyLevel || 'master'}</code> first
                 </p>
               </div>
               <Button

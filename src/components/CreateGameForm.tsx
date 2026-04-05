@@ -16,10 +16,13 @@ export type PlayerSlotType =
   | 'api-player'
   | 'none'
 
+export type StrategyLevel = 'master' | 'club' | 'social'
+
 export interface PlayerSlot {
   type: PlayerSlotType
   label: string
   apiPlayerName?: string
+  strategyLevel?: StrategyLevel
 }
 
 export interface GameConfig {
@@ -75,6 +78,7 @@ export default function CreateGameForm({ onCreateGame, onCancel, isPending }: Cr
         type,
         label: getSlotLabel(type),
         apiPlayerName: type === 'api-player' ? (prev[index].apiPlayerName || 'Claude') : undefined,
+        strategyLevel: type === 'api-player' ? (prev[index].strategyLevel || 'master') : undefined,
       }
       return next
     })
@@ -84,6 +88,14 @@ export default function CreateGameForm({ onCreateGame, onCancel, isPending }: Cr
     setSlots(prev => {
       const next = [...prev]
       next[index] = { ...next[index], apiPlayerName: name }
+      return next
+    })
+  }
+
+  const updateStrategyLevel = (index: number, level: StrategyLevel) => {
+    setSlots(prev => {
+      const next = [...prev]
+      next[index] = { ...next[index], strategyLevel: level }
       return next
     })
   }
@@ -154,12 +166,42 @@ export default function CreateGameForm({ onCreateGame, onCancel, isPending }: Cr
                   </SelectContent>
                 </Select>
                 {slot.type === 'api-player' && (
-                  <Input
-                    value={slot.apiPlayerName || 'Claude'}
-                    onChange={(e) => updateApiPlayerName(i, e.target.value)}
-                    placeholder="Player name (e.g. Claude, ChatGPT)"
-                    className="bg-amber-950/60 border-amber-800/30 text-amber-200 h-8 text-sm"
-                  />
+                  <>
+                    <Input
+                      value={slot.apiPlayerName || 'Claude'}
+                      onChange={(e) => updateApiPlayerName(i, e.target.value)}
+                      placeholder="Player name (e.g. Claude, ChatGPT)"
+                      className="bg-amber-950/60 border-amber-800/30 text-amber-200 h-8 text-sm"
+                    />
+                    <Select
+                      value={slot.strategyLevel || 'master'}
+                      onValueChange={(val) => updateStrategyLevel(i, val as StrategyLevel)}
+                    >
+                      <SelectTrigger className="bg-purple-950/40 border-purple-800/30 text-purple-200 h-8 text-sm">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-amber-950 border-amber-800/40">
+                        <SelectItem value="master" className="text-amber-200 focus:bg-amber-800/30 focus:text-amber-100">
+                          <span className="flex items-center gap-2">
+                            <span className="text-yellow-400">&#9733;&#9733;&#9733;</span>
+                            Master — Tournament-level strategy
+                          </span>
+                        </SelectItem>
+                        <SelectItem value="club" className="text-amber-200 focus:bg-amber-800/30 focus:text-amber-100">
+                          <span className="flex items-center gap-2">
+                            <span className="text-yellow-400">&#9733;&#9733;</span>
+                            Club — Intermediate strategy
+                          </span>
+                        </SelectItem>
+                        <SelectItem value="social" className="text-amber-200 focus:bg-amber-800/30 focus:text-amber-100">
+                          <span className="flex items-center gap-2">
+                            <span className="text-yellow-400">&#9733;</span>
+                            Social — Casual fun game
+                          </span>
+                        </SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </>
                 )}
               </div>
             </div>

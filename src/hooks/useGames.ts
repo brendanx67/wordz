@@ -130,7 +130,7 @@ export function useCreateConfiguredGame() {
       })
 
       // Create API players (stored alongside computer players)
-      const apiPlayers: { id: string; name: string; rack: Tile[]; score: number }[] = apiSlots.map((slot, i) => {
+      const apiPlayers: { id: string; name: string; rack: Tile[]; score: number; strategyLevel?: string }[] = apiSlots.map((slot, i) => {
         const { drawn, remaining } = drawTiles(bag, RACK_SIZE)
         bag = remaining
         const name = slot.apiPlayerName || 'Claude'
@@ -139,6 +139,7 @@ export function useCreateConfiguredGame() {
           name: `${name} (on behalf of ${displayName})`,
           rack: drawn,
           score: 0,
+          strategyLevel: slot.strategyLevel || 'master',
         }
       })
 
@@ -216,7 +217,7 @@ export function useCreateConfiguredGame() {
       }
 
       // Generate API keys for API players
-      const apiKeys: { playerName: string; playerId: string; apiKey: string }[] = []
+      const apiKeys: { playerName: string; playerId: string; apiKey: string; strategyLevel: string }[] = []
       for (const ap of apiPlayers) {
         const { data: keyRow, error: keyErr } = await supabase
           .from('api_keys')
@@ -229,7 +230,7 @@ export function useCreateConfiguredGame() {
           .select('api_key')
           .single()
         if (keyErr) throw keyErr
-        apiKeys.push({ playerName: ap.name, playerId: ap.id, apiKey: keyRow.api_key })
+        apiKeys.push({ playerName: ap.name, playerId: ap.id, apiKey: keyRow.api_key, strategyLevel: ap.strategyLevel || 'master' })
       }
 
       return { gameId: game.id, apiKeys }
