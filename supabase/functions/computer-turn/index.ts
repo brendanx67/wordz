@@ -375,12 +375,19 @@ function recordMove(board: BoardCell[][], trie: TrieNode, tilesPlaced: { row:num
   moves.push({ tiles: tilesPlaced, words: result.words, totalScore: result.totalScore });
 }
 
-type Difficulty = "easy" | "medium" | "hard";
+type Difficulty = "easy" | "medium" | "hard" | "competitive";
 
-function selectMove(moves: GeneratedMove[], difficulty: Difficulty): GeneratedMove | null {
+interface ScoreContext {
+  myScore: number;
+  otherScores: number[]; // scores of all other players
+  moveNumber: number; // how many moves have been played
+}
+
+function selectMove(moves: GeneratedMove[], difficulty: Difficulty, scoreCtx?: ScoreContext): GeneratedMove | null {
   if (!moves.length) return null;
   const sorted = [...moves].sort((a, b) => b.totalScore - a.totalScore);
   if (difficulty === "hard") return sorted[0];
+  if (difficulty === "competitive" && scoreCtx) return selectCompetitiveMove(moves, scoreCtx);
   if (difficulty === "medium") {
     const top = Math.max(3, Math.ceil(sorted.length * 0.3));
     const cands = sorted.slice(0, top);
@@ -394,6 +401,39 @@ function selectMove(moves: GeneratedMove[], difficulty: Difficulty): GeneratedMo
   const start = Math.max(0, Math.floor(sorted.length * 0.4));
   const cands = sorted.slice(start);
   return cands.length ? cands[Math.floor(Math.random() * cands.length)] : sorted[sorted.length - 1];
+}
+
+function selectCompetitiveMove(moves: GeneratedMove[], ctx: ScoreContext): GeneratedMove {
+  const bestOpponentScore = Math.max(...ctx.otherScores, 0);
+  const gap = bestOpponentScore - ctx.myScore; // positive = we're behind, negative = we're ahead
+
+  // Estimate what the best opponent might score next turn (use their average)
+  const avgMoveScore = ctx.moveNumber > 0
+    ? bestOpponentScore / Math.max(1, Math.ceil(ctx.moveNumber / 2))
+    : 20;
+
+  // Target: the score that would put us roughly even with the leader
+  // after they play another average move
+  const targetMoveScore = gap + avgMoveScore;
+
+  // Find the move whose score is closest to the target
+  // But always play at least a reasonable word (floor at ~60% of median available)
+  const scores = moves.map(m => m.totalScore);
+  const medianScore = scores.sort((a, b) => a - b)[Math.floor(scores.length / 2)] || 0;
+  const floor = Math.max(4, Math.floor(medianScore * 0.3));
+  const effectiveTarget = Math.max(floor, targetMoveScore);
+
+  let bestMove = moves[0];
+  let bestDist = Infinity;
+  for (const move of moves) {
+    const dist = Math.abs(move.totalScore - effectiveTarget);
+    if (dist < bestDist) {
+      bestDist = dist;
+      bestMove = move;
+    }
+  }
+
+  return bestMove;
 }
 
 // ─── DICTIONARY CACHE ──────────────────────────────────────────────────────────
@@ -496,7 +536,25 @@ Deno.serve(async (req) => {
 
     // Generate and select a move
     const moves = generateAllMoves(board, cpuPlayer.rack, trie);
-    const selected = selectMove(moves, cpuPlayer.difficulty);
+
+    // Build score context for competitive mode
+    let scoreCtx: ScoreContext | undefined;
+    if (cpuPlayer.difficulty === "competitive") {
+      const { data: humanPlayers } = await supabase
+        .from("game_players").select("score").eq("game_id", game_id);
+      const otherCpuScores = computerPlayers
+        .filter(cp => cp.id !== cpuPlayer.id)
+        .map(cp => cp.score);
+      const humanScores = (humanPlayers || []).map((p: { score: number }) => p.score);
+      const moveHistory = (game.move_history || []) as unknown[];
+      scoreCtx = {
+        myScore: cpuPlayer.score,
+        otherScores: [...humanScores, ...otherCpuScores],
+        moveNumber: moveHistory.length,
+      };
+    }
+
+    const selected = selectMove(moves, cpuPlayer.difficulty, scoreCtx);
 
     if (!selected) {
       // No valid moves — pass

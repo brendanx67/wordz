@@ -12,6 +12,7 @@ export type PlayerSlotType =
   | 'computer-easy'
   | 'computer-medium'
   | 'computer-hard'
+  | 'computer-competitive'
   | 'none'
 
 export interface PlayerSlot {
@@ -44,6 +45,7 @@ function getSlotLabel(type: PlayerSlotType): string {
     case 'computer-easy': return 'Computer (Easy)'
     case 'computer-medium': return 'Computer (Medium)'
     case 'computer-hard': return 'Computer (Hard)'
+    case 'computer-competitive': return 'Computer (Competitive)'
     case 'none': return 'None'
   }
 }
@@ -86,6 +88,7 @@ export default function CreateGameForm({ onCreateGame, onCancel, isPending }: Cr
       { value: 'computer-easy', label: 'Computer (Easy)' },
       { value: 'computer-medium', label: 'Computer (Medium)' },
       { value: 'computer-hard', label: 'Computer (Hard)' },
+      { value: 'computer-competitive', label: 'Computer (Competitive)' },
     )
 
     options.push({ value: 'none', label: 'None' })

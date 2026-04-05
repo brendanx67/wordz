@@ -7,7 +7,7 @@ import type { GameConfig } from '@/components/CreateGameForm'
 export interface ComputerPlayer {
   id: string
   name: string
-  difficulty: 'easy' | 'medium' | 'hard'
+  difficulty: 'easy' | 'medium' | 'hard' | 'competitive'
   rack: Tile[]
   score: number
 }
@@ -116,7 +116,7 @@ export function useCreateConfiguredGame() {
 
       // Create computer players
       const computerPlayers: ComputerPlayer[] = computerSlots.map((slot, i) => {
-        const diff = slot.type.replace('computer-', '') as 'easy' | 'medium' | 'hard'
+        const diff = slot.type.replace('computer-', '') as 'easy' | 'medium' | 'hard' | 'competitive'
         const { drawn, remaining } = drawTiles(bag, RACK_SIZE)
         bag = remaining
         return {
