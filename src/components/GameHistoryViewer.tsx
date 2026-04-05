@@ -1,7 +1,7 @@
 import { useState, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight } from 'lucide-react'
+import { ChevronLeft, ChevronRight, ChevronsLeft, ChevronsRight, Clock } from 'lucide-react'
 import type { BoardCell } from '@/lib/gameConstants'
 import { cn } from '@/lib/utils'
 import { getBonusType } from '@/lib/gameConstants'
@@ -52,6 +52,23 @@ export default function GameHistoryViewer({ moveHistory, emptyBoard }: GameHisto
   const currentMove = moveIndex >= 0 && moveIndex < moveHistory.length
     ? moveHistory[moveIndex]
     : null
+
+  // Calculate timing stats from timestamps
+  const timing = useMemo(() => {
+    if (moveHistory.length < 2) return null
+    const times = moveHistory.map(m => new Date(m.timestamp).getTime())
+    const elapsed = times.map((t, i) => i === 0 ? 0 : (t - times[i - 1]) / 1000)
+    const totalSec = (times[times.length - 1] - times[0]) / 1000
+    const avgSec = totalSec / (moveHistory.length - 1)
+    return { elapsed, totalSec, avgSec }
+  }, [moveHistory])
+
+  const formatDuration = (sec: number): string => {
+    if (sec < 60) return `${sec.toFixed(1)}s`
+    const m = Math.floor(sec / 60)
+    const s = Math.round(sec % 60)
+    return `${m}m ${s}s`
+  }
 
   const goFirst = () => setMoveIndex(-1)
   const goPrev = () => setMoveIndex(i => Math.max(-1, i - 1))
@@ -143,10 +160,24 @@ export default function GameHistoryViewer({ moveHistory, emptyBoard }: GameHisto
           )}
           {currentMove.type === 'pass' && <> passed</>}
           {currentMove.type === 'exchange' && <> exchanged tiles</>}
+          {timing && moveIndex > 0 && timing.elapsed[moveIndex] > 0 && (
+            <div className="text-[10px] text-amber-500/60 mt-0.5">
+              <Clock className="h-3 w-3 inline mr-0.5" />
+              {formatDuration(timing.elapsed[moveIndex])}
+            </div>
+          )}
         </div>
       ) : (
         <div className="text-center text-sm text-amber-500/60">
           Board before first move
+        </div>
+      )}
+
+      {/* Game timing stats */}
+      {timing && (
+        <div className="flex justify-center gap-4 text-[10px] text-amber-500/60">
+          <span><Clock className="h-3 w-3 inline mr-0.5" />Total: {formatDuration(timing.totalSec)}</span>
+          <span>Avg: {formatDuration(timing.avgSec)}/move</span>
         </div>
       )}
 
@@ -175,6 +206,9 @@ export default function GameHistoryViewer({ moveHistory, emptyBoard }: GameHisto
                 )}
                 {move.type === 'pass' && <>: Pass</>}
                 {move.type === 'exchange' && <>: Exchange</>}
+                {timing && i > 0 && timing.elapsed[i] > 0 && (
+                  <span className="text-amber-600/40 ml-1">{formatDuration(timing.elapsed[i])}</span>
+                )}
               </button>
             ))}
           </div>
