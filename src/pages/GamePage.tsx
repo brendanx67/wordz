@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { useGame, useGameMoves, useStartGame, isComputerPlayerId } from '@/hooks/useGames'
+import { useGame, useStartGame, isComputerPlayerId } from '@/hooks/useGames'
 import type { ComputerPlayer } from '@/hooks/useGames'
 import { supabase } from '@/lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
@@ -26,7 +26,6 @@ interface GamePageProps {
 
 export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   const { data: game, isLoading } = useGame(gameId)
-  const { data: moves } = useGameMoves(gameId)
   const queryClient = useQueryClient()
   const startGame = useStartGame()
   useGameRealtime(gameId)
@@ -713,18 +712,18 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
           </CardContent>
 
           {/* Recent moves */}
-          {moves && moves.length > 0 && !showHistory && (
+          {game.move_history && (game.move_history as unknown[]).length > 0 && !showHistory && (
             <CardContent className="px-4 pb-4 border-t border-amber-900/20 pt-3">
               <p className="text-amber-400/60 text-xs font-medium mb-2">Recent Moves</p>
               <div className="space-y-1 max-h-40 overflow-y-auto">
-                {moves.map((m) => (
-                  <div key={m.id} className="text-xs text-amber-500/60">
-                    <span className="text-amber-300/70">{(m.profiles as { display_name: string })?.display_name}</span>
-                    {m.move_type === 'play' && (
-                      <> played {(m.words_formed as string[])?.join(', ')} for <span className="text-amber-200">{m.score}</span> pts</>
+                {([...(game.move_history as { player_name: string; type: string; words?: { word: string; score: number }[]; score?: number }[])].reverse().slice(0, 10)).map((m, i) => (
+                  <div key={i} className="text-xs text-amber-500/60">
+                    <span className="text-amber-300/70">{m.player_name}</span>
+                    {m.type === 'play' && (
+                      <> played {m.words?.map(w => w.word).join(', ')} for <span className="text-amber-200">{m.score}</span> pts</>
                     )}
-                    {m.move_type === 'pass' && <> passed</>}
-                    {m.move_type === 'exchange' && <> exchanged tiles</>}
+                    {m.type === 'pass' && <> passed</>}
+                    {m.type === 'exchange' && <> exchanged tiles</>}
                   </div>
                 ))}
               </div>
