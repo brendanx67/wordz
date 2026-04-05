@@ -905,6 +905,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                 isExchangeMode={isExchangeMode}
                 onShuffle={handleShuffleRack}
                 onReorder={handleReorderRack}
+                onReturnFromBoard={handlePickupTile}
               />
 
               {/* Action buttons */}

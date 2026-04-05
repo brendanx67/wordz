@@ -10,9 +10,10 @@ interface TileRackProps {
   isExchangeMode: boolean
   onShuffle?: () => void
   onReorder?: (tiles: Tile[]) => void
+  onReturnFromBoard?: (row: number, col: number) => void
 }
 
-export default function TileRack({ tiles, onTileClick, selectedTiles, isExchangeMode, onShuffle, onReorder }: TileRackProps) {
+export default function TileRack({ tiles, onTileClick, selectedTiles, isExchangeMode, onShuffle, onReorder, onReturnFromBoard }: TileRackProps) {
   const [draggedTileId, setDraggedTileId] = useState<string | null>(null)
   const [dropIndex, setDropIndex] = useState<number | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -70,17 +71,29 @@ export default function TileRack({ tiles, onTileClick, selectedTiles, isExchange
   }, [tiles.length])
 
   const handleContainerDragOver = useCallback((e: React.DragEvent) => {
-    if (!draggedTileId) return
+    // Accept both rack-internal drags and board-to-rack drags
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
-    setDropIndex(computeDropIndex(e.clientX))
+    if (draggedTileId) {
+      setDropIndex(computeDropIndex(e.clientX))
+    }
   }, [draggedTileId, computeDropIndex])
 
   const handleContainerDrop = useCallback((e: React.DragEvent) => {
-    if (!draggedTileId) return
     e.preventDefault()
-    // handleDragEnd handles the reorder
-  }, [draggedTileId])
+    if (draggedTileId) return // rack-internal: handleDragEnd handles it
+
+    // Board-to-rack drop
+    const tileData = e.dataTransfer.getData('application/json')
+    if (!tileData || !onReturnFromBoard) return
+    try {
+      const parsed = JSON.parse(tileData) as { fromBoard?: string }
+      if (parsed.fromBoard) {
+        const [row, col] = parsed.fromBoard.split(',').map(Number)
+        onReturnFromBoard(row, col)
+      }
+    } catch { /* ignore */ }
+  }, [draggedTileId, onReturnFromBoard])
 
   const handleContainerDragLeave = useCallback((e: React.DragEvent) => {
     // Only clear if truly leaving the container
