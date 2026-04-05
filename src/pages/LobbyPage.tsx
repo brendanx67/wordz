@@ -266,8 +266,25 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
               <div className="space-y-3">
                 {gameHistory.map((game) => {
                   const players = game.game_players ?? []
+                  const cpuPlayers = (game.computer_players ?? []) as ComputerPlayer[]
+                  const isPlayer = players.some((p: { player_id: string }) => p.player_id === userId)
                   const didWin = game.winner === userId
-                  const winnerName = players.find((p: { player_id: string }) => p.player_id === game.winner)
+                  const isSpectatorGame = !isPlayer
+
+                  // Build scores display combining humans and computers
+                  const allScores: string[] = [
+                    ...players.map((p: { profiles: unknown; score: number }) =>
+                      `${getDisplayName(p.profiles as { display_name: string })}: ${p.score}`
+                    ),
+                    ...cpuPlayers.map(cp => `${cp.name}: ${cp.score}`),
+                  ]
+
+                  // Find winner name
+                  const humanWinner = players.find((p: { player_id: string }) => p.player_id === game.winner)
+                  const cpuWinner = cpuPlayers.find(cp => cp.id === game.winner)
+                  const winnerDisplay = humanWinner
+                    ? getDisplayName((humanWinner as { profiles: unknown }).profiles as { display_name: string })
+                    : cpuWinner?.name ?? 'Unknown'
 
                   return (
                     <div
@@ -275,19 +292,20 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
                       className="flex items-center justify-between p-4 rounded-lg bg-amber-950/40 border border-amber-900/20"
                     >
                       <div className="flex-1">
-                        <div className="flex items-center gap-3">
-                          <span className={didWin ? 'text-green-400 font-medium' : 'text-red-400/70 font-medium'}>
-                            {didWin ? 'Won!' : 'Lost'}
-                          </span>
+                        <div className="flex items-center gap-3 flex-wrap">
+                          {isSpectatorGame ? (
+                            <span className="text-blue-400/70 font-medium">Spectated</span>
+                          ) : (
+                            <span className={didWin ? 'text-green-400 font-medium' : 'text-red-400/70 font-medium'}>
+                              {didWin ? 'Won!' : 'Lost'}
+                            </span>
+                          )}
                           <span className="text-amber-200/70 text-sm">
-                            {players.map((p: { profiles: unknown; score: number }) =>
-                              `${getDisplayName(p.profiles as { display_name: string })}: ${p.score}`
-                            ).join(' | ')}
+                            {allScores.join(' | ')}
                           </span>
                         </div>
                         <div className="text-xs text-amber-600/50 mt-1">
-                          {new Date(game.updated_at).toLocaleDateString()} —
-                          Winner: {winnerName ? getDisplayName((winnerName as { profiles: unknown }).profiles as { display_name: string }) : (game.winner?.startsWith('computer-') ? game.winner : 'Unknown')}
+                          {new Date(game.updated_at).toLocaleDateString()} — Winner: {winnerDisplay}
                         </div>
                       </div>
                       <Button
