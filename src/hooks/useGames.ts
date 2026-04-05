@@ -105,9 +105,10 @@ export function useMyGames(userId: string | undefined) {
 export function useCreateConfiguredGame() {
   const queryClient = useQueryClient()
   return useMutation({
-    mutationFn: async ({ userId, config }: { userId: string; config: GameConfig }) => {
+    mutationFn: async ({ userId, config, displayName }: { userId: string; config: GameConfig; displayName: string }) => {
       const activePlayers = config.players.filter(s => s.type !== 'none')
       const computerSlots = activePlayers.filter(s => s.type.startsWith('computer-'))
+      const apiSlots = activePlayers.filter(s => s.type === 'api-player')
       const hasMe = activePlayers.some(s => s.type === 'me')
       const hasHuman = activePlayers.some(s => s.type === 'human')
 
@@ -128,21 +129,38 @@ export function useCreateConfiguredGame() {
         }
       })
 
+      // Create API players (stored alongside computer players)
+      const apiPlayers: { id: string; name: string; rack: Tile[]; score: number }[] = apiSlots.map((slot, i) => {
+        const { drawn, remaining } = drawTiles(bag, RACK_SIZE)
+        bag = remaining
+        const name = slot.apiPlayerName || 'Claude'
+        return {
+          id: `api-${i + 1}`,
+          name: `${name} (on behalf of ${displayName})`,
+          rack: drawn,
+          score: 0,
+        }
+      })
+
+      // Combine computer and API players
+      const allNonHumanPlayers = [...computerPlayers, ...apiPlayers]
+
       // Build turn order based on slot positions
       const turnOrder: string[] = []
       let cpuIdx = 0
-      const humanPlayerIds: string[] = [] // Track order for human slots
+      let apiIdx = 0
 
       for (const slot of activePlayers) {
         if (slot.type === 'me') {
           turnOrder.push(userId)
-          humanPlayerIds.push(userId)
         } else if (slot.type === 'human') {
-          // Placeholder — will be filled when human joins
           turnOrder.push('__human_pending__')
         } else if (slot.type.startsWith('computer-')) {
           turnOrder.push(computerPlayers[cpuIdx].id)
           cpuIdx++
+        } else if (slot.type === 'api-player') {
+          turnOrder.push(apiPlayers[apiIdx].id)
+          apiIdx++
         }
       }
 
@@ -173,8 +191,8 @@ export function useCreateConfiguredGame() {
             : turnOrder.filter(id => id !== '__human_pending__'),
           turn_index: canStartImmediately ? firstIdx : 0,
           current_turn: canStartImmediately ? turnOrder[firstIdx] : null,
-          has_computer: computerPlayers.length > 0,
-          computer_players: computerPlayers,
+          has_computer: computerPlayers.length > 0 || apiPlayers.length > 0,
+          computer_players: allNonHumanPlayers,
           computer_delay: config.computerDelay,
           // Legacy single-computer fields (for backward compat)
           computer_difficulty: computerPlayers[0]?.difficulty ?? null,
@@ -197,7 +215,24 @@ export function useCreateConfiguredGame() {
         if (playerErr) throw playerErr
       }
 
-      return game.id
+      // Generate API keys for API players
+      const apiKeys: { playerName: string; playerId: string; apiKey: string }[] = []
+      for (const ap of apiPlayers) {
+        const { data: keyRow, error: keyErr } = await supabase
+          .from('api_keys')
+          .insert({
+            game_id: game.id,
+            player_id: ap.id,
+            player_name: ap.name,
+            created_by: userId,
+          })
+          .select('api_key')
+          .single()
+        if (keyErr) throw keyErr
+        apiKeys.push({ playerName: ap.name, playerId: ap.id, apiKey: keyRow.api_key })
+      }
+
+      return { gameId: game.id, apiKeys }
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['games'] })
@@ -358,6 +393,11 @@ export function useGameMoves(gameId: string | undefined) {
 // Helper to check if a player ID is a computer
 export function isComputerPlayerId(playerId: string): boolean {
   return playerId.startsWith('computer-')
+}
+
+// Helper to check if a player ID is an API player
+export function isApiPlayerId(playerId: string): boolean {
+  return playerId.startsWith('api-')
 }
 
 export function useCancelGame() {

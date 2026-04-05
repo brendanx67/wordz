@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
-import { Bot, User, Play, X } from 'lucide-react'
+import { Bot, User, Play, X, Sparkles } from 'lucide-react'
 
 export type PlayerSlotType =
   | 'me'
@@ -13,11 +13,13 @@ export type PlayerSlotType =
   | 'computer-medium'
   | 'computer-hard'
   | 'computer-competitive'
+  | 'api-player'
   | 'none'
 
 export interface PlayerSlot {
   type: PlayerSlotType
   label: string
+  apiPlayerName?: string
 }
 
 export interface GameConfig {
@@ -46,12 +48,14 @@ function getSlotLabel(type: PlayerSlotType): string {
     case 'computer-medium': return 'Computer (Medium)'
     case 'computer-hard': return 'Computer (Hard)'
     case 'computer-competitive': return 'Computer (Competitive)'
+    case 'api-player': return 'API Player (LLM)'
     case 'none': return 'None'
   }
 }
 
 function getSlotIcon(type: PlayerSlotType) {
   if (type.startsWith('computer-')) return <Bot className="h-4 w-4 text-emerald-400" />
+  if (type === 'api-player') return <Sparkles className="h-4 w-4 text-purple-400" />
   if (type === 'me' || type === 'human') return <User className="h-4 w-4 text-amber-400" />
   return null
 }
@@ -67,7 +71,19 @@ export default function CreateGameForm({ onCreateGame, onCancel, isPending }: Cr
   const updateSlot = (index: number, type: PlayerSlotType) => {
     setSlots(prev => {
       const next = [...prev]
-      next[index] = { type, label: getSlotLabel(type) }
+      next[index] = {
+        type,
+        label: getSlotLabel(type),
+        apiPlayerName: type === 'api-player' ? (prev[index].apiPlayerName || 'Claude') : undefined,
+      }
+      return next
+    })
+  }
+
+  const updateApiPlayerName = (index: number, name: string) => {
+    setSlots(prev => {
+      const next = [...prev]
+      next[index] = { ...next[index], apiPlayerName: name }
       return next
     })
   }
@@ -89,6 +105,7 @@ export default function CreateGameForm({ onCreateGame, onCancel, isPending }: Cr
       { value: 'computer-medium', label: 'Computer (Medium)' },
       { value: 'computer-hard', label: 'Computer (Hard)' },
       { value: 'computer-competitive', label: 'Computer (Competitive)' },
+      { value: 'api-player', label: 'API Player (LLM)' },
     )
 
     options.push({ value: 'none', label: 'None' })
@@ -117,7 +134,7 @@ export default function CreateGameForm({ onCreateGame, onCancel, isPending }: Cr
               <div className="w-8 h-8 rounded-full bg-amber-900/30 border border-amber-800/30 flex items-center justify-center text-amber-500/60 text-xs font-bold shrink-0">
                 {i + 1}
               </div>
-              <div className="flex-1">
+              <div className="flex-1 space-y-1.5">
                 <Select
                   value={slot.type}
                   onValueChange={(val) => updateSlot(i, val as PlayerSlotType)}
@@ -136,6 +153,14 @@ export default function CreateGameForm({ onCreateGame, onCancel, isPending }: Cr
                     ))}
                   </SelectContent>
                 </Select>
+                {slot.type === 'api-player' && (
+                  <Input
+                    value={slot.apiPlayerName || 'Claude'}
+                    onChange={(e) => updateApiPlayerName(i, e.target.value)}
+                    placeholder="Player name (e.g. Claude, ChatGPT)"
+                    className="bg-amber-950/60 border-amber-800/30 text-amber-200 h-8 text-sm"
+                  />
+                )}
               </div>
             </div>
           ))}

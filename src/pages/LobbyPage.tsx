@@ -5,7 +5,9 @@ import { useOpenGames, useMyGames, useCreateConfiguredGame, useJoinGame, useStar
 import type { ComputerPlayer } from '@/hooks/useGames'
 import { useGameHistory } from '@/hooks/useGameHistory'
 import { useState, useCallback } from 'react'
-import { LogOut, Plus, Play, Users, Clock, Trophy, History, Eye, X } from 'lucide-react'
+import { LogOut, Plus, Play, Users, Clock, Trophy, History, Eye, X, Sparkles, Bot, Copy, ChevronDown, ChevronUp } from 'lucide-react'
+import { Label } from '@/components/ui/label'
+import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import CreateGameForm from '@/components/CreateGameForm'
 import type { GameConfig } from '@/components/CreateGameForm'
@@ -48,12 +50,19 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
     })
   }, [])
 
+  const [apiKeysToShow, setApiKeysToShow] = useState<{ gameId: string; keys: { playerName: string; playerId: string; apiKey: string }[] } | null>(null)
+
   const handleCreateGame = async (config: GameConfig) => {
     try {
-      const gameId = await createConfiguredGame.mutateAsync({ userId, config })
+      const result = await createConfiguredGame.mutateAsync({ userId, config, displayName })
       setShowCreateForm(false)
-      toast.success('Game created!')
-      onOpenGame(gameId)
+      if (result.apiKeys.length > 0) {
+        setApiKeysToShow({ gameId: result.gameId, keys: result.apiKeys })
+        toast.success('Game created! Copy the API keys below.')
+      } else {
+        toast.success('Game created!')
+        onOpenGame(result.gameId)
+      }
     } catch {
       toast.error('Failed to create game')
     }
@@ -96,6 +105,64 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
       </header>
 
       <main className="container mx-auto px-4 py-8 max-w-4xl space-y-8">
+        {/* API Keys Display */}
+        {apiKeysToShow && (
+          <Card className="border-purple-700/40 bg-purple-950/30 w-full max-w-lg mx-auto">
+            <CardHeader className="pb-3">
+              <CardTitle className="text-purple-300 text-lg flex items-center gap-2">
+                <Sparkles className="h-5 w-5" />
+                API Keys for LLM Players
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <p className="text-amber-400/70 text-sm">
+                Copy these API keys and use them to connect an LLM to this game. Each key is shown only once.
+              </p>
+              {apiKeysToShow.keys.map((ak) => (
+                <div key={ak.playerId} className="space-y-1.5">
+                  <Label className="text-purple-300/80 text-xs">{ak.playerName}</Label>
+                  <div className="flex gap-2">
+                    <Input
+                      readOnly
+                      value={ak.apiKey}
+                      className="bg-purple-950/60 border-purple-800/30 text-purple-200 font-mono text-xs"
+                      onClick={(e) => (e.target as HTMLInputElement).select()}
+                    />
+                    <Button
+                      size="sm"
+                      onClick={() => {
+                        navigator.clipboard.writeText(ak.apiKey)
+                        toast.success('API key copied!')
+                      }}
+                      className="bg-purple-800/60 hover:bg-purple-700/70 text-purple-200 shrink-0"
+                    >
+                      Copy
+                    </Button>
+                  </div>
+                </div>
+              ))}
+              <div className="pt-2 space-y-2">
+                <p className="text-amber-500/60 text-xs">
+                  API endpoint: <code className="text-amber-300/70">{import.meta.env.VITE_SUPABASE_URL}/functions/v1/game-api</code>
+                </p>
+                <p className="text-amber-500/60 text-xs">
+                  Use header: <code className="text-amber-300/70">x-api-key: {'<key>'}</code>
+                </p>
+              </div>
+              <Button
+                onClick={() => {
+                  const gid = apiKeysToShow.gameId
+                  setApiKeysToShow(null)
+                  onOpenGame(gid)
+                }}
+                className="w-full bg-amber-700 hover:bg-amber-600 text-amber-50 font-semibold"
+              >
+                Continue to Game
+              </Button>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Create Game */}
         {showCreateForm ? (
           <CreateGameForm
@@ -371,7 +438,124 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
             )}
           </CardContent>
         </Card>
+        {/* API & MCP Setup */}
+        <ApiSetupSection />
       </main>
     </div>
+  )
+}
+
+function ApiSetupSection() {
+  const [expanded, setExpanded] = useState(false)
+  const apiUrl = `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/game-api`
+
+  const mcpConfig = JSON.stringify({
+    mcpServers: {
+      wordz: {
+        command: "npx",
+        args: ["tsx", "/path/to/mcp-server/index.ts"],
+        env: {
+          WORDZ_API_URL: apiUrl,
+          WORDZ_API_KEY: "your-api-key-here"
+        }
+      }
+    }
+  }, null, 2)
+
+  return (
+    <Card className="border-purple-900/30 bg-purple-950/20">
+      <CardHeader
+        className="cursor-pointer select-none"
+        onClick={() => setExpanded(!expanded)}
+      >
+        <CardTitle className="text-purple-300 flex items-center gap-2">
+          <Bot className="h-5 w-5" />
+          Connect an AI (API & MCP)
+          {expanded ? <ChevronUp className="h-4 w-4 ml-auto" /> : <ChevronDown className="h-4 w-4 ml-auto" />}
+        </CardTitle>
+      </CardHeader>
+      {expanded && (
+        <CardContent className="space-y-6 text-sm">
+          <div className="space-y-3">
+            <h3 className="text-purple-200 font-semibold">How it works</h3>
+            <ol className="text-amber-400/70 space-y-2 list-decimal pl-4">
+              <li>Create a new game and add an <strong className="text-purple-300">API Player (LLM)</strong> slot</li>
+              <li>Copy the API key shown after creating the game</li>
+              <li>Configure your AI assistant with the key using one of the methods below</li>
+              <li>The AI will play on its turn automatically when you ask it to check the game</li>
+            </ol>
+          </div>
+
+          <div className="space-y-3">
+            <h3 className="text-purple-200 font-semibold">Claude Desktop (MCP)</h3>
+            <p className="text-amber-400/60">
+              Add this to your Claude Desktop config file. First,{' '}
+              <a
+                href="https://github.com/nicedash/wordz-mcp"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-purple-400 hover:text-purple-300 underline"
+              >
+                download the MCP server
+              </a>{' '}
+              or clone the <code className="text-purple-300 bg-purple-950/60 px-1 rounded">mcp-server/</code> folder from the repo.
+            </p>
+            <div className="relative">
+              <pre className="bg-purple-950/60 border border-purple-800/30 rounded-lg p-3 text-purple-200/80 font-mono text-xs overflow-x-auto whitespace-pre">
+                {mcpConfig}
+              </pre>
+              <Button
+                size="sm"
+                onClick={() => {
+                  navigator.clipboard.writeText(mcpConfig)
+                  toast.success('Config copied!')
+                }}
+                className="absolute top-2 right-2 bg-purple-800/60 hover:bg-purple-700/70 text-purple-200 h-7 px-2"
+              >
+                <Copy className="h-3 w-3 mr-1" />
+                Copy
+              </Button>
+            </div>
+          </div>
+
+          <div className="space-y-3">
+            <h3 className="text-purple-200 font-semibold">REST API (ChatGPT, other LLMs)</h3>
+            <p className="text-amber-400/60">
+              Any HTTP client can use the REST API directly. Include your API key in the header.
+            </p>
+            <div className="space-y-2">
+              <div className="bg-purple-950/60 border border-purple-800/30 rounded-lg p-3 font-mono text-xs">
+                <p className="text-purple-400/60 mb-1"># Get game state</p>
+                <p className="text-purple-200/80">
+                  curl -H "x-api-key: YOUR_KEY" \
+                </p>
+                <p className="text-purple-200/80 pl-4 break-all">
+                  {apiUrl}/state
+                </p>
+              </div>
+              <div className="bg-purple-950/60 border border-purple-800/30 rounded-lg p-3 font-mono text-xs">
+                <p className="text-purple-400/60 mb-1"># Play a word (0-indexed rows/cols)</p>
+                <p className="text-purple-200/80">
+                  curl -X POST -H "x-api-key: YOUR_KEY" \
+                </p>
+                <p className="text-purple-200/80 pl-4">
+                  -H "Content-Type: application/json" \
+                </p>
+                <p className="text-purple-200/80 pl-4 break-all">
+                  -d '{`{"action":"play","tiles":[{"row":7,"col":7,"letter":"H"},{"row":7,"col":8,"letter":"I"}]}`}' \
+                </p>
+                <p className="text-purple-200/80 pl-4 break-all">
+                  {apiUrl}/move
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div className="text-amber-500/50 text-xs border-t border-amber-900/20 pt-3">
+            Actions: <code className="text-purple-300/60">play</code>, <code className="text-purple-300/60">pass</code>, <code className="text-purple-300/60">exchange</code>. All words are validated against the TWL06 dictionary.
+          </div>
+        </CardContent>
+      )}
+    </Card>
   )
 }

@@ -1,7 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { useGame, useStartGame, isComputerPlayerId, useCancelGame } from '@/hooks/useGames'
+import { useGame, useStartGame, isComputerPlayerId, isApiPlayerId, useCancelGame } from '@/hooks/useGames'
 import type { ComputerPlayer } from '@/hooks/useGames'
 import { supabase } from '@/lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
@@ -75,8 +75,12 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
 
   const isMyTurn = game?.current_turn === userId
   const isComputerTurn = game?.current_turn ? isComputerPlayerId(game.current_turn) : false
+  const isApiTurn = game?.current_turn ? isApiPlayerId(game.current_turn) : false
   const computerPlayers = (game?.computer_players ?? []) as ComputerPlayer[]
   const currentComputerPlayer = isComputerTurn && game?.current_turn
+    ? computerPlayers.find(cp => cp.id === game.current_turn)
+    : null
+  const currentApiPlayer = isApiTurn && game?.current_turn
     ? computerPlayers.find(cp => cp.id === game.current_turn)
     : null
   const isActive = game?.status === 'active'
@@ -883,6 +887,11 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
           {isActive && isComputerTurn && currentComputerPlayer && (
             <div className="text-amber-300 text-sm font-medium animate-pulse px-4 py-2 rounded-lg bg-amber-900/20">
               {currentComputerPlayer.name} is thinking...
+            </div>
+          )}
+          {isActive && isApiTurn && currentApiPlayer && (
+            <div className="text-purple-300 text-sm font-medium animate-pulse px-4 py-2 rounded-lg bg-purple-900/15">
+              Waiting for {currentApiPlayer.name} to play...
             </div>
           )}
           {isActive && isMyTurn && (

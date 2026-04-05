@@ -14,6 +14,44 @@ export type Database = {
   }
   public: {
     Tables: {
+      api_keys: {
+        Row: {
+          api_key: string
+          created_at: string | null
+          created_by: string
+          game_id: string
+          id: string
+          player_id: string
+          player_name: string
+        }
+        Insert: {
+          api_key?: string
+          created_at?: string | null
+          created_by: string
+          game_id: string
+          id?: string
+          player_id: string
+          player_name?: string
+        }
+        Update: {
+          api_key?: string
+          created_at?: string | null
+          created_by?: string
+          game_id?: string
+          id?: string
+          player_id?: string
+          player_name?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "api_keys_game_id_fkey"
+            columns: ["game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       game_moves: {
         Row: {
           created_at: string | null
