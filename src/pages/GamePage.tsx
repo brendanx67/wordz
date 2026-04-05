@@ -246,6 +246,26 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
         return
       }
 
+      // Validate words against dictionary when playing against computer
+      if (game.has_computer && result.words.length > 0) {
+        try {
+          const wordStrings = result.words.map(w => w.word)
+          const { data: valData, error: valErr } = await supabase.functions.invoke('validate-word', {
+            body: { words: wordStrings },
+          })
+          if (valErr) throw valErr
+          const invalid = wordStrings.filter(w => !valData.results[w])
+          if (invalid.length > 0) {
+            toast.error(`Not in dictionary: ${invalid.join(', ')}`)
+            setSubmitting(false)
+            return
+          }
+        } catch {
+          // If validation service is down, allow the move rather than blocking play
+          console.warn('Word validation service unavailable, allowing move')
+        }
+      }
+
       // Update board
       const newBoard = board.map(row => row.map(cell => ({ ...cell })))
       for (const pt of placed) {
