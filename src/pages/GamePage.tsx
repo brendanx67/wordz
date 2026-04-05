@@ -87,6 +87,9 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   const board = (game?.board ?? []) as BoardCell[][]
   const isFirstMove = board.every(row => row.every(cell => !cell.tile))
 
+  // API players owned by the current user (so we can show their rack)
+  const myApiPlayers = computerPlayers.filter(cp => cp.id.startsWith('api-') && cp.owner_id === userId)
+
   // Trigger computer's turn automatically via Edge Function
   useEffect(() => {
     if (!game || !isActive || !isComputerTurn) return
@@ -1036,6 +1039,21 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
               />
             </div>
           )}
+
+          {/* Show API player racks for the owning user */}
+          {isActive && myApiPlayers.length > 0 && myApiPlayers.map(ap => (
+            <div key={ap.id} className="space-y-2">
+              <div className="text-center text-xs text-purple-400/60">
+                {ap.name}&apos;s rack:
+              </div>
+              <TileRack
+                tiles={ap.rack}
+                onTileClick={() => {}}
+                selectedTiles={new Set()}
+                isExchangeMode={false}
+              />
+            </div>
+          ))}
         </div>
       </main>
     </div>

@@ -442,7 +442,7 @@ server.tool(
 
     const boardText = renderBoard(state.tiles_on_board);
     const rackText = state.your_rack
-      .map((t) => `${t.letter}(${t.value})`)
+      .map((t) => `${t.letter}(${t.value}${t.isBlank ? ",blank" : ""})`)
       .join(" ");
 
     const scoreText = state.players
@@ -648,16 +648,32 @@ server.tool(
 
 server.tool(
   "exchange_tiles",
-  "Exchange tiles from your rack for new ones from the bag. Specify the tile IDs to exchange (from get_game_state rack info).",
+  "Exchange tiles from your rack for new ones from the bag. Specify letters to exchange (e.g. [\"F\", \"H\", \"V\", \"V\"]). For duplicate letters, include each copy separately.",
   {
     game_id: z.string().describe("Game ID (use list_games to find your games)"),
-    tile_ids: z
+    letters: z
       .array(z.string())
       .min(1)
-      .describe("IDs of tiles to exchange from your rack"),
+      .describe("Letters to exchange from your rack (e.g. [\"F\", \"H\", \"V\"])"),
   },
-  async ({ game_id, tile_ids }) => {
+  async ({ game_id, letters }) => {
     try {
+      // Fetch current rack to resolve letters to tile IDs
+      const state = (await apiCall("state", "GET", undefined, game_id)) as GameState;
+      const available = [...state.your_rack];
+      const tile_ids: string[] = [];
+      for (const letter of letters) {
+        const upperLetter = letter.toUpperCase();
+        const idx = available.findIndex(t => t.letter === upperLetter);
+        if (idx === -1) {
+          return {
+            content: [{ type: "text", text: `Letter "${upperLetter}" not found in your rack. Your rack: ${available.map(t => t.letter).join(", ")}` }],
+            isError: true,
+          };
+        }
+        tile_ids.push(available[idx].id);
+        available.splice(idx, 1);
+      }
       const result = (await apiCall("move", "POST", {
         action: "exchange",
         tile_ids,

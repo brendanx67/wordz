@@ -10,6 +10,8 @@ export interface ComputerPlayer {
   difficulty: 'easy' | 'medium' | 'hard' | 'competitive'
   rack: Tile[]
   score: number
+  owner_id?: string
+  strategyLevel?: string
 }
 
 export interface GameRow {
