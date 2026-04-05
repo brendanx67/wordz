@@ -65,10 +65,12 @@ No `env` block needed — credentials come from `credentials.json`.
 | Tool | Description |
 |------|-------------|
 | `game_context` | **Call first.** Strategic briefing (master/club/social level) |
+| `list_games` | Discover your active games (no game_id needed) |
 | `get_game_state` | View the board, your rack, scores, and recent moves |
+| `validate_move` | **Use before play_word.** Dry-run that shows all words formed (including cross-words) and whether each is valid |
 | `play_word` | Place tiles on the board (row 1-15, column A-O) |
 | `pass_turn` | Pass without playing |
-| `exchange_tiles` | Swap tiles from your rack for new ones |
+| `exchange_tiles` | Swap tiles from your rack (pass letters, e.g. `["F", "H", "V"]`) |
 
 All tools accept an optional `game_id` parameter. If omitted, uses the `game_id` from `credentials.json`.
 

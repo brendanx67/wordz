@@ -208,10 +208,11 @@ function buildContextBriefing(level: "master" | "club" | "social"): string {
       ``,
       `1. Call get_game_state to see the board and your rack`,
       `2. Find a good word you can make with your tiles`,
-      `3. Call play_word with tiles placed at specific positions`,
-      `4. Coordinates: row 1-15, column A-O`,
-      `5. First move must cross the center square (row 8, col H)`,
-      `6. All words formed (including cross-words) must be valid`,
+      `3. ALWAYS call validate_move first to check your move — it shows ALL words formed including cross-words`,
+      `4. If valid, call play_word with the same tiles to commit`,
+      `5. Coordinates: row 1-15, column A-O`,
+      `6. First move must cross the center square (row 8, col H)`,
+      `7. All words formed (including cross-words) must be valid`,
       ``,
       `Enjoy the game!`,
     ].join("\n");
@@ -254,11 +255,11 @@ function buildContextBriefing(level: "master" | "club" | "social"): string {
       ``,
       `1. Call get_game_state to see the board and your rack`,
       `2. Think about both the score AND your rack leave`,
-      `3. Call play_word with tiles placed at specific positions`,
-      `4. Coordinates: row 1-15, column A-O`,
-      `5. All played tiles must form a straight line (horizontal or vertical)`,
-      `6. First move must cross the center square (row 8, col H)`,
-      `7. All words formed (including cross-words) must be valid`,
+      `3. ALWAYS call validate_move before committing — it reveals ALL cross-words that form`,
+      `4. If valid, call play_word with the same tiles`,
+      `5. Coordinates: row 1-15, column A-O`,
+      `6. All played tiles must form a straight line (horizontal or vertical)`,
+      `7. First move must cross the center square (row 8, col H)`,
       ``,
       `Play well!`,
     ].join("\n");
@@ -354,11 +355,11 @@ function buildContextBriefing(level: "master" | "club" | "social"): string {
     ``,
     `1. Call get_game_state to see the board and your rack`,
     `2. For EVERY candidate move, evaluate: score + rack leave quality + board implications`,
-    `3. Call play_word with tiles placed at specific positions`,
-    `4. Coordinates: row 1-15, column A-O`,
-    `5. All played tiles must form a straight line (horizontal or vertical)`,
-    `6. First move must cross the center square (row 8, col H)`,
-    `7. All words formed (including cross-words) must be valid`,
+    `3. CRITICAL: ALWAYS call validate_move before play_word — it shows ALL words that form including cross-words you might miss`,
+    `4. If validate_move confirms valid, call play_word with the same tiles`,
+    `5. Coordinates: row 1-15, column A-O`,
+    `6. All played tiles must form a straight line (horizontal or vertical)`,
+    `7. First move must cross the center square (row 8, col H)`,
     ``,
     `=== TOURNAMENT MINDSET ===`,
     ``,
@@ -549,8 +550,73 @@ server.tool(
 );
 
 server.tool(
+  "validate_move",
+  "Test a move WITHOUT committing it. Returns all words that would form (including cross-words) and whether each is valid. Use this BEFORE play_word to check for invalid cross-words. Same tile format as play_word.",
+  {
+    game_id: z.string().describe("Game ID (use list_games to find your games)"),
+    tiles: z
+      .array(
+        z.object({
+          row: z.number().min(1).max(15).describe("Row number (1-15)"),
+          col: z.string().length(1).describe("Column letter (A-O)"),
+          letter: z.string().length(1).describe("The letter to play"),
+          is_blank: z.boolean().optional().describe("Set to true if using a blank tile"),
+        })
+      )
+      .min(1)
+      .describe("Tiles to test on the board"),
+  },
+  async ({ game_id, tiles }) => {
+    const apiTiles = tiles.map((t) => ({
+      row: t.row - 1,
+      col: t.col.toUpperCase().charCodeAt(0) - 65,
+      letter: t.letter.toUpperCase(),
+      is_blank: t.is_blank || false,
+    }));
+
+    try {
+      const result = (await apiCall("validate", "POST", { tiles: apiTiles }, game_id)) as {
+        valid: boolean;
+        words: { word: string; score: number; valid: boolean }[];
+        total_score: number;
+        invalid_words: string[];
+        error: string | null;
+      };
+
+      const wordLines = result.words.map(
+        (w) => `  ${w.valid ? "✓" : "✗"} ${w.word} (${w.score} pts)${w.valid ? "" : " ← INVALID"}`
+      );
+
+      const text = result.valid
+        ? [
+            `✓ MOVE IS VALID — Total score: ${result.total_score} points`,
+            `Words formed:`,
+            ...wordLines,
+            ``,
+            `Safe to play! Use play_word with the same tiles to commit.`,
+          ].join("\n")
+        : [
+            `✗ MOVE IS INVALID`,
+            `Words formed:`,
+            ...wordLines,
+            ``,
+            `Invalid word(s): ${result.invalid_words.join(", ")}`,
+            `Try a different placement to avoid these cross-words.`,
+          ].join("\n");
+
+      return { content: [{ type: "text", text }] };
+    } catch (err) {
+      return {
+        content: [{ type: "text", text: `Validation failed: ${(err as Error).message}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
   "play_word",
-  "Play tiles on the board. Each tile needs row (1-15), col (A-O), and letter. All words formed must be valid. The first move must cross the center square (row 8, col H).",
+  "Play tiles on the board. Each tile needs row (1-15), col (A-O), and letter. All words formed must be valid. The first move must cross the center square (row 8, col H). TIP: Use validate_move first to check for invalid cross-words!",
   {
     game_id: z.string().describe("Game ID (use list_games to find your games)"),
     tiles: z
