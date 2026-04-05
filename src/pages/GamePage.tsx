@@ -931,8 +931,8 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
             </div>
           )}
 
-          {/* Show computer rack when it's a computer's turn */}
-          {isActive && isComputerTurn && currentComputerPlayer && (
+          {/* Show computer rack when spectating (not a player) */}
+          {isActive && !myPlayer && isComputerTurn && currentComputerPlayer && (
             <div className="space-y-2">
               <div className="text-center text-xs text-amber-500/60">
                 {currentComputerPlayer.name}&apos;s rack:
