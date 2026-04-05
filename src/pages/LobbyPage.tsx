@@ -461,7 +461,7 @@ function ApiSetupSection() {
     mcpServers: {
       wordz: {
         command: "npx",
-        args: ["tsx", "/path/to/mcp-server/index.ts"],
+        args: ["tsx", "~/.wordz-mcp/index.ts"],
         env: {
           WORDZ_API_URL: apiUrl,
           WORDZ_API_KEY: "your-api-key-here"
@@ -497,17 +497,18 @@ function ApiSetupSection() {
           <div className="space-y-3">
             <h3 className="text-purple-200 font-semibold">Claude Desktop (MCP)</h3>
             <p className="text-amber-400/60">
-              Add this to your Claude Desktop config file. First,{' '}
               <a
-                href="https://github.com/nicedash/wordz-mcp"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-purple-400 hover:text-purple-300 underline"
+                href="/wordz-mcp.zip"
+                download
+                className="text-purple-400 hover:text-purple-300 underline font-semibold"
               >
-                download the MCP server
+                Download the MCP server
               </a>{' '}
-              or clone the <code className="text-purple-300 bg-purple-950/60 px-1 rounded">mcp-server/</code> folder from the repo.
+              and extract it to <code className="text-purple-300 bg-purple-950/60 px-1 rounded">~/.wordz-mcp</code>. Then install dependencies:
             </p>
+            <div className="bg-purple-950/60 border border-purple-800/30 rounded-lg p-3 font-mono text-xs text-purple-200/80">
+              cd ~/.wordz-mcp && npm install
+            </div>
             <div className="relative">
               <pre className="bg-purple-950/60 border border-purple-800/30 rounded-lg p-3 text-purple-200/80 font-mono text-xs overflow-x-auto whitespace-pre">
                 {mcpConfig}

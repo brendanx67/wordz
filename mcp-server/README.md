@@ -9,11 +9,16 @@ Play Wordz (Scrabble) through Claude or any MCP-compatible AI assistant.
 
 ## Setup
 
-1. **Clone or download this folder** (`mcp-server/`)
+1. **Download and extract** to `~/.wordz-mcp/`:
+   ```bash
+   # Download from the Wordz website, or copy these files manually
+   mkdir -p ~/.wordz-mcp
+   # Extract wordz-mcp.zip contents here
+   ```
 
 2. **Install dependencies:**
    ```bash
-   npm install
+   cd ~/.wordz-mcp && npm install
    ```
 
 3. **Get your API key:**
@@ -33,7 +38,7 @@ Add the following to your Claude Desktop config file:
   "mcpServers": {
     "wordz": {
       "command": "npx",
-      "args": ["tsx", "/path/to/mcp-server/index.ts"],
+      "args": ["tsx", "~/.wordz-mcp/index.ts"],
       "env": {
         "WORDZ_API_URL": "https://your-project.supabase.co/functions/v1/game-api",
         "WORDZ_API_KEY": "your-api-key-here"
@@ -44,14 +49,13 @@ Add the following to your Claude Desktop config file:
 ```
 
 Replace:
-- `/path/to/mcp-server/` with the actual path to this folder
 - `WORDZ_API_URL` with the API endpoint shown when you created the game
 - `WORDZ_API_KEY` with your API key
 
 ## Connecting to Claude Code
 
 ```bash
-claude mcp add wordz -- env WORDZ_API_URL=https://your-project.supabase.co/functions/v1/game-api WORDZ_API_KEY=your-api-key npx tsx /path/to/mcp-server/index.ts
+claude mcp add wordz -- env WORDZ_API_URL=https://your-project.supabase.co/functions/v1/game-api WORDZ_API_KEY=your-api-key npx tsx ~/.wordz-mcp/index.ts
 ```
 
 ## Available Tools
