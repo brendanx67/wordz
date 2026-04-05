@@ -68,6 +68,10 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
     setRackOrder([...ids])
   }, [rackTiles])
 
+  const handleReorderRack = useCallback((reordered: Tile[]) => {
+    setRackOrder(reordered.map(t => t.id))
+  }, [])
+
   const isMyTurn = game?.current_turn === userId
   const isComputerTurn = game?.current_turn ? isComputerPlayerId(game.current_turn) : false
   const computerPlayers = (game?.computer_players ?? []) as ComputerPlayer[]
@@ -900,6 +904,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                 selectedTiles={exchangeSelection}
                 isExchangeMode={isExchangeMode}
                 onShuffle={handleShuffleRack}
+                onReorder={handleReorderRack}
               />
 
               {/* Action buttons */}
