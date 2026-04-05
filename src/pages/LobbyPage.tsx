@@ -390,8 +390,7 @@ function ApiSetupSection({ userId }: { userId: string }) {
 
   const credentialsJson = JSON.stringify({
     api_url: apiUrl,
-    api_key: "your-api-key-here",
-    game_id: "paste-game-id-here"
+    api_key: "your-api-key-here"
   }, null, 2)
 
   const mcpConfig = JSON.stringify({
@@ -556,6 +555,7 @@ function ApiSetupSection({ userId }: { userId: string }) {
               <li>Run <code className="text-purple-300 bg-purple-950/60 px-1 rounded">cd ~/.wordz-mcp && npm install</code></li>
               <li>Create <code className="text-purple-300 bg-purple-950/60 px-1 rounded">~/.wordz-mcp/credentials.json</code> with your key</li>
               <li>Add the MCP server to Claude</li>
+              <li>Create a game with an API Player slot, then tell your AI: <em className="text-purple-300">"I started a new Wordz game with you. Please join."</em></li>
             </ol>
           </div>
 
@@ -635,6 +635,12 @@ function ApiSetupSection({ userId }: { userId: string }) {
               Any HTTP client can use the REST API directly. Include your API key and the game ID.
             </p>
             <div className="space-y-2">
+              <div className="bg-purple-950/60 border border-purple-800/30 rounded-lg p-3 font-mono text-xs">
+                <p className="text-purple-400/60 mb-1"># List your games</p>
+                <p className="text-purple-200/80 break-all">
+                  curl -H "x-api-key: YOUR_KEY" {apiUrl}/games
+                </p>
+              </div>
               <div className="bg-purple-950/60 border border-purple-800/30 rounded-lg p-3 font-mono text-xs">
                 <p className="text-purple-400/60 mb-1"># Get game state</p>
                 <p className="text-purple-200/80 break-all">

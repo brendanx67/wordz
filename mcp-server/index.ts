@@ -13,7 +13,6 @@ import { homedir } from "os";
 interface Credentials {
   api_url?: string;
   api_key?: string;
-  game_id?: string;
 }
 
 function loadCredentials(): Credentials {
@@ -39,7 +38,6 @@ function loadCredentials(): Credentials {
 const creds = loadCredentials();
 const API_URL = process.env.WORDZ_API_URL || creds.api_url || "";
 const API_KEY = process.env.WORDZ_API_KEY || creds.api_key || "";
-const DEFAULT_GAME_ID = process.env.WORDZ_GAME_ID || creds.game_id || "";
 
 if (!API_URL || !API_KEY) {
   console.error(
@@ -47,18 +45,11 @@ if (!API_URL || !API_KEY) {
       "Create ~/.wordz-mcp/credentials.json:\n" +
       '  {\n' +
       '    "api_url": "https://your-project.supabase.co/functions/v1/game-api",\n' +
-      '    "api_key": "your-api-key-here",\n' +
-      '    "game_id": "optional-game-uuid"\n' +
+      '    "api_key": "your-api-key-here"\n' +
       '  }\n\n' +
-      "Or set environment variables: WORDZ_API_URL, WORDZ_API_KEY, WORDZ_GAME_ID"
+      "Or set environment variables: WORDZ_API_URL, WORDZ_API_KEY"
   );
   process.exit(1);
-}
-
-function resolveGameId(gameId?: string): string {
-  const id = gameId || DEFAULT_GAME_ID;
-  if (!id) throw new Error("No game_id provided and WORDZ_GAME_ID not set. Pass game_id or set WORDZ_GAME_ID env var.");
-  return id;
 }
 
 async function apiCall(
@@ -67,9 +58,8 @@ async function apiCall(
   body?: unknown,
   gameId?: string,
 ): Promise<unknown> {
-  const gid = resolveGameId(gameId);
-  const url = method === "GET"
-    ? `${API_URL}/${path}?game_id=${gid}`
+  const url = method === "GET" && gameId
+    ? `${API_URL}/${path}?game_id=${gameId}`
     : `${API_URL}/${path}`;
   const res = await fetch(url, {
     method,
@@ -77,7 +67,7 @@ async function apiCall(
       "x-api-key": API_KEY,
       "Content-Type": "application/json",
     },
-    body: body ? JSON.stringify({ ...(body as Record<string, unknown>), game_id: gid }) : undefined,
+    body: body ? JSON.stringify({ ...(body as Record<string, unknown>), ...(gameId ? { game_id: gameId } : {}) }) : undefined,
   });
   const data = await res.json();
   if (!res.ok) {
@@ -392,10 +382,60 @@ function buildContextBriefing(level: "master" | "club" | "social"): string {
 }
 
 server.tool(
+  "list_games",
+  "List all Wordz games you're involved in. Shows game IDs, status, whose turn it is, and scores. Use this to find which game to play.",
+  {},
+  async () => {
+    try {
+      const url = `${API_URL}/games`;
+      const res = await fetch(url, {
+        headers: { "x-api-key": API_KEY, "Content-Type": "application/json" },
+      });
+      const data = await res.json() as { games?: { game_id: string; status: string; is_your_turn: boolean; your_player_name: string; your_score: number; players: { name: string; score: number; type: string }[]; updated_at: string }[]; error?: string };
+      if (!res.ok) throw new Error(data.error || `API error: ${res.status}`);
+
+      const games = data.games ?? [];
+      if (games.length === 0) {
+        return { content: [{ type: "text", text: "No active games found. Ask your human to create a game with an API Player slot for you." }] };
+      }
+
+      const lines = games.map((g) => {
+        const turnInfo = g.is_your_turn ? ">>> YOUR TURN <<<" : "Waiting for opponent";
+        const players = g.players.map((p) => `${p.name}: ${p.score}`).join(", ");
+        const ago = new Date(g.updated_at).toLocaleString();
+        return [
+          `Game: ${g.game_id}`,
+          `  Status: ${g.status} | ${turnInfo}`,
+          `  You are: ${g.your_player_name} (score: ${g.your_score})`,
+          `  Players: ${players}`,
+          `  Last activity: ${ago}`,
+        ].join("\n");
+      });
+
+      const text = [
+        `=== YOUR WORDZ GAMES ===`,
+        `Found ${games.length} game${games.length !== 1 ? "s" : ""}:`,
+        ``,
+        ...lines,
+        ``,
+        `To play, call get_game_state with the game_id, or call game_context first for strategic briefing.`,
+      ].join("\n");
+
+      return { content: [{ type: "text", text }] };
+    } catch (err) {
+      return {
+        content: [{ type: "text", text: `Failed to list games: ${(err as Error).message}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+server.tool(
   "get_game_state",
   "Get the current state of the Wordz game: board, your rack, scores, whose turn it is, and recent moves",
   {
-    game_id: z.string().optional().describe("Game ID (optional if WORDZ_GAME_ID env var is set)"),
+    game_id: z.string().describe("Game ID (use list_games to find your games)"),
   },
   async ({ game_id }) => {
     const state = (await apiCall("state", "GET", undefined, game_id)) as GameState;
@@ -512,7 +552,7 @@ server.tool(
   "play_word",
   "Play tiles on the board. Each tile needs row (1-15), col (A-O), and letter. All words formed must be valid. The first move must cross the center square (row 8, col H).",
   {
-    game_id: z.string().optional().describe("Game ID (optional if WORDZ_GAME_ID env var is set)"),
+    game_id: z.string().describe("Game ID (use list_games to find your games)"),
     tiles: z
       .array(
         z.object({
@@ -589,7 +629,7 @@ server.tool(
   "pass_turn",
   "Pass your turn without playing any tiles",
   {
-    game_id: z.string().optional().describe("Game ID (optional if WORDZ_GAME_ID env var is set)"),
+    game_id: z.string().describe("Game ID (use list_games to find your games)"),
   },
   async ({ game_id }) => {
     try {
@@ -610,7 +650,7 @@ server.tool(
   "exchange_tiles",
   "Exchange tiles from your rack for new ones from the bag. Specify the tile IDs to exchange (from get_game_state rack info).",
   {
-    game_id: z.string().optional().describe("Game ID (optional if WORDZ_GAME_ID env var is set)"),
+    game_id: z.string().describe("Game ID (use list_games to find your games)"),
     tile_ids: z
       .array(z.string())
       .min(1)
