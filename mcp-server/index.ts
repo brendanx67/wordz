@@ -63,7 +63,7 @@ interface GameState {
   your_score: number;
   tiles_on_board: TileOnBoard[];
   tiles_remaining: number;
-  players: { id: string; name: string; score: number }[];
+  players: { id: string; name: string; score: number; type?: string; description?: string; difficulty?: string; strategy_level?: string }[];
   recent_moves: { player: string; type: string; words: string[]; score: number }[];
   winner: string | null;
 }
@@ -349,6 +349,24 @@ server.tool(
       .map((p) => `${p.name}: ${p.score}`)
       .join(", ");
 
+    // Describe opponents
+    const opponents = state.players.filter(p => p.id !== "you");
+    const opponentDescriptions = state.players
+      .map((p) => {
+        if (p.type === "computer") {
+          return `${p.name} — BRUTE-FORCE ALGORITHM (${p.difficulty ?? "unknown"}): Exhaustively searches all legal moves and plays the highest-scoring one every turn. No strategic thinking, pure greedy optimization.`;
+        }
+        if (p.type === "api") {
+          return `${p.name} — LLM/AI PLAYER (strategy: ${p.strategy_level ?? "unknown"}): Another AI model playing via API.`;
+        }
+        if (p.type === "human") {
+          return `${p.name} — HUMAN PLAYER: A person playing through the web interface.`;
+        }
+        return `${p.name} — Unknown player type`;
+      })
+      .join("\n");
+    void opponents;
+
     const movesText =
       state.recent_moves.length > 0
         ? state.recent_moves
@@ -397,6 +415,9 @@ server.tool(
       `Scores: ${scoreText}`,
       `Score differential: ${scoreDiff >= 0 ? "+" : ""}${scoreDiff} | ${positionHint}`,
       `Tiles remaining in bag: ${state.tiles_remaining}`,
+      ``,
+      `Opponents:`,
+      opponentDescriptions,
       ``,
       `Board:`,
       boardText,

@@ -330,18 +330,32 @@ async function handleGetGame(req: Request): Promise<Response> {
     }
   }
 
-  // Build scoreboard
+  // Build scoreboard with player type info
   const humanPlayers = (game.game_players ?? []).map((p: { player_id: string; score: number; profiles: { display_name: string } }) => ({
     id: p.player_id,
     name: p.profiles.display_name,
     score: p.score,
+    type: "human" as const,
+    description: "Human player",
   }));
 
-  const aiPlayers = allPlayers.map((p: ApiPlayer) => ({
-    id: p.id,
-    name: p.name,
-    score: p.score,
-  }));
+  const aiPlayers = allPlayers.map((p: ApiPlayer & { difficulty?: string; strategyLevel?: string }) => {
+    const isComputer = p.id.startsWith("computer-");
+    const isApi = p.id.startsWith("api-");
+    return {
+      id: p.id,
+      name: p.name,
+      score: p.score,
+      type: isComputer ? "computer" as const : isApi ? "api" as const : "unknown" as const,
+      description: isComputer
+        ? `Brute-force algorithm (${p.difficulty ?? "unknown"} difficulty) — finds the highest-scoring move every turn using exhaustive search`
+        : isApi
+          ? `LLM/AI player via API (strategy level: ${p.strategyLevel ?? "unknown"})`
+          : "Unknown player type",
+      ...(isComputer && p.difficulty ? { difficulty: p.difficulty } : {}),
+      ...(isApi && p.strategyLevel ? { strategy_level: p.strategyLevel } : {}),
+    };
+  });
 
   const tilesRemaining = ((game.tile_bag ?? []) as Tile[]).length;
 
