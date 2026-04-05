@@ -364,29 +364,29 @@ export function useCancelGame() {
   const queryClient = useQueryClient()
   return useMutation({
     mutationFn: async ({ gameId, userId }: { gameId: string; userId: string }) => {
-      // Fetch game details to decide delete vs finish
+      // Fetch game details
       const { data: game, error: gErr } = await supabase
         .from('games')
-        .select('id, created_by, status, move_history, game_players(player_id)')
+        .select('id, created_by, status, computer_players, game_players(player_id)')
         .eq('id', gameId)
         .single()
       if (gErr) throw gErr
 
       const players = game.game_players ?? []
-      const moveHistory = (game.move_history ?? []) as unknown[]
       const otherPlayers = players.filter((p: { player_id: string }) => p.player_id !== userId)
 
-      // If no moves and no other human players joined, delete entirely
-      if (moveHistory.length === 0 && otherPlayers.length === 0) {
-        await supabase.from('game_players').delete().eq('game_id', gameId)
+      // Only attempt delete for waiting games with no other human players
+      // (no game_moves rows exist yet, so FK won't block)
+      if (game.status === 'waiting' && otherPlayers.length === 0) {
+        const { error: gpErr } = await supabase.from('game_players').delete().eq('game_id', gameId)
+        if (gpErr) throw gpErr
         const { error } = await supabase.from('games').delete().eq('id', gameId)
         if (error) throw error
         return { deleted: true }
       }
 
-      // Otherwise mark as finished (resign)
-      // Winner is the other player (first non-self human, or first computer)
-      const computerPlayers = (await supabase.from('games').select('computer_players').eq('id', gameId).single()).data?.computer_players as ComputerPlayer[] ?? []
+      // Everything else: mark as finished (resign)
+      const computerPlayers = (game.computer_players ?? []) as ComputerPlayer[]
       const otherHuman = otherPlayers[0]?.player_id
       const firstComputer = computerPlayers[0]?.id
       const winner = otherHuman ?? firstComputer ?? null
