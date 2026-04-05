@@ -129,6 +129,100 @@ const server = new McpServer({
 });
 
 server.tool(
+  "game_context",
+  "CALL THIS FIRST. Get strategic context, rules, and competitive briefing for playing Wordz. This primes you with expert Scrabble strategy that will dramatically improve your play.",
+  {},
+  async () => {
+    const text = [
+      `=== WORDZ: STRATEGIC BRIEFING ===`,
+      ``,
+      `You are playing Wordz, a competitive word game on a 15×15 board with bonus squares.`,
+      `You may be competing against other AI models, human players, or a brute-force`,
+      `algorithm that uses the Appel & Jacobson (1988) anchor-based move generation`,
+      `to find the highest-scoring move every turn.`,
+      ``,
+      `=== YOUR COMPETITIVE ADVANTAGE ===`,
+      ``,
+      `The brute-force algorithm is greedy — it always plays the highest-scoring move`,
+      `available RIGHT NOW. It has zero concept of strategy. You can beat it by thinking`,
+      `ahead, just as expert Scrabble players beat raw computation with superior strategy.`,
+      ``,
+      `=== EXPERT SCRABBLE STRATEGY ===`,
+      ``,
+      `1. RACK MANAGEMENT (most important)`,
+      `   - Keep a balanced rack: mix of vowels and consonants (ideal: 3 consonants, 2 vowels + flexible tiles)`,
+      `   - RETAIN high-synergy tiles: S, blank, E, R, N, T, A, I (the "NASTIER" letters)`,
+      `   - DUMP low-synergy tiles: V, C, Q, U (when Q), duplicate vowels, duplicate consonants`,
+      `   - Sacrifice 10-20 points NOW to keep a strong rack leave for NEXT turn`,
+      `   - A blank tile is worth ~30 points in future potential — don't waste it on a low-scoring play`,
+      `   - The S tile adds ~8-10 points of value — save it to pluralize AND form a parallel word`,
+      ``,
+      `2. BOARD CONTROL`,
+      `   - BLOCK triple word squares (corners, edges) when your opponent could exploit them`,
+      `   - OPEN bonus squares only when YOU can use them next turn`,
+      `   - Play PARALLEL to existing words — they form multiple cross-words, each scoring bonus multipliers`,
+      `   - Short words near the center keep the board tight and limit opponent options`,
+      `   - DON'T open the triple-triple lanes (rows/columns that connect two triple word squares)`,
+      ``,
+      `3. TILE TRACKING`,
+      `   - There are 100 tiles total. Track what's been played to estimate what's left.`,
+      `   - Key distributions: E×12, A×9, I×9, O×8, N×6, R×6, T×6, S×4, blank×2`,
+      `   - Late game: if all S tiles are played, your opponent can't pluralize your words`,
+      `   - If blanks are gone, high-scoring plays become much harder`,
+      ``,
+      `4. BINGO STRATEGY (using all 7 tiles = +50 bonus)`,
+      `   - Keep common bingo-friendly leaves: -ING, -TION, -ER, -ED, -EST, RE-, UN-`,
+      `   - 7-letter and 8-letter words are your biggest scoring opportunity`,
+      `   - Holding 5-6 good tiles? Consider exchanging 1-2 bad ones instead of a mediocre play`,
+      ``,
+      `5. ENDGAME`,
+      `   - When the bag is empty, you can see exactly what tiles your opponent holds`,
+      `   - Go out first (play all your tiles) to get the bonus of opponent's remaining tile values`,
+      `   - Sometimes passing is better than playing if it forces the opponent to open a scoring lane`,
+      ``,
+      `6. DEFENSIVE PLAY`,
+      `   - If ahead: close the board, play short words, protect leads`,
+      `   - If behind: open the board, take risks, seek bingos and triple word scores`,
+      `   - Track the score differential — adjust strategy based on whether you're winning or losing`,
+      ``,
+      `=== WORD KNOWLEDGE ===`,
+      ``,
+      `The game uses the TWL06 (Tournament Word List) dictionary. Key high-value words:`,
+      `- Two-letter words are critical for parallel plays: QI, ZA, JO, XI, XU, AX, EX, OX`,
+      `- Q without U: QI, QOPH, QADI, QAID, QANAT, QINTAR, QINDAR, QWERTY, SUQ, TRANQ`,
+      `- High-scoring short words: ZA, ZO, ZAX, ZEP, ZAG, JO, JIN, JAB, JAG, KA, KI`,
+      `- Common bingos with -ING: SEATING,EARING, STARING, DEALING, LEADING`,
+      `- Common bingos with -TION: STATION, ERATION, INATION`,
+      ``,
+      `=== HOW TO PLAY ===`,
+      ``,
+      `1. Call get_game_state to see the board and your rack`,
+      `2. Think strategically about rack leave, not just the highest score`,
+      `3. Call play_word with tiles placed at specific positions`,
+      `4. Coordinates: row 1-15, column A-O`,
+      `5. All played tiles must form a straight line (horizontal or vertical)`,
+      `6. First move must cross the center square (row 8, col H)`,
+      `7. All words formed (including cross-words) must be valid`,
+      ``,
+      `=== COMPETITIVE MINDSET ===`,
+      ``,
+      `Think like a tournament Scrabble player, not a casual one. Every turn, ask yourself:`,
+      `- "What's my rack leave after this play?"`,
+      `- "Am I opening a bonus square my opponent can exploit?"`,
+      `- "Should I sacrifice points now for a better rack next turn?"`,
+      `- "Am I ahead or behind? Should I play offensively or defensively?"`,
+      ``,
+      `The brute-force algorithm WILL outscore you on any given turn.`,
+      `You win by outscoring it over 15-20 turns through superior strategy.`,
+      ``,
+      `Good luck. Play like a champion.`,
+    ].join("\n");
+
+    return { content: [{ type: "text", text }] };
+  }
+);
+
+server.tool(
   "get_game_state",
   "Get the current state of the Wordz game: board, your rack, scores, whose turn it is, and recent moves",
   {},
@@ -161,21 +255,49 @@ server.tool(
           ? "IT IS YOUR TURN"
           : `Waiting for opponent to play`;
 
+    // Score differential for strategic context
+    const myScore = state.your_score;
+    const opponentScores = state.players.filter(p => p.score !== myScore || p.name !== "You");
+    const maxOpponentScore = Math.max(...state.players.map(p => p.score), 0);
+    const scoreDiff = myScore - maxOpponentScore;
+    const positionHint = scoreDiff > 30
+      ? "You're ahead — consider defensive play (short words, close the board)."
+      : scoreDiff < -30
+        ? "You're behind — play aggressively (open the board, seek bingos and bonus squares)."
+        : "Game is close — balance scoring with rack management.";
+
+    // Rack quality assessment
+    const vowels = state.your_rack.filter(t => "AEIOU".includes(t.letter)).length;
+    const blanks = state.your_rack.filter(t => t.isBlank).length;
+    const sCount = state.your_rack.filter(t => t.letter === "S").length;
+    const highValue = state.your_rack.filter(t => t.value >= 4);
+    const rackHints: string[] = [];
+    if (blanks > 0) rackHints.push(`You have ${blanks} blank(s) — save for bingo or high-value play`);
+    if (sCount > 0) rackHints.push(`You have ${sCount} S tile(s) — use to pluralize AND form cross-words`);
+    if (vowels >= 5) rackHints.push("Too many vowels — consider exchanging some");
+    if (vowels <= 1) rackHints.push("Low on vowels — consider exchanging consonants");
+    if (highValue.length >= 3) rackHints.push(`High-value tiles (${highValue.map(t => t.letter).join(",")}) — try to place on bonus squares`);
+
+    void opponentScores;
+
     const text = [
       `=== WORDZ GAME STATE ===`,
       `Status: ${statusText}`,
       `Scores: ${scoreText}`,
+      `Score differential: ${scoreDiff >= 0 ? "+" : ""}${scoreDiff} | ${positionHint}`,
       `Tiles remaining in bag: ${state.tiles_remaining}`,
       ``,
       `Board:`,
       boardText,
       ``,
       `Your rack: ${rackText}`,
+      ...(rackHints.length > 0 ? [`Rack notes: ${rackHints.join(". ")}`] : []),
       ``,
       `Recent moves:`,
       movesText,
       ``,
-      `--- HOW TO PLAY ---`,
+      `--- REMEMBER ---`,
+      `Think about RACK LEAVE — what tiles remain after your play matters as much as the score.`,
       `Coordinates: row is 1-15, column is A-O (A=0, B=1, ... O=14)`,
       `To play a word, use the play_word tool with tiles placed at specific positions.`,
       `Each tile needs: row (1-15), col (A-O), letter.`,
