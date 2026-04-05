@@ -11,7 +11,7 @@ import type { Tile, BoardCell, PlacedTile } from '@/lib/gameConstants'
 import GameBoard from '@/components/GameBoard'
 import TileRack from '@/components/TileRack'
 import { toast } from 'sonner'
-import { ArrowLeft, RotateCcw, Send, Flag, RefreshCw, Shuffle, Play, History } from 'lucide-react'
+import { ArrowLeft, RotateCcw, Send, Flag, RefreshCw, Play, History } from 'lucide-react'
 import { createEmptyBoard } from '@/lib/gameConstants'
 import GameHistoryViewer from '@/components/GameHistoryViewer'
 import { cn } from '@/lib/utils'
@@ -40,12 +40,33 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   const [submitting, setSubmitting] = useState(false)
   const [blankTileTarget, setBlankTileTarget] = useState<{ row: number; col: number; tile: Tile } | null>(null)
   const [showHistory, setShowHistory] = useState(false)
+  const [rackOrder, setRackOrder] = useState<string[] | null>(null)
 
   // Rack tiles for current user (excluding placed tiles)
   const myPlayer = game?.game_players?.find(p => p.player_id === userId)
   const fullRack = (myPlayer?.rack ?? []) as Tile[]
   const placedTileIds = useMemo(() => new Set(Array.from(placedTiles.values()).map(t => t.id)), [placedTiles])
-  const rackTiles = fullRack.filter(t => !placedTileIds.has(t.id))
+  const filteredRack = fullRack.filter(t => !placedTileIds.has(t.id))
+  const rackTiles = useMemo(() => {
+    if (!rackOrder) return filteredRack
+    const byId = new Map(filteredRack.map(t => [t.id, t]))
+    const ordered = rackOrder.filter(id => byId.has(id)).map(id => byId.get(id)!)
+    // Add any tiles not in the order (newly drawn)
+    const inOrder = new Set(rackOrder)
+    for (const t of filteredRack) {
+      if (!inOrder.has(t.id)) ordered.push(t)
+    }
+    return ordered
+  }, [filteredRack, rackOrder])
+
+  const handleShuffleRack = useCallback(() => {
+    const ids = rackTiles.map(t => t.id)
+    for (let i = ids.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [ids[i], ids[j]] = [ids[j], ids[i]]
+    }
+    setRackOrder([...ids])
+  }, [rackTiles])
 
   const isMyTurn = game?.current_turn === userId
   const isComputerTurn = game?.current_turn ? isComputerPlayerId(game.current_turn) : false
@@ -815,9 +836,9 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
             </div>
           )}
           {game.status === 'finished' && (
-            <div className="text-amber-200 bg-amber-800/30 px-6 py-3 rounded-lg text-center">
-              <div className="text-lg font-bold" style={{ fontFamily: "'Playfair Display', serif" }}>Game Over!</div>
-              <div className="text-sm mt-1">
+            <div className="px-8 py-3 rounded-lg text-center border border-amber-600/40" style={{ background: 'linear-gradient(135deg, #5c3a1e 0%, #4a2e15 100%)', boxShadow: '0 0 0 2px #6b4226, 0 4px 16px rgba(0,0,0,0.3)' }}>
+              <div className="text-xl font-bold text-amber-300" style={{ fontFamily: "'Playfair Display', serif" }}>Game Over!</div>
+              <div className="text-sm mt-1 text-amber-200/80">
                 Winner: {
                   players.find(p => p.player_id === game.winner)?.profiles.display_name
                   ?? computerPlayers.find(cp => cp.id === game.winner)?.name
@@ -827,18 +848,18 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
             </div>
           )}
           {isActive && !isMyTurn && !isComputerTurn && (
-            <div className="text-amber-500/70 text-sm">
+            <div className="text-amber-400/80 text-sm font-medium px-4 py-2 rounded-lg bg-amber-900/20">
               Waiting for {currentTurnPlayer?.profiles.display_name} to play...
             </div>
           )}
           {isActive && isComputerTurn && currentComputerPlayer && (
-            <div className="text-amber-400 text-sm font-medium animate-pulse">
+            <div className="text-amber-300 text-sm font-medium animate-pulse px-4 py-2 rounded-lg bg-amber-900/20">
               {currentComputerPlayer.name} is thinking...
             </div>
           )}
           {isActive && isMyTurn && (
-            <div className="text-green-400 text-sm font-medium animate-pulse">
-              Your turn! {direction === 'across' ? 'Playing across \u2192' : 'Playing down \u2193'} (click a square or press arrow keys to change direction)
+            <div className="text-green-400 text-sm font-medium px-4 py-2 rounded-lg bg-green-900/15">
+              Your turn &mdash; place tiles on the board
             </div>
           )}
 
@@ -878,6 +899,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                 onTileClick={handleRackTileClick}
                 selectedTiles={exchangeSelection}
                 isExchangeMode={isExchangeMode}
+                onShuffle={handleShuffleRack}
               />
 
               {/* Action buttons */}
@@ -910,8 +932,8 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                         variant={isExchangeMode ? 'destructive' : 'outline'}
                         className={!isExchangeMode ? 'border-amber-700/40 text-amber-300 hover:bg-amber-800/30' : ''}
                       >
-                        <Shuffle className="h-4 w-4 mr-1" />
-                        {isExchangeMode ? 'Cancel Exchange' : 'Exchange Tiles'}
+                        <RefreshCw className="h-4 w-4 mr-1" />
+                        {isExchangeMode ? 'Cancel Exchange' : 'Exchange'}
                       </Button>
                       {isExchangeMode && exchangeSelection.size > 0 && (
                         <Button

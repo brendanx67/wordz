@@ -15,23 +15,23 @@ interface GameBoardProps {
 
 function bonusLabel(bonus: string | null): string {
   switch (bonus) {
-    case 'TW': return 'TRIPLE WORD'
-    case 'DW': return 'DOUBLE WORD'
-    case 'TL': return 'TRIPLE LETTER'
-    case 'DL': return 'DOUBLE LETTER'
+    case 'TW': return 'TW'
+    case 'DW': return 'DW'
+    case 'TL': return 'TL'
+    case 'DL': return 'DL'
     case 'CENTER': return '\u2605'
     default: return ''
   }
 }
 
-function bonusClasses(bonus: string | null): string {
+function bonusFullLabel(bonus: string | null): string {
   switch (bonus) {
-    case 'TW': return 'bg-red-700/90 text-red-100'
-    case 'DW': return 'bg-amber-600/80 text-amber-100'
-    case 'TL': return 'bg-blue-600/80 text-blue-100'
-    case 'DL': return 'bg-sky-400/70 text-sky-100'
-    case 'CENTER': return 'bg-amber-600/80 text-amber-100'
-    default: return 'bg-emerald-800/60'
+    case 'TW': return 'Triple Word'
+    case 'DW': return 'Double Word'
+    case 'TL': return 'Triple Letter'
+    case 'DL': return 'Double Letter'
+    case 'CENTER': return 'Center'
+    default: return ''
   }
 }
 
@@ -48,7 +48,6 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
   }
 
   const handleDragLeave = (e: React.DragEvent) => {
-    // Only clear if we're actually leaving the square (not entering a child)
     const relatedTarget = e.relatedTarget as HTMLElement | null
     if (!relatedTarget || !e.currentTarget.contains(relatedTarget)) {
       setDragOverSquare(null)
@@ -63,7 +62,6 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
 
     const parsed = JSON.parse(tileData) as Tile & { fromBoard?: string }
 
-    // If the tile is being moved from another board position, remove it from the old spot
     if (parsed.fromBoard) {
       onPickupTile(
         parseInt(parsed.fromBoard.split(',')[0]),
@@ -71,7 +69,6 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
       )
     }
 
-    // Strip the fromBoard metadata before placing
     const { fromBoard: _, ...tile } = parsed
     onDrop(row, col, tile as Tile)
   }
@@ -87,10 +84,10 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
   }
 
   return (
-    <div className="inline-block p-1.5 rounded-lg bg-amber-950/80 border-2 border-amber-900/60 shadow-xl" onDragEnd={handleDragEnd}>
+    <div className="inline-block p-2 sm:p-2.5 rounded-xl shadow-2xl" style={{ background: 'linear-gradient(145deg, #5c3a1e 0%, #4a2e15 50%, #3d2510 100%)', boxShadow: '0 0 0 3px #2a1a0a, 0 0 0 5px #6b4226, 0 8px 32px rgba(0,0,0,0.5)' }} onDragEnd={handleDragEnd}>
       <div
-        className="grid gap-px"
-        style={{ gridTemplateColumns: `repeat(${BOARD_SIZE}, minmax(0, 1fr))` }}
+        className="grid"
+        style={{ gridTemplateColumns: `repeat(${BOARD_SIZE}, minmax(0, 1fr))`, gap: '2px', background: '#2a4a2a' , borderRadius: '4px', padding: '2px' }}
       >
         {Array.from({ length: BOARD_SIZE }).map((_, row) =>
           Array.from({ length: BOARD_SIZE }).map((_, col) => {
@@ -120,44 +117,69 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
                 onDragLeave={handleDragLeave}
                 onDrop={(e) => handleDrop(e, row, col)}
                 className={cn(
-                  'w-[30px] h-[30px] sm:w-[34px] sm:h-[34px] md:w-[38px] md:h-[38px] flex items-center justify-center rounded-[2px] cursor-pointer transition-all relative select-none',
+                  'w-[30px] h-[30px] sm:w-[35px] sm:h-[35px] md:w-[40px] md:h-[40px] flex items-center justify-center cursor-pointer transition-all relative select-none',
                   displayTile
-                    ? isNewlyPlaced
-                      ? 'bg-gradient-to-br from-amber-200 to-amber-300 shadow-md ring-2 ring-amber-400 cursor-grab active:cursor-grabbing hover:ring-red-400/60'
-                      : 'bg-gradient-to-br from-amber-100 to-amber-200'
-                    : bonusClasses(bonus),
-                  isSelected && !displayTile && 'ring-2 ring-white/80 scale-105',
-                  !displayTile && !isCommitted && 'hover:brightness-110',
-                  isDragTarget && 'ring-2 ring-white scale-110 brightness-125 z-10'
+                    ? '' // tile styles applied via inline style below
+                    : bonus === 'TW' ? 'bg-red-600'
+                    : bonus === 'DW' || bonus === 'CENTER' ? 'bg-rose-400'
+                    : bonus === 'TL' ? 'bg-blue-500'
+                    : bonus === 'DL' ? 'bg-sky-300'
+                    : 'bg-emerald-700',
+                  isSelected && !displayTile && 'ring-2 ring-white/90 z-10',
+                  !displayTile && !isCommitted && 'hover:brightness-125',
+                  isDragTarget && 'ring-2 ring-white z-10 brightness-125'
                 )}
+                style={displayTile ? {
+                  background: isNewlyPlaced
+                    ? 'linear-gradient(135deg, #f5deb3 0%, #e8c97a 40%, #d4a853 100%)'
+                    : 'linear-gradient(135deg, #f0dcc0 0%, #dcc8a0 40%, #c8b080 100%)',
+                  boxShadow: isNewlyPlaced
+                    ? 'inset 0 1px 2px rgba(255,255,255,0.4), inset 0 -1px 2px rgba(0,0,0,0.15), 0 2px 4px rgba(0,0,0,0.3), 0 0 0 1.5px #b8942e'
+                    : 'inset 0 1px 1px rgba(255,255,255,0.3), inset 0 -1px 1px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.2)',
+                  borderRadius: '3px',
+                  cursor: isNewlyPlaced ? 'grab' : 'pointer',
+                } : {
+                  borderRadius: '1px',
+                }}
                 title={
                   isNewlyPlaced
                     ? 'Click to return to rack, or drag to reposition'
-                    : isSelected
-                      ? `Type letters to place ${direction}. Click again to change direction.`
-                      : undefined
+                    : displayTile
+                      ? undefined
+                      : bonusFullLabel(bonus) || undefined
                 }
               >
                 {displayTile ? (
                   <>
-                    <span className="text-[13px] sm:text-[15px] md:text-[17px] font-bold text-amber-900" style={{ fontFamily: "'Playfair Display', serif" }}>
+                    <span
+                      className="text-[14px] sm:text-[17px] md:text-[19px] font-black tracking-tight"
+                      style={{ color: '#3d2b1a', fontFamily: "'Playfair Display', serif", textShadow: '0 1px 0 rgba(255,255,255,0.3)' }}
+                    >
                       {displayTile.letter || ''}
                     </span>
-                    <span className="absolute bottom-0.5 right-0.5 text-[7px] sm:text-[8px] text-amber-700/70 font-medium">
+                    <span
+                      className="absolute text-[6px] sm:text-[7px] md:text-[8px] font-bold"
+                      style={{ bottom: '1px', right: '2px', color: '#6b4f30' }}
+                    >
                       {displayTile.value || ''}
                     </span>
                   </>
                 ) : (
                   <span className={cn(
-                    'text-[5px] sm:text-[6px] md:text-[7px] font-semibold text-center leading-tight opacity-80',
-                    isSelected && 'opacity-0'
+                    'font-bold text-center leading-none opacity-90',
+                    isSelected && 'opacity-0',
+                    bonus === 'TW' ? 'text-[7px] sm:text-[8px] md:text-[9px] text-red-100'
+                    : bonus === 'DW' || bonus === 'CENTER' ? 'text-[7px] sm:text-[8px] md:text-[9px] text-rose-100'
+                    : bonus === 'TL' ? 'text-[7px] sm:text-[8px] md:text-[9px] text-blue-100'
+                    : bonus === 'DL' ? 'text-[7px] sm:text-[8px] md:text-[9px] text-sky-800'
+                    : 'text-[7px] text-emerald-900/30'
                   )}>
                     {bonusLabel(bonus)}
                   </span>
                 )}
                 {isSelected && !displayTile && (
-                  <div className="absolute inset-0 flex items-center justify-center rounded-[2px] bg-white/20">
-                    <span className="text-white font-bold text-[16px] sm:text-[18px] md:text-[20px] drop-shadow-md">
+                  <div className="absolute inset-0 flex items-center justify-center bg-white/25 rounded-sm">
+                    <span className="text-white font-black text-[18px] sm:text-[20px] md:text-[22px] drop-shadow-lg">
                       {direction === 'across' ? '\u2192' : '\u2193'}
                     </span>
                   </div>
