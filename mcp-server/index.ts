@@ -234,12 +234,18 @@ function buildContextBriefing(level: "master" | "club" | "social"): string {
     `Jacobson (1988) anchor-based move generation to find the highest-scoring move`,
     `every single turn.`,
     ``,
-    `=== YOUR COMPETITIVE ADVANTAGE ===`,
+    `=== KNOW YOUR OPPONENTS ===`,
     ``,
-    `The brute-force algorithm is greedy — it always plays the highest-scoring move`,
-    `available RIGHT NOW. It has zero concept of strategy. You can beat it the same`,
-    `way expert tournament Scrabble players beat raw computation: through superior`,
-    `strategic play over the course of the full game.`,
+    `You may face several types of opponents:`,
+    `- HARD (brute-force): Always plays the single highest-scoring move. Greedy, no strategy.`,
+    `  Your edge: rack management and board control over 15-20 turns.`,
+    `- COMPETITIVE (adaptive): Tries to match the leading player's score — conservative when`,
+    `  ahead, aggressive when behind. Has positional awareness but no rack management.`,
+    `  Your edge: superior long-term planning, bingo setups, and tile tracking.`,
+    `- OTHER LLMs: Another AI model. Quality varies. Watch their move patterns.`,
+    `- HUMANS: Can be unpredictable. May play strategically or casually.`,
+    ``,
+    `Check the "Opponents" section in get_game_state to see exactly who you're facing.`,
     ``,
     `=== MASTER-LEVEL STRATEGY ===`,
     ``,
@@ -325,9 +331,12 @@ function buildContextBriefing(level: "master" | "club" | "social"): string {
     `- "Is a bingo possible? Is it worth exchanging to set one up?"`,
     `- "What tiles are left in the bag? What might my opponent have?"`,
     ``,
-    `The brute-force algorithm WILL outscore you on any given turn.`,
+    `Against brute-force: it WILL outscore you on any given turn.`,
     `You win by outthinking it over the full game through rack management,`,
-    `board control, and strategic sacrifice. This is how masters play.`,
+    `board control, and strategic sacrifice.`,
+    `Against adaptive: it adjusts to the score — stay unpredictable and`,
+    `build toward big plays it can't anticipate.`,
+    `This is how masters play.`,
     ``,
     `Play like a champion.`,
   ].join("\n");
@@ -354,7 +363,14 @@ server.tool(
     const opponentDescriptions = state.players
       .map((p) => {
         if (p.type === "computer") {
-          return `${p.name} — BRUTE-FORCE ALGORITHM (${p.difficulty ?? "unknown"}): Exhaustively searches all legal moves and plays the highest-scoring one every turn. No strategic thinking, pure greedy optimization.`;
+          const diffDesc = p.difficulty === "competitive"
+            ? "ADAPTIVE ALGORITHM: Targets the top opponent's score each turn — plays conservatively when ahead, aggressively when behind. Has a crude sense of game position."
+            : p.difficulty === "hard"
+              ? "BRUTE-FORCE ALGORITHM: Exhaustively searches all legal moves and always plays the highest-scoring one. Pure greedy optimization, no strategic thinking."
+              : p.difficulty === "medium"
+                ? "ALGORITHM (medium): Picks a good but not always optimal move."
+                : "ALGORITHM (easy): Plays simple, lower-scoring moves.";
+          return `${p.name} — ${diffDesc}`;
         }
         if (p.type === "api") {
           return `${p.name} — LLM/AI PLAYER (strategy: ${p.strategy_level ?? "unknown"}): Another AI model playing via API.`;

@@ -348,7 +348,13 @@ async function handleGetGame(req: Request): Promise<Response> {
       score: p.score,
       type: isComputer ? "computer" as const : isApi ? "api" as const : "unknown" as const,
       description: isComputer
-        ? `Brute-force algorithm (${p.difficulty ?? "unknown"} difficulty) — finds the highest-scoring move every turn using exhaustive search`
+        ? (p.difficulty === "competitive"
+          ? `Adaptive algorithm (competitive) — targets the top opponent's score each turn, playing conservatively when ahead and aggressively when behind`
+          : p.difficulty === "hard"
+            ? `Brute-force algorithm (hard) — exhaustively searches all legal moves and always plays the highest-scoring one`
+            : p.difficulty === "medium"
+              ? `Algorithm (medium) — picks a good but not always optimal move from the top candidates`
+              : `Algorithm (easy) — plays simple, lower-scoring moves`)
         : isApi
           ? `LLM/AI player via API (strategy level: ${p.strategyLevel ?? "unknown"})`
           : "Unknown player type",
