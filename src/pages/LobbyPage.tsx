@@ -4,7 +4,7 @@ import { Skeleton } from '@/components/ui/skeleton'
 import { useOpenGames, useMyGames, useCreateConfiguredGame, useJoinGame, useStartGame, useCancelGame } from '@/hooks/useGames'
 import type { ComputerPlayer } from '@/hooks/useGames'
 import { useGameHistory } from '@/hooks/useGameHistory'
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { LogOut, Plus, Play, Users, Clock, Trophy, History, Eye, X } from 'lucide-react'
 import { toast } from 'sonner'
 import CreateGameForm from '@/components/CreateGameForm'
@@ -32,6 +32,21 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
   const startGame = useStartGame()
   const cancelGame = useCancelGame()
   const [showCreateForm, setShowCreateForm] = useState(false)
+  const [ignoredGames, setIgnoredGames] = useState<Set<string>>(() => {
+    try {
+      const stored = localStorage.getItem('wordz-ignored-games')
+      return stored ? new Set(JSON.parse(stored)) : new Set()
+    } catch { return new Set() }
+  })
+
+  const handleIgnoreGame = useCallback((gameId: string) => {
+    setIgnoredGames(prev => {
+      const next = new Set(prev)
+      next.add(gameId)
+      localStorage.setItem('wordz-ignored-games', JSON.stringify([...next]))
+      return next
+    })
+  }, [])
 
   const handleCreateGame = async (config: GameConfig) => {
     try {
@@ -230,12 +245,18 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
               <div className="space-y-3">
                 <Skeleton className="h-16 bg-amber-900/20" />
               </div>
-            ) : !openGames?.length ? (
+            ) : (() => {
+              const visibleGames = (openGames ?? [])
+                .filter(g => !g.game_players?.some((p: { player_id: string }) => p.player_id === userId))
+                .filter(g => !ignoredGames.has(g.id))
+              return visibleGames.length === 0
+            })() ? (
               <p className="text-amber-600/60 text-center py-4">No open games right now. Be the first to create one!</p>
             ) : (
               <div className="space-y-3">
-                {openGames
+                {(openGames ?? [])
                   .filter(g => !g.game_players?.some((p: { player_id: string }) => p.player_id === userId))
+                  .filter(g => !ignoredGames.has(g.id))
                   .map((game) => {
                     const players = game.game_players ?? []
                     return (
@@ -249,14 +270,24 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
                           </span>
                           <span className="text-amber-600/60 text-sm ml-2">({players.length}/4 players)</span>
                         </div>
-                        <Button
-                          size="sm"
-                          onClick={() => handleJoin(game.id)}
-                          disabled={joinGame.isPending || players.length >= 4}
-                          className="bg-amber-700 hover:bg-amber-600 text-amber-50"
-                        >
-                          {joinGame.isPending ? 'Joining...' : 'Join'}
-                        </Button>
+                        <div className="flex gap-2">
+                          <Button
+                            size="sm"
+                            onClick={() => handleJoin(game.id)}
+                            disabled={joinGame.isPending || players.length >= 4}
+                            className="bg-amber-700 hover:bg-amber-600 text-amber-50"
+                          >
+                            {joinGame.isPending ? 'Joining...' : 'Join'}
+                          </Button>
+                          <Button
+                            size="sm"
+                            onClick={() => handleIgnoreGame(game.id)}
+                            className="bg-amber-900/40 hover:bg-amber-800/50 text-amber-500/60 border border-amber-900/30"
+                          >
+                            <X className="h-3 w-3 mr-1" />
+                            Ignore
+                          </Button>
+                        </div>
                       </div>
                     )
                   })}
