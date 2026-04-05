@@ -120,10 +120,7 @@ export default function CreateGameForm({ onCreateGame, onCancel, isPending }: Cr
                   onValueChange={(val) => updateSlot(i, val as PlayerSlotType)}
                 >
                   <SelectTrigger className="bg-amber-950/60 border-amber-800/30 text-amber-200 h-9">
-                    <div className="flex items-center gap-2">
-                      {getSlotIcon(slot.type)}
-                      <SelectValue />
-                    </div>
+                    <SelectValue />
                   </SelectTrigger>
                   <SelectContent className="bg-amber-950 border-amber-800/40">
                     {getOptionsForSlot(i).map(opt => (
