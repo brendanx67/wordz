@@ -15,22 +15,34 @@ interface GameBoardProps {
 
 function bonusLabel(bonus: string | null): string {
   switch (bonus) {
-    case 'TW': return 'TW'
-    case 'DW': return 'DW'
-    case 'TL': return 'TL'
-    case 'DL': return 'DL'
+    case 'TW': return 'TRIPLE\nWORD'
+    case 'DW': return 'DOUBLE\nWORD'
+    case 'TL': return 'TRIPLE\nLETTER'
+    case 'DL': return 'DOUBLE\nLETTER'
     case 'CENTER': return '\u2605'
     default: return ''
   }
 }
 
-function bonusFullLabel(bonus: string | null): string {
+// Colors matching the classic Scrabble board look from the reference
+function bonusBg(bonus: string | null): string {
   switch (bonus) {
-    case 'TW': return 'Triple Word'
-    case 'DW': return 'Double Word'
-    case 'TL': return 'Triple Letter'
-    case 'DL': return 'Double Letter'
-    case 'CENTER': return 'Center'
+    case 'TW': return '#c0392b'     // muted red
+    case 'DW': return '#e8a87c'     // salmon/peach
+    case 'TL': return '#2874a6'     // muted blue
+    case 'DL': return '#85c1e9'     // light blue
+    case 'CENTER': return '#e8a87c' // same as DW
+    default: return '#1a7a5a'       // dark teal green
+  }
+}
+
+function bonusTextColor(bonus: string | null): string {
+  switch (bonus) {
+    case 'TW': return '#f5d0cc'
+    case 'DW': return '#5b2c1a'
+    case 'TL': return '#d4e6f1'
+    case 'DL': return '#1a4a6b'
+    case 'CENTER': return '#5b2c1a'
     default: return ''
   }
 }
@@ -84,10 +96,23 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
   }
 
   return (
-    <div className="inline-block p-2 sm:p-2.5 rounded-xl shadow-2xl" style={{ background: 'linear-gradient(145deg, #5c3a1e 0%, #4a2e15 50%, #3d2510 100%)', boxShadow: '0 0 0 3px #2a1a0a, 0 0 0 5px #6b4226, 0 8px 32px rgba(0,0,0,0.5)' }} onDragEnd={handleDragEnd}>
+    <div
+      className="inline-block p-2 sm:p-2.5 rounded-xl shadow-2xl"
+      style={{
+        background: 'linear-gradient(145deg, #5c3a1e 0%, #4a2e15 50%, #3d2510 100%)',
+        boxShadow: '0 0 0 3px #2a1a0a, 0 0 0 5px #6b4226, 0 8px 32px rgba(0,0,0,0.5)',
+      }}
+      onDragEnd={handleDragEnd}
+    >
       <div
         className="grid"
-        style={{ gridTemplateColumns: `repeat(${BOARD_SIZE}, minmax(0, 1fr))`, gap: '2px', background: '#2a4a2a' , borderRadius: '4px', padding: '2px' }}
+        style={{
+          gridTemplateColumns: `repeat(${BOARD_SIZE}, minmax(0, 1fr))`,
+          gap: '1.5px',
+          background: '#0d3d2d',
+          borderRadius: '4px',
+          padding: '1.5px',
+        }}
       >
         {Array.from({ length: BOARD_SIZE }).map((_, row) =>
           Array.from({ length: BOARD_SIZE }).map((_, col) => {
@@ -118,15 +143,8 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
                 onDrop={(e) => handleDrop(e, row, col)}
                 className={cn(
                   'w-[30px] h-[30px] sm:w-[35px] sm:h-[35px] md:w-[40px] md:h-[40px] flex items-center justify-center cursor-pointer transition-all relative select-none',
-                  displayTile
-                    ? '' // tile styles applied via inline style below
-                    : bonus === 'TW' ? 'bg-red-600'
-                    : bonus === 'DW' || bonus === 'CENTER' ? 'bg-rose-400'
-                    : bonus === 'TL' ? 'bg-blue-500'
-                    : bonus === 'DL' ? 'bg-sky-300'
-                    : 'bg-emerald-700',
-                  isSelected && !displayTile && 'ring-2 ring-white/90 z-10',
-                  !displayTile && !isCommitted && 'hover:brightness-125',
+                  isSelected && !displayTile && 'ring-2 ring-white/80 z-10',
+                  !displayTile && !isCommitted && 'hover:brightness-110',
                   isDragTarget && 'ring-2 ring-white z-10 brightness-125'
                 )}
                 style={displayTile ? {
@@ -139,14 +157,13 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
                   borderRadius: '3px',
                   cursor: isNewlyPlaced ? 'grab' : 'pointer',
                 } : {
-                  borderRadius: '1px',
+                  background: bonusBg(bonus),
+                  borderRadius: '2px',
                 }}
                 title={
                   isNewlyPlaced
                     ? 'Click to return to rack, or drag to reposition'
-                    : displayTile
-                      ? undefined
-                      : bonusFullLabel(bonus) || undefined
+                    : undefined
                 }
               >
                 {displayTile ? (
@@ -164,19 +181,18 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
                       {displayTile.value || ''}
                     </span>
                   </>
-                ) : (
-                  <span className={cn(
-                    'font-bold text-center leading-none opacity-90',
-                    isSelected && 'opacity-0',
-                    bonus === 'TW' ? 'text-[7px] sm:text-[8px] md:text-[9px] text-red-100'
-                    : bonus === 'DW' || bonus === 'CENTER' ? 'text-[7px] sm:text-[8px] md:text-[9px] text-rose-100'
-                    : bonus === 'TL' ? 'text-[7px] sm:text-[8px] md:text-[9px] text-blue-100'
-                    : bonus === 'DL' ? 'text-[7px] sm:text-[8px] md:text-[9px] text-sky-800'
-                    : 'text-[7px] text-emerald-900/30'
-                  )}>
+                ) : bonus ? (
+                  <span
+                    className={cn(
+                      'font-semibold text-center leading-[1.1] whitespace-pre-line',
+                      isSelected && 'opacity-0',
+                      bonus === 'CENTER' ? 'text-[14px] sm:text-[16px] md:text-[18px]' : 'text-[5px] sm:text-[6px] md:text-[7px]'
+                    )}
+                    style={{ color: bonusTextColor(bonus) }}
+                  >
                     {bonusLabel(bonus)}
                   </span>
-                )}
+                ) : null}
                 {isSelected && !displayTile && (
                   <div className="absolute inset-0 flex items-center justify-center bg-white/25 rounded-sm">
                     <span className="text-white font-black text-[18px] sm:text-[20px] md:text-[22px] drop-shadow-lg">
