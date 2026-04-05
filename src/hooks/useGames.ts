@@ -405,6 +405,7 @@ export function useCancelGame() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['games'] })
       queryClient.invalidateQueries({ queryKey: ['game_history'] })
+      queryClient.invalidateQueries({ queryKey: ['game'] })
     },
   })
 }
