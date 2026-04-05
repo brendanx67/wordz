@@ -184,9 +184,9 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
                 ) : bonus ? (
                   <span
                     className={cn(
-                      'font-semibold text-center leading-[1.1] whitespace-pre-line',
+                      'font-extrabold text-center leading-[1.15] whitespace-pre-line',
                       isSelected && 'opacity-0',
-                      bonus === 'CENTER' ? 'text-[14px] sm:text-[16px] md:text-[18px]' : 'text-[5px] sm:text-[6px] md:text-[7px]'
+                      bonus === 'CENTER' ? 'text-[14px] sm:text-[16px] md:text-[18px]' : 'text-[6px] sm:text-[7px] md:text-[8px]'
                     )}
                     style={{ color: bonusTextColor(bonus) }}
                   >

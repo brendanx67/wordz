@@ -910,15 +910,14 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                       <Button
                         onClick={handleSubmitMove}
                         disabled={submitting}
-                        className="bg-green-700 hover:bg-green-600 text-white"
+                        className="bg-green-700 hover:bg-green-600 text-white font-semibold px-5"
                       >
                         <Send className="h-4 w-4 mr-1" />
                         {submitting ? 'Submitting...' : 'Submit Word'}
                       </Button>
                       <Button
                         onClick={handleRecall}
-                        variant="outline"
-                        className="border-amber-700/40 text-amber-300 hover:bg-amber-800/30"
+                        className="bg-amber-900/60 hover:bg-amber-800/70 text-amber-200 border border-amber-700/40 font-semibold"
                       >
                         <RotateCcw className="h-4 w-4 mr-1" />
                         Recall
@@ -929,8 +928,10 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                     <>
                       <Button
                         onClick={toggleExchangeMode}
-                        variant={isExchangeMode ? 'destructive' : 'outline'}
-                        className={!isExchangeMode ? 'border-amber-700/40 text-amber-300 hover:bg-amber-800/30' : ''}
+                        className={isExchangeMode
+                          ? 'bg-red-800 hover:bg-red-700 text-white font-semibold'
+                          : 'bg-amber-900/60 hover:bg-amber-800/70 text-amber-200 border border-amber-700/40 font-semibold'
+                        }
                       >
                         <RefreshCw className="h-4 w-4 mr-1" />
                         {isExchangeMode ? 'Cancel Exchange' : 'Exchange'}
@@ -939,7 +940,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                         <Button
                           onClick={handlePass}
                           disabled={submitting}
-                          className="bg-amber-700 hover:bg-amber-600 text-white"
+                          className="bg-amber-700 hover:bg-amber-600 text-white font-semibold"
                         >
                           <RefreshCw className="h-4 w-4 mr-1" />
                           Exchange {exchangeSelection.size} tile(s)
@@ -950,16 +951,14 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                           <Button
                             onClick={handlePass}
                             disabled={submitting}
-                            variant="outline"
-                            className="border-amber-700/40 text-amber-300 hover:bg-amber-800/30"
+                            className="bg-amber-900/60 hover:bg-amber-800/70 text-amber-200 border border-amber-700/40 font-semibold"
                           >
                             <Flag className="h-4 w-4 mr-1" />
                             Pass
                           </Button>
                           <Button
                             onClick={handleChallenge}
-                            variant="outline"
-                            className="border-red-700/40 text-red-400 hover:bg-red-900/20"
+                            className="bg-red-900/60 hover:bg-red-800/70 text-red-200 border border-red-700/40 font-semibold"
                           >
                             Challenge
                           </Button>
