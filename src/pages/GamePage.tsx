@@ -692,7 +692,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
       {/* Header */}
       <header className="border-b border-amber-900/30 bg-amber-950/40 backdrop-blur sticky top-0 z-50">
         <div className="container mx-auto px-3 py-2 flex items-center justify-between">
-          <Button variant="ghost" size="sm" onClick={onBack} className="text-amber-500/60 hover:text-amber-300">
+          <Button variant="ghost" size="sm" onClick={onBack} className="text-amber-400/80 hover:text-amber-200">
             <ArrowLeft className="h-4 w-4 mr-1" />
             Lobby
           </Button>
@@ -706,13 +706,13 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                   navigator.clipboard.writeText(gameId)
                   toast.success('Game ID copied!')
                 }}
-                className="text-[10px] text-purple-400/50 hover:text-purple-300 font-mono cursor-pointer"
+                className="text-[10px] text-purple-300/70 hover:text-purple-200 font-mono cursor-pointer"
                 title="Click to copy game ID for API/MCP use"
               >
                 ID: {gameId.slice(0, 8)}...
               </button>
             )}
-            <span className="text-xs text-amber-600/60">
+            <span className="text-xs text-amber-400/70">
               {tileBag.length} tiles left
             </span>
             {isActive && myPlayer && (
