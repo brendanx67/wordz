@@ -45,6 +45,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   const [suggestionTiles, setSuggestionTiles] = useState<Map<string, Tile>>(new Map())
   const [suggestionSquare, setSuggestionSquare] = useState<{ row: number; col: number } | null>(null)
   const [suggestionDirection, setSuggestionDirection] = useState<'across' | 'down'>('across')
+  const [suggestionSent, setSuggestionSent] = useState(false)
   const [rackOrder, setRackOrder] = useState<string[] | null>(null)
   const [reviewMode, setReviewMode] = useState(false)
   const [reviewMoveIndex, setReviewMoveIndex] = useState(-1)
@@ -98,19 +99,29 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   const isSpectatingApi = isActive && !myPlayer && myApiPlayers.length > 0
   const spectatingApiPlayer = isSpectatingApi ? myApiPlayers[0] : null
 
-  // Suggestion rack: API player's rack minus tiles already placed as suggestions
-  const suggestionPlacedIds = useMemo(() => new Set(Array.from(suggestionTiles.values()).map(t => t.id)), [suggestionTiles])
-  const suggestionRack = useMemo(() => {
-    if (!spectatingApiPlayer) return []
-    return spectatingApiPlayer.rack.filter(t => !suggestionPlacedIds.has(t.id))
-  }, [spectatingApiPlayer, suggestionPlacedIds])
-
   // Parse previewed_move from game data for board display
   const previewedTiles = useMemo(() => {
     const pm = (game as Record<string, unknown> | undefined)?.previewed_move as { tiles: { row: number; col: number; letter: string; is_blank?: boolean }[] } | null
     if (!pm?.tiles) return undefined
     return pm.tiles
   }, [game])
+
+  // Suggestion rack: API player's rack minus tiles already placed as suggestions
+  // Also minus tiles the LLM is previewing, so the rack shows what it would look like after the move
+  const suggestionPlacedIds = useMemo(() => new Set(Array.from(suggestionTiles.values()).map(t => t.id)), [suggestionTiles])
+  const suggestionRack = useMemo(() => {
+    if (!spectatingApiPlayer) return []
+    let rack = spectatingApiPlayer.rack.filter(t => !suggestionPlacedIds.has(t.id))
+    // Remove previewed tiles from rack by letter matching
+    if (previewedTiles && previewedTiles.length > 0) {
+      const lettersToRemove = [...previewedTiles.map(t => t.is_blank ? '' : t.letter)]
+      for (const letter of lettersToRemove) {
+        const idx = rack.findIndex(t => t.letter === letter)
+        if (idx !== -1) rack = [...rack.slice(0, idx), ...rack.slice(idx + 1)]
+      }
+    }
+    return rack
+  }, [spectatingApiPlayer, suggestionPlacedIds, previewedTiles])
 
   // Clear local suggestion tiles when a new move is played (move history grows)
   const moveCount = (game?.move_history as unknown[] | undefined)?.length ?? 0
@@ -119,6 +130,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
     if (moveCount > prevMoveCountRef.current) {
       setSuggestionTiles(new Map())
       setSuggestionSquare(null)
+      setSuggestionSent(false)
     }
     prevMoveCountRef.current = moveCount
   }, [moveCount])
@@ -276,12 +288,14 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
         timestamp: new Date().toISOString(),
       }
     }).eq('id', gameId)
+    setSuggestionSent(true)
     toast.success('Suggestion sent to LLM')
   }, [gameId, suggestionTiles, userId])
 
   const clearSuggestion = useCallback(async () => {
     setSuggestionTiles(new Map())
     setSuggestionSquare(null)
+    setSuggestionSent(false)
     if (gameId) {
       await supabase.from('games').update({ suggested_move: null }).eq('id', gameId)
     }
@@ -1517,15 +1531,15 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                 isExchangeMode={false}
               />
               {/* Suggestion controls */}
-              <div className="flex justify-center gap-2">
-                {suggestionTiles.size > 0 && (
-                  <>
+              <div className="flex flex-col items-center gap-2">
+                {suggestionTiles.size > 0 && !suggestionSent && (
+                  <div className="flex justify-center gap-2 w-full">
                     <Button
                       size="sm"
                       onClick={saveSuggestion}
-                      className="bg-purple-700 hover:bg-purple-600 text-white gap-1"
+                      className="bg-purple-600 hover:bg-purple-500 text-white gap-1.5 animate-pulse shadow-lg shadow-purple-900/50 ring-2 ring-purple-400/50"
                     >
-                      <Lightbulb className="h-3.5 w-3.5" />
+                      <Lightbulb className="h-4 w-4" />
                       Send Suggestion
                     </Button>
                     <Button
@@ -1537,21 +1551,56 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                       <X className="h-3.5 w-3.5" />
                       Clear
                     </Button>
-                  </>
+                  </div>
                 )}
-                {suggestionTiles.size === 0 && !suggestionSquare && (
+                {suggestionTiles.size > 0 && !suggestionSent && (
+                  <div className="text-amber-400/80 text-[11px] font-medium">
+                    Suggestion not sent yet — click Send or press Enter
+                  </div>
+                )}
+                {suggestionSent && (
+                  <div className="flex items-center justify-center gap-2 w-full">
+                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-900/30 border border-green-700/40">
+                      <Lightbulb className="h-3.5 w-3.5 text-green-400" />
+                      <span className="text-green-300 text-xs font-medium">Suggestion sent</span>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={clearSuggestion}
+                      className="text-amber-400 hover:text-amber-200 gap-1"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      Clear
+                    </Button>
+                  </div>
+                )}
+                {suggestionTiles.size === 0 && !suggestionSquare && !previewedTiles?.length && (
                   <div className="text-amber-500/60 text-xs">
                     Tap a square on the board, then tap rack tiles to suggest a move
                   </div>
                 )}
               </div>
-              {/* Preview indicator */}
+              {/* LLM preview indicator with clear option */}
               {previewedTiles && previewedTiles.length > 0 && (
                 <div className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-purple-900/20 border border-purple-700/30">
                   <Eye className="h-3.5 w-3.5 text-purple-400" />
                   <span className="text-purple-300 text-xs">
-                    LLM is previewing: {previewedTiles.map(t => `${t.letter}(${String.fromCharCode(65 + t.col)}${t.row + 1})`).join(' ')}
+                    LLM is considering: {previewedTiles.map(t => `${t.letter}(${String.fromCharCode(65 + t.col)}${t.row + 1})`).join(' ')}
                   </span>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    onClick={async () => {
+                      if (gameId) {
+                        await supabase.from('games').update({ previewed_move: null }).eq('id', gameId)
+                      }
+                    }}
+                    className="text-purple-400 hover:text-purple-200 h-6 px-2 text-xs gap-1"
+                  >
+                    <X className="h-3 w-3" />
+                    Dismiss
+                  </Button>
                 </div>
               )}
             </div>
