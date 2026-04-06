@@ -568,6 +568,7 @@ Deno.serve(async (req) => {
         player_id: cpuPlayer.id,
         player_name: cpuPlayer.name,
         type: "pass",
+        rack_snapshot: cpuPlayer.rack.map((t: { letter: string; value: number; isBlank?: boolean }) => ({ letter: t.letter, value: t.value, isBlank: t.isBlank })),
         board_snapshot: board,
         timestamp: new Date().toISOString(),
       });
@@ -640,6 +641,7 @@ Deno.serve(async (req) => {
       tiles: selected.tiles,
       words: selected.words,
       score: selected.totalScore,
+      rack_snapshot: cpuPlayer.rack.map((t: { letter: string; value: number; isBlank?: boolean }) => ({ letter: t.letter, value: t.value, isBlank: t.isBlank })),
       board_snapshot: newBoard,
       timestamp: new Date().toISOString(),
     });

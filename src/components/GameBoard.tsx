@@ -10,6 +10,11 @@ export interface PreviewTile {
   is_blank?: boolean
 }
 
+export interface HighlightTile {
+  row: number
+  col: number
+}
+
 interface GameBoardProps {
   board: BoardCell[][]
   selectedSquare: { row: number; col: number } | null
@@ -18,6 +23,7 @@ interface GameBoardProps {
   onPickupTile: (row: number, col: number) => void
   placedTiles: Map<string, Tile>
   previewTiles?: PreviewTile[]
+  highlightTiles?: HighlightTile[]
   direction: 'across' | 'down'
   showLabels?: boolean
 }
@@ -58,12 +64,19 @@ function bonusTextColor(bonus: string | null): string {
 
 const COL_LETTERS = Array.from({ length: BOARD_SIZE }, (_, i) => String.fromCharCode(65 + i))
 
-export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop, onPickupTile, placedTiles, previewTiles, direction, showLabels = false }: GameBoardProps) {
+export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop, onPickupTile, placedTiles, previewTiles, highlightTiles, direction, showLabels = false }: GameBoardProps) {
   // Build preview tile lookup
   const previewMap = new Map<string, PreviewTile>()
   if (previewTiles) {
     for (const pt of previewTiles) {
       previewMap.set(`${pt.row},${pt.col}`, pt)
+    }
+  }
+  // Build highlight tile lookup (for review mode - gold ring around newly placed tiles)
+  const highlightSet = new Set<string>()
+  if (highlightTiles) {
+    for (const ht of highlightTiles) {
+      highlightSet.add(`${ht.row},${ht.col}`)
     }
   }
   const [dragOverSquare, setDragOverSquare] = useState<string | null>(null)
@@ -188,6 +201,7 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
               const isNewlyPlaced = !!placedTile
               const isPreview = !!preview && !displayTile
               const isCommitted = !!tile
+              const isHighlighted = highlightSet.has(`${row},${col}`) && isCommitted
               const isDragTarget = dragOverSquare === `${row},${col}` && !isCommitted && !isNewlyPlaced
 
               return (
@@ -213,12 +227,16 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
                     isPreview && 'animate-pulse z-10'
                   )}
                   style={displayTile ? {
-                    background: isNewlyPlaced
-                      ? 'linear-gradient(135deg, #f5deb3 0%, #e8c97a 40%, #d4a853 100%)'
-                      : 'linear-gradient(135deg, #f0dcc0 0%, #dcc8a0 40%, #c8b080 100%)',
-                    boxShadow: isNewlyPlaced
-                      ? 'inset 0 1px 2px rgba(255,255,255,0.4), inset 0 -1px 2px rgba(0,0,0,0.15), 0 2px 4px rgba(0,0,0,0.3), 0 0 0 1.5px #b8942e'
-                      : 'inset 0 1px 1px rgba(255,255,255,0.3), inset 0 -1px 1px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.2)',
+                    background: isHighlighted
+                      ? 'linear-gradient(135deg, #fde68a 0%, #f59e0b 40%, #d97706 100%)'
+                      : isNewlyPlaced
+                        ? 'linear-gradient(135deg, #f5deb3 0%, #e8c97a 40%, #d4a853 100%)'
+                        : 'linear-gradient(135deg, #f0dcc0 0%, #dcc8a0 40%, #c8b080 100%)',
+                    boxShadow: isHighlighted
+                      ? 'inset 0 1px 2px rgba(255,255,255,0.4), 0 0 10px rgba(245,158,11,0.6), 0 0 0 2px #f59e0b'
+                      : isNewlyPlaced
+                        ? 'inset 0 1px 2px rgba(255,255,255,0.4), inset 0 -1px 2px rgba(0,0,0,0.15), 0 2px 4px rgba(0,0,0,0.3), 0 0 0 1.5px #b8942e'
+                        : 'inset 0 1px 1px rgba(255,255,255,0.3), inset 0 -1px 1px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.2)',
                     borderRadius: '3px',
                     cursor: isNewlyPlaced ? 'grab' : 'pointer',
                   } : isPreview ? {

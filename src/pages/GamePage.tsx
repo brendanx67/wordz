@@ -11,7 +11,7 @@ import type { Tile, BoardCell, PlacedTile } from '@/lib/gameConstants'
 import GameBoard from '@/components/GameBoard'
 import TileRack from '@/components/TileRack'
 import { toast } from 'sonner'
-import { ArrowLeft, RotateCcw, Send, Flag, RefreshCw, Play, History, LogOut, Grid3X3, Lightbulb, X, Eye } from 'lucide-react'
+import { ArrowLeft, RotateCcw, Send, Flag, RefreshCw, Play, History, LogOut, Grid3X3, Lightbulb, X, Eye, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Clock } from 'lucide-react'
 import { createEmptyBoard } from '@/lib/gameConstants'
 import GameHistoryViewer from '@/components/GameHistoryViewer'
 import { cn } from '@/lib/utils'
@@ -46,6 +46,8 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   const [suggestionSquare, setSuggestionSquare] = useState<{ row: number; col: number } | null>(null)
   const [suggestionDirection, setSuggestionDirection] = useState<'across' | 'down'>('across')
   const [rackOrder, setRackOrder] = useState<string[] | null>(null)
+  const [reviewMode, setReviewMode] = useState(false)
+  const [reviewMoveIndex, setReviewMoveIndex] = useState(-1)
 
   // Rack tiles for current user (excluding placed tiles)
   const myPlayer = game?.game_players?.find(p => p.player_id === userId)
@@ -109,6 +111,58 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
     if (!pm?.tiles) return undefined
     return pm.tiles
   }, [game])
+
+  // Review mode: board and highlighted tiles for game history on the main board
+  const moveHistory = (game?.move_history ?? []) as { player_id: string; player_name: string; type: 'play' | 'pass' | 'exchange'; words?: { word: string; score: number }[]; score?: number; board_snapshot: BoardCell[][]; tiles?: { row: number; col: number; letter: string }[]; timestamp: string }[]
+
+  const reviewBoard = useMemo(() => {
+    if (!reviewMode || !moveHistory.length) return board
+    if (reviewMoveIndex < 0) return createEmptyBoard()
+    const entry = moveHistory[Math.min(reviewMoveIndex, moveHistory.length - 1)]
+    return entry.board_snapshot || board
+  }, [reviewMode, reviewMoveIndex, moveHistory, board])
+
+  const reviewHighlightTiles = useMemo(() => {
+    if (!reviewMode || reviewMoveIndex < 0 || !moveHistory.length) return undefined
+    const entry = moveHistory[Math.min(reviewMoveIndex, moveHistory.length - 1)]
+    if (entry.type !== 'play') return undefined
+
+    // If the move has explicit tiles array, use that
+    if (entry.tiles && entry.tiles.length > 0) {
+      return entry.tiles.map(t => ({ row: t.row, col: t.col }))
+    }
+
+    // Otherwise diff with previous board snapshot
+    const currentSnapshot = entry.board_snapshot
+    if (!currentSnapshot) return undefined
+    const prevSnapshot = reviewMoveIndex > 0
+      ? moveHistory[reviewMoveIndex - 1].board_snapshot
+      : null
+
+    const highlights: { row: number; col: number }[] = []
+    for (let r = 0; r < 15; r++) {
+      for (let c = 0; c < 15; c++) {
+        const hasTileNow = currentSnapshot[r]?.[c]?.tile
+        const hadTileBefore = prevSnapshot ? prevSnapshot[r]?.[c]?.tile : null
+        if (hasTileNow && !hadTileBefore) {
+          highlights.push({ row: r, col: c })
+        }
+      }
+    }
+    return highlights.length > 0 ? highlights : undefined
+  }, [reviewMode, reviewMoveIndex, moveHistory])
+
+  const reviewCurrentMove = reviewMode && reviewMoveIndex >= 0 && reviewMoveIndex < moveHistory.length
+    ? moveHistory[reviewMoveIndex]
+    : null
+
+  // Review timing
+  const reviewTiming = useMemo(() => {
+    if (!reviewMode || moveHistory.length < 2) return null
+    const times = moveHistory.map(m => new Date(m.timestamp).getTime())
+    const elapsed = times.map((t, i) => i === 0 ? 0 : (t - times[i - 1]) / 1000)
+    return { elapsed }
+  }, [reviewMode, moveHistory])
 
   // Suggestion placement handlers
   const handleSuggestionSquareClick = useCallback((row: number, col: number) => {
@@ -453,6 +507,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
         tiles: placed,
         words: result.words,
         score: result.totalScore,
+        rack_snapshot: fullRack.map(t => ({ letter: t.letter, value: t.value, isBlank: t.isBlank })),
         board_snapshot: newBoard,
         timestamp: new Date().toISOString(),
       }
@@ -633,6 +688,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
         player_id: userId,
         player_name: myPlayer?.profiles?.display_name ?? 'Player',
         type: 'pass',
+        rack_snapshot: fullRack.map(t => ({ letter: t.letter, value: t.value, isBlank: t.isBlank })),
         board_snapshot: board,
         timestamp: new Date().toISOString(),
       }
@@ -1031,11 +1087,29 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
             const actualWinner = allPlayerScores.reduce((best, p) => p.score > best.score ? p : best, allPlayerScores[0])
             const isTie = allPlayerScores.filter(p => p.score === actualWinner?.score).length > 1
             return (
-            <div className="px-8 py-3 rounded-lg text-center border border-amber-600/40" style={{ background: 'linear-gradient(135deg, #5c3a1e 0%, #4a2e15 100%)', boxShadow: '0 0 0 2px #6b4226, 0 4px 16px rgba(0,0,0,0.3)' }}>
-              <div className="text-xl font-bold text-amber-300" style={{ fontFamily: "'Playfair Display', serif" }}>Game Over!</div>
-              <div className="text-sm mt-1 text-amber-200/80">
-                {isTie ? 'Tie!' : `Winner: ${actualWinner?.name ?? 'Unknown'}`}
+            <div className="flex flex-col items-center gap-2">
+              <div className="px-8 py-3 rounded-lg text-center border border-amber-600/40" style={{ background: 'linear-gradient(135deg, #5c3a1e 0%, #4a2e15 100%)', boxShadow: '0 0 0 2px #6b4226, 0 4px 16px rgba(0,0,0,0.3)' }}>
+                <div className="text-xl font-bold text-amber-300" style={{ fontFamily: "'Playfair Display', serif" }}>Game Over!</div>
+                <div className="text-sm mt-1 text-amber-200/80">
+                  {isTie ? 'Tie!' : `Winner: ${actualWinner?.name ?? 'Unknown'}`}
+                </div>
               </div>
+              <Button
+                onClick={() => {
+                  setReviewMode(r => !r)
+                  if (!reviewMode) setReviewMoveIndex(moveHistory.length - 1)
+                }}
+                className={cn(
+                  'gap-1.5',
+                  reviewMode
+                    ? 'bg-amber-700 hover:bg-amber-600 text-white'
+                    : 'bg-amber-900/60 hover:bg-amber-800/70 text-amber-200 border border-amber-700/40'
+                )}
+                size="sm"
+              >
+                <History className="h-4 w-4" />
+                {reviewMode ? 'Exit Review' : 'Review Game'}
+              </Button>
             </div>
             )
           })()}
@@ -1097,17 +1171,100 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
               A1
             </button>
             <GameBoard
-              board={board}
-              selectedSquare={isSpectatingApi ? suggestionSquare : selectedSquare}
-              onSquareClick={isSpectatingApi ? handleSuggestionSquareClick : handleSquareClick}
-              onDrop={handleDrop}
-              onPickupTile={handlePickupTile}
-              placedTiles={isSpectatingApi ? suggestionTiles : placedTiles}
-              previewTiles={previewedTiles}
+              board={reviewMode ? reviewBoard : board}
+              selectedSquare={reviewMode ? null : isSpectatingApi ? suggestionSquare : selectedSquare}
+              onSquareClick={reviewMode ? () => {} : isSpectatingApi ? handleSuggestionSquareClick : handleSquareClick}
+              onDrop={reviewMode ? () => {} : handleDrop}
+              onPickupTile={reviewMode ? () => {} : handlePickupTile}
+              placedTiles={reviewMode ? new Map() : isSpectatingApi ? suggestionTiles : placedTiles}
+              previewTiles={reviewMode ? undefined : previewedTiles}
+              highlightTiles={reviewMode ? reviewHighlightTiles : undefined}
               direction={isSpectatingApi ? suggestionDirection : direction}
               showLabels={showLabels}
             />
           </div>
+
+          {/* Review mode controls */}
+          {reviewMode && (
+            <div className="flex flex-col items-center gap-3 w-full max-w-lg">
+              {/* Navigation */}
+              <div className="flex items-center gap-2">
+                <Button
+                  variant="ghost" size="icon"
+                  onClick={() => setReviewMoveIndex(-1)}
+                  disabled={reviewMoveIndex <= -1}
+                  className="h-9 w-9 text-amber-400 hover:text-amber-200 hover:bg-amber-900/30"
+                >
+                  <ChevronsLeft className="h-5 w-5" />
+                </Button>
+                <Button
+                  variant="ghost" size="icon"
+                  onClick={() => setReviewMoveIndex(i => Math.max(-1, i - 1))}
+                  disabled={reviewMoveIndex <= -1}
+                  className="h-9 w-9 text-amber-400 hover:text-amber-200 hover:bg-amber-900/30"
+                >
+                  <ChevronLeft className="h-5 w-5" />
+                </Button>
+
+                <span className="text-amber-300 text-sm min-w-[100px] text-center font-medium">
+                  Move {reviewMoveIndex + 1} / {moveHistory.length}
+                </span>
+
+                <Button
+                  variant="ghost" size="icon"
+                  onClick={() => setReviewMoveIndex(i => Math.min(moveHistory.length - 1, i + 1))}
+                  disabled={reviewMoveIndex >= moveHistory.length - 1}
+                  className="h-9 w-9 text-amber-400 hover:text-amber-200 hover:bg-amber-900/30"
+                >
+                  <ChevronRight className="h-5 w-5" />
+                </Button>
+                <Button
+                  variant="ghost" size="icon"
+                  onClick={() => setReviewMoveIndex(moveHistory.length - 1)}
+                  disabled={reviewMoveIndex >= moveHistory.length - 1}
+                  className="h-9 w-9 text-amber-400 hover:text-amber-200 hover:bg-amber-900/30"
+                >
+                  <ChevronsRight className="h-5 w-5" />
+                </Button>
+              </div>
+
+              {/* Move info */}
+              {reviewCurrentMove ? (
+                <div className="text-center px-4 py-2.5 rounded-lg bg-amber-950/40 border border-amber-900/30 w-full">
+                  <div className="text-amber-200 font-medium text-sm">
+                    {reviewCurrentMove.player_name}
+                  </div>
+                  {reviewCurrentMove.type === 'play' && reviewCurrentMove.words && (
+                    <div className="text-amber-300/90 text-sm mt-0.5">
+                      played <span className="text-amber-100 font-semibold">{reviewCurrentMove.words.map(w => w.word).join(', ')}</span> for <span className="text-amber-100 font-bold">{reviewCurrentMove.score}</span> pts
+                    </div>
+                  )}
+                  {reviewCurrentMove.type === 'pass' && (
+                    <div className="text-amber-400/80 text-sm mt-0.5">passed</div>
+                  )}
+                  {reviewCurrentMove.type === 'exchange' && (
+                    <div className="text-amber-400/80 text-sm mt-0.5">exchanged tiles</div>
+                  )}
+                  {reviewTiming && reviewMoveIndex > 0 && reviewTiming.elapsed[reviewMoveIndex] > 0 && (
+                    <div className="text-amber-500/70 text-xs mt-1 flex items-center justify-center gap-1">
+                      <Clock className="h-3 w-3" />
+                      {(() => {
+                        const sec = reviewTiming.elapsed[reviewMoveIndex]
+                        if (sec < 60) return `${sec.toFixed(1)}s`
+                        const m = Math.floor(sec / 60)
+                        const s = Math.round(sec % 60)
+                        return `${m}m ${s}s`
+                      })()}
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center text-sm text-amber-400 px-4 py-2 rounded-lg bg-amber-950/40 border border-amber-900/30 w-full">
+                  Board before first move
+                </div>
+              )}
+            </div>
+          )}
 
           {/* Rack */}
           {isActive && myPlayer && (

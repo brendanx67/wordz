@@ -978,6 +978,7 @@ async function handlePlayMove(req: Request): Promise<Response> {
     tiles: placedTiles,
     words: result.words,
     score: result.totalScore,
+    rack_snapshot: myPlayer.rack.map((t: Tile) => ({ letter: t.letter, value: t.value, isBlank: t.isBlank })),
     board_snapshot: newBoard,
     timestamp: new Date().toISOString(),
   };
