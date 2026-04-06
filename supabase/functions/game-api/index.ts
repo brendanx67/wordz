@@ -642,7 +642,7 @@ async function handleGetGame(req: Request): Promise<Response> {
   const supabase = getServiceClient();
   const { data: game, error } = await supabase
     .from("games")
-    .select("id, status, board, current_turn, turn_order, turn_index, tile_bag, consecutive_passes, winner, computer_players, move_history, game_players(player_id, score, profiles(display_name))")
+    .select("id, status, board, current_turn, turn_order, turn_index, tile_bag, consecutive_passes, winner, computer_players, move_history, suggested_move, word_finder_enabled, game_players(player_id, score, profiles(display_name))")
     .eq("id", auth.gameId)
     .single();
 
