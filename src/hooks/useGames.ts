@@ -198,6 +198,7 @@ export function useCreateConfiguredGame() {
           has_computer: computerPlayers.length > 0 || apiPlayers.length > 0,
           computer_players: allNonHumanPlayers,
           computer_delay: config.computerDelay,
+          word_finder_enabled: config.wordFinderEnabled ?? false,
           // Legacy single-computer fields (for backward compat)
           computer_difficulty: computerPlayers[0]?.difficulty ?? null,
           computer_rack: computerPlayers[0]?.rack ?? [],

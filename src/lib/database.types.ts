@@ -144,12 +144,15 @@ export type Database = {
           id: string
           last_move: Json | null
           move_history: Json
+          previewed_move: Json | null
           status: string
+          suggested_move: Json | null
           tile_bag: Json
           turn_index: number
           turn_order: string[]
           updated_at: string | null
           winner: string | null
+          word_finder_enabled: boolean | null
         }
         Insert: {
           board?: Json
@@ -166,12 +169,15 @@ export type Database = {
           id?: string
           last_move?: Json | null
           move_history?: Json
+          previewed_move?: Json | null
           status?: string
+          suggested_move?: Json | null
           tile_bag?: Json
           turn_index?: number
           turn_order?: string[]
           updated_at?: string | null
           winner?: string | null
+          word_finder_enabled?: boolean | null
         }
         Update: {
           board?: Json
@@ -188,12 +194,15 @@ export type Database = {
           id?: string
           last_move?: Json | null
           move_history?: Json
+          previewed_move?: Json | null
           status?: string
+          suggested_move?: Json | null
           tile_bag?: Json
           turn_index?: number
           turn_order?: string[]
           updated_at?: string | null
           winner?: string | null
+          word_finder_enabled?: boolean | null
         }
         Relationships: [
           {

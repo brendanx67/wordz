@@ -4,7 +4,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
-import { Bot, User, Play, X, Sparkles } from 'lucide-react'
+import { Bot, User, Play, X, Sparkles, Search } from 'lucide-react'
+import { Switch } from '@/components/ui/switch'
 
 export type PlayerSlotType =
   | 'me'
@@ -28,6 +29,7 @@ export interface PlayerSlot {
 export interface GameConfig {
   players: PlayerSlot[]
   computerDelay: number
+  wordFinderEnabled: boolean
 }
 
 interface CreateGameFormProps {
@@ -66,8 +68,10 @@ function getSlotIcon(type: PlayerSlotType) {
 export default function CreateGameForm({ onCreateGame, onCancel, isPending }: CreateGameFormProps) {
   const [slots, setSlots] = useState<PlayerSlot[]>(DEFAULT_SLOTS)
   const [computerDelay, setComputerDelay] = useState(0)
+  const [wordFinderEnabled, setWordFinderEnabled] = useState(false)
 
   const hasComputer = slots.some(s => s.type.startsWith('computer-'))
+  const hasApiPlayer = slots.some(s => s.type === 'api-player')
   const activePlayers = slots.filter(s => s.type !== 'none')
   const isValid = activePlayers.length >= 2
 
@@ -231,6 +235,28 @@ export default function CreateGameForm({ onCreateGame, onCancel, isPending }: Cr
           </div>
         )}
 
+        {/* Word Finder Toggle — only shown when API player is in the game */}
+        {hasApiPlayer && (
+          <div className="space-y-2 pt-2 border-t border-amber-900/20">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Search className="h-4 w-4 text-purple-400" />
+                <Label className="text-amber-400/80 text-xs uppercase tracking-wider">
+                  Word Finder
+                </Label>
+              </div>
+              <Switch
+                checked={wordFinderEnabled}
+                onCheckedChange={setWordFinderEnabled}
+              />
+            </div>
+            <p className="text-amber-600/50 text-xs">
+              Give the LLM access to the A&amp;J algorithm to find all legal moves.
+              Enables strategic play over raw word-finding.
+            </p>
+          </div>
+        )}
+
         {/* Summary */}
         <div className="pt-2 border-t border-amber-900/20">
           <div className="flex items-center gap-2 text-sm text-amber-400/70 mb-3">
@@ -247,7 +273,7 @@ export default function CreateGameForm({ onCreateGame, onCancel, isPending }: Cr
         {/* Actions */}
         <div className="flex gap-3">
           <Button
-            onClick={() => onCreateGame({ players: slots, computerDelay })}
+            onClick={() => onCreateGame({ players: slots, computerDelay, wordFinderEnabled })}
             disabled={!isValid || isPending}
             className="flex-1 bg-amber-700 hover:bg-amber-600 text-amber-50 font-semibold py-5"
           >

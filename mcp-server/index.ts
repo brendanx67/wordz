@@ -684,6 +684,17 @@ server.tool(
       ``,
       `Recent moves:`,
       movesText,
+      ...(state.suggested_move ? [
+        ``,
+        `=== OWNER SUGGESTION ===`,
+        `Your owner has placed tiles on the board for you to consider:`,
+        ...state.suggested_move.tiles.map((t: { cell: string; letter: string }) => `  ${t.letter} at ${t.cell}`),
+        `Use validate_move to check this suggestion, or play_suggestion to play it as-is.`,
+      ] : []),
+      ...(state.word_finder_enabled ? [
+        ``,
+        `[Word finder is ENABLED — use find_words to search all legal moves with the A&J algorithm]`,
+      ] : []),
       ``,
       `--- REMEMBER ---`,
       `Think about RACK LEAVE — what tiles remain after your play matters as much as the score.`,
@@ -952,6 +963,168 @@ server.tool(
     return {
       content: [{ type: "text", text: `Timed out after ${timeout_minutes} minutes. Use get_game_state to check manually.` }],
     };
+  }
+);
+
+// ─── find_words: expose A&J algorithm to LLM ─────────────────────────────────
+server.tool(
+  "find_words",
+  "Search ALL legal moves using the Appel & Jacobson algorithm. Returns moves sorted and filtered as requested. Only available if word finder is enabled for the game. Use this to see what the board offers before deciding your play.",
+  {
+    game_id: z.string().describe("Game ID"),
+    sort_by: z.enum(["score", "length", "tiles_used"]).optional().describe("Sort order (default: score)"),
+    filter: z.object({
+      contains_letter: z.string().optional().describe("Only moves using this letter from your rack"),
+      min_length: z.number().optional().describe("Minimum main word length"),
+      max_length: z.number().optional().describe("Maximum main word length"),
+      uses_blank: z.boolean().optional().describe("Filter by blank tile usage"),
+      min_score: z.number().optional().describe("Minimum total score"),
+      touches_cell: z.string().optional().describe("Only moves placing a tile on this cell (e.g. 'H8')"),
+    }).optional().describe("Filters to narrow results"),
+    limit: z.number().optional().describe("Max results to return (default 10, max 50)"),
+  },
+  async ({ game_id, sort_by, filter, limit }) => {
+    try {
+      const result = await apiCall("find-words", "POST", {
+        sort_by,
+        filter,
+        limit: limit || 10,
+      }, game_id) as {
+        total_moves_found: number;
+        filtered_count: number;
+        showing: number;
+        moves: {
+          tiles: { cell: string; letter: string; value: number; is_blank: boolean }[];
+          words: { word: string; score: number }[];
+          total_score: number;
+          tiles_used: number;
+          is_bingo: boolean;
+          rack_leave: string;
+        }[];
+      };
+
+      const moveLines = result.moves.map((m, i) => {
+        const placements = m.tiles.map(t => `${t.letter}(${t.cell})`).join(" ");
+        const words = m.words.map(w => `${w.word}(${w.score})`).join(" + ");
+        return `  ${i + 1}. ${words} = ${m.total_score} pts | Place: ${placements} | Leave: ${m.rack_leave || "(empty)"}${m.is_bingo ? " ★BINGO" : ""}`;
+      });
+
+      const text = [
+        `Found ${result.total_moves_found} total legal moves${result.filtered_count !== result.total_moves_found ? `, ${result.filtered_count} after filtering` : ""}.`,
+        `Showing top ${result.showing}${sort_by ? ` by ${sort_by}` : " by score"}:`,
+        ``,
+        ...moveLines,
+        ``,
+        `To play any of these, use play_word with the tile placements shown.`,
+        `To validate first, use validate_move with the same tiles.`,
+      ].join("\n");
+
+      return { content: [{ type: "text", text }] };
+    } catch (err) {
+      return {
+        content: [{ type: "text", text: `Find words failed: ${(err as Error).message}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+// ─── preview_move: LLM shows candidate move to human ─────────────────────────
+server.tool(
+  "preview_move",
+  "Show a candidate move to your owner on the game board. The tiles appear highlighted on their screen so they can see exactly what you're considering. Call with empty tiles to clear the preview.",
+  {
+    game_id: z.string().describe("Game ID"),
+    tiles: z.array(
+      z.object({
+        cell: z.string().describe("Cell in Excel notation, e.g. 'H8'"),
+        letter: z.string().length(1).describe("The letter to preview"),
+        is_blank: z.boolean().optional().describe("Whether this is a blank tile"),
+      })
+    ).optional().describe("Tiles to preview (omit or empty to clear)"),
+  },
+  async ({ game_id, tiles }) => {
+    try {
+      await apiCall("preview", "POST", { tiles: tiles || [] }, game_id);
+      if (!tiles || tiles.length === 0) {
+        return { content: [{ type: "text", text: "Preview cleared." }] };
+      }
+      const placements = tiles.map(t => `${t.letter} at ${t.cell}`).join(", ");
+      return {
+        content: [{ type: "text", text: `Preview shown to owner: ${placements}. They can see it on the board now.` }],
+      };
+    } catch (err) {
+      return {
+        content: [{ type: "text", text: `Preview failed: ${(err as Error).message}` }],
+        isError: true,
+      };
+    }
+  }
+);
+
+// ─── play_suggestion: play the move suggested by the owner ────────────────────
+server.tool(
+  "play_suggestion",
+  "Play the move your owner suggested (tiles they placed on the board). Use get_game_state first to see if there's a suggestion. You can validate it first with validate_move.",
+  {
+    game_id: z.string().describe("Game ID"),
+  },
+  async ({ game_id }) => {
+    try {
+      // Get the current suggestion
+      const state = await apiCall("state", "GET", undefined, game_id) as {
+        suggested_move?: {
+          tiles: { cell: string; row: number; col: number; letter: string; is_blank: boolean }[];
+        };
+      };
+
+      if (!state.suggested_move || !state.suggested_move.tiles?.length) {
+        return {
+          content: [{ type: "text", text: "No suggestion from owner to play. Use get_game_state to check." }],
+          isError: true,
+        };
+      }
+
+      // Convert suggestion tiles to play format (API uses 0-indexed row/col)
+      const apiTiles = state.suggested_move.tiles.map(t => ({
+        row: t.row,
+        col: t.col,
+        letter: t.letter.toUpperCase(),
+        is_blank: t.is_blank || false,
+      }));
+
+      const result = await apiCall("move", "POST", {
+        action: "play",
+        tiles: apiTiles,
+      }, game_id) as {
+        success: boolean;
+        words: { word: string; score: number }[];
+        total_score: number;
+        new_rack: { letter: string; value: number }[];
+        game_over: boolean;
+      };
+
+      const wordsText = result.words.map(w => `${w.word} (${w.score} pts)`).join(", ");
+      const rackText = result.new_rack.map(t => `${t.letter}(${t.value})`).join(" ");
+
+      return {
+        content: [{
+          type: "text",
+          text: [
+            `✓ Played owner's suggestion!`,
+            `Words: ${wordsText}`,
+            `Total: ${result.total_score} points`,
+            `New rack: ${rackText}`,
+            result.game_over ? `\n🏁 GAME OVER!` : ``,
+          ].join("\n"),
+        }],
+      };
+    } catch (err) {
+      return {
+        content: [{ type: "text", text: `Failed to play suggestion: ${(err as Error).message}` }],
+        isError: true,
+      };
+    }
   }
 );
 

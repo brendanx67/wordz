@@ -92,6 +92,290 @@ function isWord(root: TrieNode, word: string): boolean {
   return node.isTerminal;
 }
 
+// ─── Dictionary cache for move generator ─────────────────────────────────────
+let wordListCache: string | null = null;
+
+async function getWordList(): Promise<string> {
+  if (wordListCache) return wordListCache;
+  const res = await fetch(
+    "https://raw.githubusercontent.com/cviebrock/wordlists/master/TWL06.txt"
+  );
+  wordListCache = await res.text();
+  return wordListCache;
+}
+
+async function getMoveGenTrie(): Promise<TrieNode> {
+  const wl = await getWordList();
+  if (moveGenTrie) return moveGenTrie;
+  const root = createTrieNode();
+  for (const line of wl.split("\n")) {
+    const trimmed = line.trim().toUpperCase();
+    if (trimmed.length >= 2) insertWord(root, trimmed);
+  }
+  moveGenTrie = root;
+  return root;
+}
+let moveGenTrie: TrieNode | null = null;
+
+// ─── MOVE GENERATOR (Appel & Jacobson) ──────────────────────────────────────
+interface GeneratedMove {
+  tiles: { row: number; col: number; tile: Tile }[];
+  words: { word: string; score: number }[];
+  totalScore: number;
+}
+
+function getCrossCheckSet(
+  board: BoardCell[][], trie: TrieNode,
+  row: number, col: number, checkVertical: boolean
+): Set<string> {
+  let prefixStr = "", suffixStr = "";
+  if (checkVertical) {
+    let r = row - 1;
+    while (r >= 0 && board[r][col].tile) { prefixStr = board[r][col].tile!.letter + prefixStr; r--; }
+    r = row + 1;
+    while (r < BOARD_SIZE && board[r][col].tile) { suffixStr += board[r][col].tile!.letter; r++; }
+  } else {
+    let c = col - 1;
+    while (c >= 0 && board[row][c].tile) { prefixStr = board[row][c].tile!.letter + prefixStr; c--; }
+    c = col + 1;
+    while (c < BOARD_SIZE && board[row][c].tile) { suffixStr += board[row][c].tile!.letter; c++; }
+  }
+  if (!prefixStr && !suffixStr) return new Set("ABCDEFGHIJKLMNOPQRSTUVWXYZ".split(""));
+  const valid = new Set<string>();
+  for (const l of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
+    if (isWord(trie, prefixStr + l + suffixStr)) valid.add(l);
+  }
+  return valid;
+}
+
+function computeCrossChecks(board: BoardCell[][], trie: TrieNode): Map<string, Set<string>> {
+  const checks = new Map<string, Set<string>>();
+  for (let r = 0; r < BOARD_SIZE; r++) {
+    for (let c = 0; c < BOARD_SIZE; c++) {
+      if (board[r][c].tile) continue;
+      checks.set(`h:${r},${c}`, getCrossCheckSet(board, trie, r, c, true));
+      checks.set(`v:${r},${c}`, getCrossCheckSet(board, trie, r, c, false));
+    }
+  }
+  return checks;
+}
+
+function findAnchors(board: BoardCell[][]): Set<string> {
+  const anchors = new Set<string>();
+  const hasAny = board.some(row => row.some(cell => cell.tile));
+  if (!hasAny) { anchors.add("7,7"); return anchors; }
+  for (let r = 0; r < BOARD_SIZE; r++) {
+    for (let c = 0; c < BOARD_SIZE; c++) {
+      if (board[r][c].tile) continue;
+      const nbrs = [[r-1,c],[r+1,c],[r,c-1],[r,c+1]];
+      if (nbrs.some(([nr,nc]) => nr>=0 && nr<BOARD_SIZE && nc>=0 && nc<BOARD_SIZE && board[nr][nc].tile)) {
+        anchors.add(`${r},${c}`);
+      }
+    }
+  }
+  return anchors;
+}
+
+function scoreWord(positions: { row: number; col: number; letter: string; value: number; isNew: boolean }[]): number {
+  let raw = 0, mult = 1;
+  for (const p of positions) {
+    let ls = p.value;
+    if (p.isNew) {
+      const b = getBonusType(p.row, p.col);
+      if (b === "DL") ls *= 2; else if (b === "TL") ls *= 3;
+      else if (b === "DW" || b === "CENTER") mult *= 2; else if (b === "TW") mult *= 3;
+    }
+    raw += ls;
+  }
+  return raw * mult;
+}
+
+function computeMoveScore(
+  board: BoardCell[][],
+  placedTiles2: { row: number; col: number; letter: string; value: number }[],
+  _trie: TrieNode
+): { words: { word: string; score: number }[]; totalScore: number } | null {
+  if (!placedTiles2.length) return null;
+  const tempBoard: (BoardCell & { placed?: { letter: string; value: number } })[][] =
+    board.map(row => row.map(cell => ({ ...cell })));
+  for (const pt of placedTiles2) {
+    tempBoard[pt.row][pt.col] = { ...tempBoard[pt.row][pt.col], placed: { letter: pt.letter, value: pt.value } };
+  }
+  const getTileAt = (r: number, c: number) => {
+    const cell = tempBoard[r][c];
+    if (cell.tile) return { letter: cell.tile.letter, value: cell.tile.value, isNew: false };
+    if ((cell as { placed?: { letter: string; value: number } }).placed) {
+      const p = (cell as { placed: { letter: string; value: number } }).placed;
+      return { letter: p.letter, value: p.value, isNew: true };
+    }
+    return null;
+  };
+  const hasTileAt = (r: number, c: number) => getTileAt(r, c) !== null;
+  const rows = new Set(placedTiles2.map(t => t.row));
+  const isHorizontal = rows.size === 1;
+
+  const getWordAlong = (startR: number, startC: number, horizontal: boolean) => {
+    let r = startR, c = startC;
+    if (horizontal) { while (c > 0 && hasTileAt(r, c-1)) c--; }
+    else { while (r > 0 && hasTileAt(r-1, c)) r--; }
+    const positions: { row: number; col: number; letter: string; value: number; isNew: boolean }[] = [];
+    let word = "";
+    while (r < BOARD_SIZE && c < BOARD_SIZE && hasTileAt(r, c)) {
+      const t = getTileAt(r, c)!; word += t.letter; positions.push({ row: r, col: c, ...t });
+      if (horizontal) c++; else r++;
+    }
+    if (word.length < 2) return null;
+    return { word, score: scoreWord(positions) };
+  };
+
+  const words: { word: string; score: number }[] = [];
+  const main = getWordAlong(placedTiles2[0].row, placedTiles2[0].col, isHorizontal);
+  if (main) words.push(main);
+  for (const pt of placedTiles2) {
+    const cross = getWordAlong(pt.row, pt.col, !isHorizontal);
+    if (cross) words.push(cross);
+  }
+  if (!words.length) return null;
+  let total = words.reduce((s, w) => s + w.score, 0);
+  if (placedTiles2.length === 7) total += 50;
+  return { words, totalScore: total };
+}
+
+function generateAllMoves(board: BoardCell[][], rack: Tile[], trie: TrieNode): GeneratedMove[] {
+  const moves: GeneratedMove[] = [];
+  const anchors = findAnchors(board);
+  const crossChecks = computeCrossChecks(board, trie);
+  const rackLetters: string[] = rack.map(t => t.isBlank ? "*" : t.letter);
+
+  for (const dir of ["horizontal", "vertical"] as const) {
+    for (const anchorStr of anchors) {
+      const [aR, aC] = anchorStr.split(",").map(Number);
+      let maxPrefix = 0;
+      if (dir === "horizontal") {
+        let c = aC - 1;
+        while (c >= 0 && !board[aR][c].tile && !anchors.has(`${aR},${c}`)) { maxPrefix++; c--; }
+      } else {
+        let r = aR - 1;
+        while (r >= 0 && !board[r][aC].tile && !anchors.has(`${r},${aC}`)) { maxPrefix++; r--; }
+      }
+      const existing = getExistingPrefix(board, aR, aC, dir);
+      if (existing) {
+        const node = getNode(trie, existing);
+        if (node) extendRight(board, trie, crossChecks, rackLetters, rack, aR, aC, node, existing, [], dir, moves, true);
+      } else {
+        generateWithPrefix(board, trie, crossChecks, rackLetters, rack, aR, aC, maxPrefix, dir, moves);
+      }
+    }
+  }
+
+  const seen = new Set<string>();
+  return moves.filter(m => {
+    const key = m.tiles.map(t => `${t.row},${t.col}:${t.tile.letter}`).sort().join("|");
+    if (seen.has(key)) return false; seen.add(key); return true;
+  });
+}
+
+function getExistingPrefix(board: BoardCell[][], aR: number, aC: number, dir: "horizontal"|"vertical"): string|null {
+  let prefix = "";
+  if (dir === "horizontal") {
+    let c = aC - 1; while (c >= 0 && board[aR][c].tile) { prefix = board[aR][c].tile!.letter + prefix; c--; }
+  } else {
+    let r = aR - 1; while (r >= 0 && board[r][aC].tile) { prefix = board[r][aC].tile!.letter + prefix; r--; }
+  }
+  return prefix || null;
+}
+
+function generateWithPrefix(
+  board: BoardCell[][], trie: TrieNode, cc: Map<string,Set<string>>,
+  rackLetters: string[], rack: Tile[],
+  aR: number, aC: number, maxPrefix: number,
+  dir: "horizontal"|"vertical", moves: GeneratedMove[]
+): void {
+  extendRight(board, trie, cc, rackLetters, rack, aR, aC, trie, "", [], dir, moves, true);
+
+  function buildPrefix(node: TrieNode, prefixTiles: { row:number;col:number;tile:Tile }[], remaining: string[], depth: number) {
+    if (depth > maxPrefix) return;
+    const pos = dir === "horizontal" ? { row: aR, col: aC - depth } : { row: aR - depth, col: aC };
+    if (pos.row < 0 || pos.col < 0) return;
+
+    for (const [letter, childNode] of node.children) {
+      const ccKey = dir === "horizontal" ? `h:${pos.row},${pos.col}` : `v:${pos.row},${pos.col}`;
+      const ccSet = cc.get(ccKey);
+      if (ccSet && !ccSet.has(letter)) continue;
+
+      const tryTile = (tile: Tile, asLetter: string, asValue: number) => {
+        const newRemaining = [...remaining];
+        const idx = newRemaining.indexOf(tile.isBlank ? "*" : tile.letter);
+        if (idx < 0) return;
+        newRemaining.splice(idx, 1);
+        const placed: Tile = { ...tile, letter: asLetter, value: asValue };
+        const newPT = [{ row: pos.row, col: pos.col, tile: placed }, ...prefixTiles];
+        const currentPrefix = newPT.map(t => t.tile.letter).join("");
+        extendRight(board, trie, cc, newRemaining, rack, aR, aC, childNode, currentPrefix, newPT, dir, moves, true);
+        buildPrefix(childNode, newPT, newRemaining, depth + 1);
+      };
+
+      const usedIds = new Set(prefixTiles.map(t => t.tile.id));
+      const reg = rack.find(t => !t.isBlank && t.letter === letter && !usedIds.has(t.id));
+      if (reg) tryTile(reg, letter, reg.value);
+      const blank = rack.find(t => t.isBlank && !usedIds.has(t.id));
+      if (blank) tryTile(blank, letter, 0);
+    }
+  }
+  buildPrefix(trie, [], rackLetters, 1);
+}
+
+function extendRight(
+  board: BoardCell[][], trie: TrieNode, crossChecks: Map<string,Set<string>>,
+  _rackLetters: string[], rack: Tile[],
+  row: number, col: number, node: TrieNode, _wordSoFar: string,
+  tilesPlaced: { row:number;col:number;tile:Tile }[],
+  dir: "horizontal"|"vertical", moves: GeneratedMove[], isAnchor: boolean
+): void {
+  if (row >= BOARD_SIZE || col >= BOARD_SIZE) {
+    if (node.isTerminal && tilesPlaced.length > 0) recordMove(board, trie, tilesPlaced, moves);
+    return;
+  }
+  const cell = board[row][col];
+  if (cell.tile) {
+    const child = node.children.get(cell.tile.letter);
+    if (child) {
+      const nR = dir === "vertical" ? row+1 : row, nC = dir === "horizontal" ? col+1 : col;
+      extendRight(board, trie, crossChecks, _rackLetters, rack, nR, nC, child, _wordSoFar + cell.tile.letter, tilesPlaced, dir, moves, false);
+    }
+    return;
+  }
+  if (node.isTerminal && tilesPlaced.length > 0 && !isAnchor) recordMove(board, trie, tilesPlaced, moves);
+
+  const ccKey = dir === "horizontal" ? `h:${row},${col}` : `v:${row},${col}`;
+  const ccSet = crossChecks.get(ccKey);
+  const usedIds = new Set(tilesPlaced.map(t => t.tile.id));
+  const nR = dir === "vertical" ? row+1 : row, nC = dir === "horizontal" ? col+1 : col;
+
+  for (const [letter, childNode] of node.children) {
+    if (ccSet && !ccSet.has(letter)) continue;
+    const reg = rack.find(t => !t.isBlank && t.letter === letter && !usedIds.has(t.id));
+    if (reg) {
+      extendRight(board, trie, crossChecks, _rackLetters, rack, nR, nC, childNode, _wordSoFar + letter,
+        [...tilesPlaced, { row, col, tile: reg }], dir, moves, false);
+    }
+    const blank2 = rack.find(t => t.isBlank && !usedIds.has(t.id));
+    if (blank2) {
+      const assigned: Tile = { ...blank2, letter, value: 0 };
+      extendRight(board, trie, crossChecks, _rackLetters, rack, nR, nC, childNode, _wordSoFar + letter,
+        [...tilesPlaced, { row, col, tile: assigned }], dir, moves, false);
+    }
+  }
+}
+
+function recordMove(board: BoardCell[][], trie: TrieNode, tilesPlaced: { row:number;col:number;tile:Tile }[], moves: GeneratedMove[]): void {
+  const placed = tilesPlaced.map(t => ({ row: t.row, col: t.col, letter: t.tile.letter, value: t.tile.value }));
+  const result = computeMoveScore(board, placed, trie);
+  if (!result) return;
+  for (const w of result.words) { if (!isWord(trie, w.word)) return; }
+  moves.push({ tiles: tilesPlaced, words: result.words, totalScore: result.totalScore });
+}
+
 // ─── Cell notation support (accepts both "H8" cell format and {row, col} format) ───
 interface RawTile {
   row?: number;
@@ -468,6 +752,9 @@ async function handleGetGame(req: Request): Promise<Response> {
     players: [...humanPlayers, ...aiPlayers],
     recent_moves: moveHistory,
     winner: game.winner,
+    word_finder_enabled: game.word_finder_enabled ?? false,
+    suggested_move: game.suggested_move ?? null,
+    previewed_move: game.previewed_move ?? null,
   });
 }
 
@@ -705,6 +992,8 @@ async function handlePlayMove(req: Request): Promise<Response> {
     current_turn: gameOver ? null : nextPlayer,
     turn_index: nextIndex,
     consecutive_passes: 0,
+    suggested_move: null,
+    previewed_move: null,
     last_move: {
       player_id: auth.playerId,
       type: "play",
@@ -916,6 +1205,250 @@ async function handleValidateMove(req: Request): Promise<Response> {
   });
 }
 
+// ─── FIND WORDS (A&J move generation exposed to LLM) ─────────────────────────
+async function handleFindWords(req: Request): Promise<Response> {
+  const body = await req.json();
+  const { game_id, sort_by, filter, limit: maxResults } = body as {
+    game_id?: string;
+    sort_by?: "score" | "length" | "tiles_used";
+    filter?: {
+      contains_letter?: string;
+      min_length?: number;
+      max_length?: number;
+      uses_blank?: boolean;
+      min_score?: number;
+      touches_cell?: string; // e.g. "H8"
+    };
+    limit?: number;
+  };
+
+  const auth = await authenticateApiKey(req, game_id);
+  if (!auth) return jsonError("Invalid or missing API key", 401);
+
+  const supabase = getServiceClient();
+  const { data: game, error: gErr } = await supabase
+    .from("games")
+    .select("*")
+    .eq("id", auth.gameId)
+    .single();
+
+  if (gErr || !game) return jsonError("Game not found", 404);
+  if (!game.word_finder_enabled) {
+    return jsonError("Word finder is not enabled for this game. The game creator can enable it in game settings.", 403);
+  }
+
+  const cpPlayers = (game.computer_players ?? []) as ApiPlayer[];
+  const myPlayer = cpPlayers.find((p: ApiPlayer) => p.id === auth.playerId);
+  if (!myPlayer) return jsonError("Player not found in game", 404);
+
+  const boardState = game.board as BoardCell[][];
+  const trie = await getMoveGenTrie();
+
+  const allMoves = generateAllMoves(boardState, myPlayer.rack, trie);
+
+  // Apply filters
+  let filtered = allMoves;
+  if (filter) {
+    if (filter.contains_letter) {
+      const letter = filter.contains_letter.toUpperCase();
+      filtered = filtered.filter((m: GeneratedMove) =>
+        m.tiles.some(t => t.tile.letter === letter)
+      );
+    }
+    if (filter.min_length) {
+      const minLen = filter.min_length;
+      filtered = filtered.filter((m: GeneratedMove) => {
+        const mainWord = m.words[0]?.word ?? "";
+        return mainWord.length >= minLen;
+      });
+    }
+    if (filter.max_length) {
+      const maxLen = filter.max_length;
+      filtered = filtered.filter((m: GeneratedMove) => {
+        const mainWord = m.words[0]?.word ?? "";
+        return mainWord.length <= maxLen;
+      });
+    }
+    if (filter.uses_blank === true) {
+      filtered = filtered.filter((m: GeneratedMove) =>
+        m.tiles.some(t => t.tile.isBlank)
+      );
+    }
+    if (filter.uses_blank === false) {
+      filtered = filtered.filter((m: GeneratedMove) =>
+        !m.tiles.some(t => t.tile.isBlank)
+      );
+    }
+    if (filter.min_score) {
+      const minScore = filter.min_score;
+      filtered = filtered.filter((m: GeneratedMove) => m.totalScore >= minScore);
+    }
+    if (filter.touches_cell) {
+      const cellMatch = filter.touches_cell.toUpperCase().match(/^([A-O])(\d{1,2})$/);
+      if (cellMatch) {
+        const tCol = cellMatch[1].charCodeAt(0) - 65;
+        const tRow = parseInt(cellMatch[2]) - 1;
+        filtered = filtered.filter((m: GeneratedMove) =>
+          m.tiles.some(t => t.row === tRow && t.col === tCol)
+        );
+      }
+    }
+  }
+
+  // Sort
+  const sortKey = sort_by || "score";
+  if (sortKey === "score") {
+    filtered.sort((a: GeneratedMove, b: GeneratedMove) => b.totalScore - a.totalScore);
+  } else if (sortKey === "length") {
+    filtered.sort((a: GeneratedMove, b: GeneratedMove) => {
+      const aLen = a.words[0]?.word.length ?? 0;
+      const bLen = b.words[0]?.word.length ?? 0;
+      return bLen - aLen || b.totalScore - a.totalScore;
+    });
+  } else if (sortKey === "tiles_used") {
+    filtered.sort((a: GeneratedMove, b: GeneratedMove) =>
+      b.tiles.length - a.tiles.length || b.totalScore - a.totalScore
+    );
+  }
+
+  // Limit results
+  const cap = Math.min(maxResults || 10, 50);
+  const results = filtered.slice(0, cap);
+
+  // Format for response
+  const cellNotation = (row: number, col: number) =>
+    `${String.fromCharCode(65 + col)}${row + 1}`;
+
+  const formatted = results.map((m: GeneratedMove) => ({
+    tiles: m.tiles.map(t => ({
+      cell: cellNotation(t.row, t.col),
+      letter: t.tile.letter,
+      value: t.tile.value,
+      is_blank: t.tile.isBlank,
+    })),
+    words: m.words.map(w => ({ word: w.word, score: w.score })),
+    total_score: m.totalScore,
+    tiles_used: m.tiles.length,
+    is_bingo: m.tiles.length === 7,
+    rack_leave: myPlayer.rack
+      .filter((rt: Tile) => !m.tiles.some(mt => mt.tile.id === rt.id))
+      .map((rt: Tile) => rt.letter)
+      .join(""),
+  }));
+
+  return jsonOk({
+    total_moves_found: allMoves.length,
+    filtered_count: filtered.length,
+    showing: formatted.length,
+    sort_by: sortKey,
+    moves: formatted,
+  });
+}
+
+// ─── PREVIEW MOVE (LLM → human) ──────────────────────────────────────────────
+async function handlePreviewMove(req: Request): Promise<Response> {
+  const body = await req.json();
+  const { game_id, tiles } = body as {
+    game_id?: string;
+    tiles?: RawTile[];
+  };
+
+  const auth = await authenticateApiKey(req, game_id);
+  if (!auth) return jsonError("Invalid or missing API key", 401);
+
+  const supabase = getServiceClient();
+
+  if (!tiles || tiles.length === 0) {
+    // Clear preview
+    await supabase.from("games").update({ previewed_move: null }).eq("id", auth.gameId);
+    return jsonOk({ success: true, message: "Preview cleared" });
+  }
+
+  // Normalize tiles
+  let normalizedTiles: { row: number; col: number; letter: string; is_blank: boolean }[];
+  try {
+    normalizedTiles = tiles.map(normalizeTile);
+  } catch (err) {
+    return jsonError((err as Error).message, 400);
+  }
+
+  const cellNotation = (row: number, col: number) =>
+    `${String.fromCharCode(65 + col)}${row + 1}`;
+
+  const preview = {
+    player_id: auth.playerId,
+    player_name: auth.playerName,
+    tiles: normalizedTiles.map(t => ({
+      cell: cellNotation(t.row, t.col),
+      row: t.row,
+      col: t.col,
+      letter: t.letter,
+      is_blank: t.is_blank,
+    })),
+    timestamp: new Date().toISOString(),
+  };
+
+  await supabase.from("games").update({ previewed_move: preview }).eq("id", auth.gameId);
+  return jsonOk({ success: true, message: "Preview set", preview });
+}
+
+// ─── SUGGEST MOVE (human → LLM, via Supabase auth) ───────────────────────────
+async function handleSuggestMove(req: Request): Promise<Response> {
+  // This endpoint uses the user's Supabase auth token, not the API key
+  const authHeader = req.headers.get("Authorization");
+  if (!authHeader) return jsonError("Missing auth header", 401);
+
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_ANON_KEY")!,
+    { global: { headers: { Authorization: authHeader } } }
+  );
+  const { data: { user }, error: authErr } = await supabase.auth.getUser();
+  if (authErr || !user) return jsonError("Unauthorized", 401);
+
+  const body = await req.json();
+  const { game_id, tiles } = body as {
+    game_id: string;
+    tiles?: { cell: string; letter: string; is_blank?: boolean }[];
+  };
+
+  if (!game_id) return jsonError("Missing game_id", 400);
+
+  const serviceClient = getServiceClient();
+
+  if (!tiles || tiles.length === 0) {
+    // Clear suggestion
+    await serviceClient.from("games").update({ suggested_move: null }).eq("id", game_id);
+    return jsonOk({ success: true, message: "Suggestion cleared" });
+  }
+
+  // Normalize tiles
+  let normalizedTiles: { row: number; col: number; letter: string; is_blank: boolean }[];
+  try {
+    normalizedTiles = tiles.map(t => normalizeTile({ cell: t.cell, letter: t.letter, is_blank: t.is_blank }));
+  } catch (err) {
+    return jsonError((err as Error).message, 400);
+  }
+
+  const cellNotation = (row: number, col: number) =>
+    `${String.fromCharCode(65 + col)}${row + 1}`;
+
+  const suggestion = {
+    user_id: user.id,
+    tiles: normalizedTiles.map(t => ({
+      cell: cellNotation(t.row, t.col),
+      row: t.row,
+      col: t.col,
+      letter: t.letter,
+      is_blank: t.is_blank,
+    })),
+    timestamp: new Date().toISOString(),
+  };
+
+  await serviceClient.from("games").update({ suggested_move: suggestion }).eq("id", game_id);
+  return jsonOk({ success: true, message: "Suggestion saved", suggestion });
+}
+
 // ─── MAIN HANDLER ─────────────────────────────────────────────────────────────
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
@@ -940,6 +1473,18 @@ Deno.serve(async (req) => {
 
     if (req.method === "POST" && path === "validate") {
       return await handleValidateMove(req);
+    }
+
+    if (req.method === "POST" && path === "find-words") {
+      return await handleFindWords(req);
+    }
+
+    if (req.method === "POST" && path === "preview") {
+      return await handlePreviewMove(req);
+    }
+
+    if (req.method === "POST" && path === "suggest") {
+      return await handleSuggestMove(req);
     }
 
     return jsonError(`Unknown endpoint: ${path}`, 404);

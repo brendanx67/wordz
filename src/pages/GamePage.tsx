@@ -11,7 +11,7 @@ import type { Tile, BoardCell, PlacedTile } from '@/lib/gameConstants'
 import GameBoard from '@/components/GameBoard'
 import TileRack from '@/components/TileRack'
 import { toast } from 'sonner'
-import { ArrowLeft, RotateCcw, Send, Flag, RefreshCw, Play, History, LogOut, Grid3X3 } from 'lucide-react'
+import { ArrowLeft, RotateCcw, Send, Flag, RefreshCw, Play, History, LogOut, Grid3X3, Lightbulb, X, Eye } from 'lucide-react'
 import { createEmptyBoard } from '@/lib/gameConstants'
 import GameHistoryViewer from '@/components/GameHistoryViewer'
 import { cn } from '@/lib/utils'
@@ -42,6 +42,9 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   const [submitting, setSubmitting] = useState(false)
   const [blankTileTarget, setBlankTileTarget] = useState<{ row: number; col: number; tile: Tile } | null>(null)
   const [showHistory, setShowHistory] = useState(false)
+  const [suggestionTiles, setSuggestionTiles] = useState<Map<string, Tile>>(new Map())
+  const [suggestionSquare, setSuggestionSquare] = useState<{ row: number; col: number } | null>(null)
+  const [suggestionDirection, setSuggestionDirection] = useState<'across' | 'down'>('across')
   const [rackOrder, setRackOrder] = useState<string[] | null>(null)
 
   // Rack tiles for current user (excluding placed tiles)
@@ -90,6 +93,105 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
 
   // API players owned by the current user (so we can show their rack)
   const myApiPlayers = computerPlayers.filter(cp => cp.id.startsWith('api-') && cp.owner_id === userId)
+  const isSpectatingApi = isActive && !myPlayer && myApiPlayers.length > 0
+  const spectatingApiPlayer = isSpectatingApi ? myApiPlayers[0] : null
+
+  // Suggestion rack: API player's rack minus tiles already placed as suggestions
+  const suggestionPlacedIds = useMemo(() => new Set(Array.from(suggestionTiles.values()).map(t => t.id)), [suggestionTiles])
+  const suggestionRack = useMemo(() => {
+    if (!spectatingApiPlayer) return []
+    return spectatingApiPlayer.rack.filter(t => !suggestionPlacedIds.has(t.id))
+  }, [spectatingApiPlayer, suggestionPlacedIds])
+
+  // Parse previewed_move from game data for board display
+  const previewedTiles = useMemo(() => {
+    const pm = (game as Record<string, unknown> | undefined)?.previewed_move as { tiles: { row: number; col: number; letter: string; is_blank?: boolean }[] } | null
+    if (!pm?.tiles) return undefined
+    return pm.tiles
+  }, [game])
+
+  // Suggestion placement handlers
+  const handleSuggestionSquareClick = useCallback((row: number, col: number) => {
+    if (!isSpectatingApi) return
+    const key = `${row},${col}`
+
+    // If there's a suggestion tile here, pick it up
+    if (suggestionTiles.has(key)) {
+      setSuggestionTiles(prev => {
+        const next = new Map(prev)
+        next.delete(key)
+        return next
+      })
+      return
+    }
+
+    // If square is occupied by committed tile, ignore
+    if (board[row]?.[col]?.tile) return
+
+    // Set or toggle selection
+    if (suggestionSquare?.row === row && suggestionSquare?.col === col) {
+      setSuggestionDirection(d => d === 'across' ? 'down' : 'across')
+    } else {
+      setSuggestionSquare({ row, col })
+    }
+  }, [isSpectatingApi, suggestionTiles, board, suggestionSquare])
+
+  const handleSuggestionTileClick = useCallback((tile: Tile) => {
+    if (!suggestionSquare) return
+    const key = `${suggestionSquare.row},${suggestionSquare.col}`
+    if (board[suggestionSquare.row]?.[suggestionSquare.col]?.tile) return
+    if (suggestionTiles.has(key)) return
+
+    setSuggestionTiles(prev => {
+      const next = new Map(prev)
+      next.set(key, tile)
+      return next
+    })
+
+    // Advance cursor
+    const dr = suggestionDirection === 'down' ? 1 : 0
+    const dc = suggestionDirection === 'across' ? 1 : 0
+    let nextRow = suggestionSquare.row + dr
+    let nextCol = suggestionSquare.col + dc
+    while (nextRow < 15 && nextCol < 15 && (board[nextRow]?.[nextCol]?.tile || suggestionTiles.has(`${nextRow},${nextCol}`))) {
+      nextRow += dr
+      nextCol += dc
+    }
+    if (nextRow < 15 && nextCol < 15) {
+      setSuggestionSquare({ row: nextRow, col: nextCol })
+    }
+  }, [suggestionSquare, suggestionDirection, board, suggestionTiles])
+
+  const saveSuggestion = useCallback(async () => {
+    if (!gameId || suggestionTiles.size === 0) return
+    const tiles = Array.from(suggestionTiles.entries()).map(([key, tile]) => {
+      const [row, col] = key.split(',').map(Number)
+      return {
+        cell: `${String.fromCharCode(65 + col)}${row + 1}`,
+        letter: tile.letter,
+        is_blank: tile.isBlank,
+      }
+    })
+    await supabase.from('games').update({
+      suggested_move: {
+        user_id: userId,
+        tiles: tiles.map(t => {
+          const match = t.cell.match(/^([A-O])(\d{1,2})$/)!
+          return { ...t, row: parseInt(match[2]) - 1, col: match[1].charCodeAt(0) - 65 }
+        }),
+        timestamp: new Date().toISOString(),
+      }
+    }).eq('id', gameId)
+    toast.success('Suggestion sent to LLM')
+  }, [gameId, suggestionTiles, userId])
+
+  const clearSuggestion = useCallback(async () => {
+    setSuggestionTiles(new Map())
+    setSuggestionSquare(null)
+    if (gameId) {
+      await supabase.from('games').update({ suggested_move: null }).eq('id', gameId)
+    }
+  }, [gameId])
 
   // Live turn timer
   const [turnElapsed, setTurnElapsed] = useState(0)
@@ -950,6 +1052,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
           {isActive && isApiTurn && currentApiPlayer && (
             <div className="text-purple-300 text-sm font-medium animate-pulse px-4 py-2 rounded-lg bg-purple-900/15">
               Waiting for {currentApiPlayer.name} to play...
+              {isSpectatingApi && <span className="text-amber-400/70 text-xs block mt-1 animate-none">You can suggest a move while you wait</span>}
             </div>
           )}
           {isActive && isMyTurn && (
@@ -995,12 +1098,13 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
             </button>
             <GameBoard
               board={board}
-              selectedSquare={selectedSquare}
-              onSquareClick={handleSquareClick}
+              selectedSquare={isSpectatingApi ? suggestionSquare : selectedSquare}
+              onSquareClick={isSpectatingApi ? handleSuggestionSquareClick : handleSquareClick}
               onDrop={handleDrop}
               onPickupTile={handlePickupTile}
-              placedTiles={placedTiles}
-              direction={direction}
+              placedTiles={isSpectatingApi ? suggestionTiles : placedTiles}
+              previewTiles={previewedTiles}
+              direction={isSpectatingApi ? suggestionDirection : direction}
               showLabels={showLabels}
             />
           </div>
@@ -1103,19 +1207,58 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
           )}
 
           {/* Show API player racks when spectating (not a player in the game) */}
-          {isActive && !myPlayer && myApiPlayers.length > 0 && myApiPlayers.map(ap => (
-            <div key={ap.id} className="space-y-2">
+          {isSpectatingApi && spectatingApiPlayer && (
+            <div className="space-y-2">
               <div className="text-center text-xs text-purple-300">
-                {ap.name}&apos;s rack:
+                {spectatingApiPlayer.name}&apos;s rack
+                {suggestionSquare && <span className="text-amber-400 ml-1">(tap tiles to suggest)</span>}
               </div>
               <TileRack
-                tiles={ap.rack}
-                onTileClick={() => {}}
+                tiles={suggestionRack}
+                onTileClick={handleSuggestionTileClick}
                 selectedTiles={new Set()}
                 isExchangeMode={false}
               />
+              {/* Suggestion controls */}
+              <div className="flex justify-center gap-2">
+                {suggestionTiles.size > 0 && (
+                  <>
+                    <Button
+                      size="sm"
+                      onClick={saveSuggestion}
+                      className="bg-purple-700 hover:bg-purple-600 text-white gap-1"
+                    >
+                      <Lightbulb className="h-3.5 w-3.5" />
+                      Send Suggestion
+                    </Button>
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      onClick={clearSuggestion}
+                      className="text-amber-400 hover:text-amber-200 gap-1"
+                    >
+                      <X className="h-3.5 w-3.5" />
+                      Clear
+                    </Button>
+                  </>
+                )}
+                {suggestionTiles.size === 0 && !suggestionSquare && (
+                  <div className="text-amber-500/60 text-xs">
+                    Tap a square on the board, then tap rack tiles to suggest a move
+                  </div>
+                )}
+              </div>
+              {/* Preview indicator */}
+              {previewedTiles && previewedTiles.length > 0 && (
+                <div className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-purple-900/20 border border-purple-700/30">
+                  <Eye className="h-3.5 w-3.5 text-purple-400" />
+                  <span className="text-purple-300 text-xs">
+                    LLM is previewing: {previewedTiles.map(t => `${t.letter}(${String.fromCharCode(65 + t.col)}${t.row + 1})`).join(' ')}
+                  </span>
+                </div>
+              )}
             </div>
-          ))}
+          )}
         </div>
       </main>
     </div>

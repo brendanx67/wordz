@@ -3,6 +3,13 @@ import { BOARD_SIZE, getBonusType } from '@/lib/gameConstants'
 import type { BoardCell, Tile } from '@/lib/gameConstants'
 import { cn } from '@/lib/utils'
 
+export interface PreviewTile {
+  row: number
+  col: number
+  letter: string
+  is_blank?: boolean
+}
+
 interface GameBoardProps {
   board: BoardCell[][]
   selectedSquare: { row: number; col: number } | null
@@ -10,6 +17,7 @@ interface GameBoardProps {
   onDrop: (row: number, col: number, tile: Tile) => void
   onPickupTile: (row: number, col: number) => void
   placedTiles: Map<string, Tile>
+  previewTiles?: PreviewTile[]
   direction: 'across' | 'down'
   showLabels?: boolean
 }
@@ -50,7 +58,14 @@ function bonusTextColor(bonus: string | null): string {
 
 const COL_LETTERS = Array.from({ length: BOARD_SIZE }, (_, i) => String.fromCharCode(65 + i))
 
-export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop, onPickupTile, placedTiles, direction, showLabels = false }: GameBoardProps) {
+export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop, onPickupTile, placedTiles, previewTiles, direction, showLabels = false }: GameBoardProps) {
+  // Build preview tile lookup
+  const previewMap = new Map<string, PreviewTile>()
+  if (previewTiles) {
+    for (const pt of previewTiles) {
+      previewMap.set(`${pt.row},${pt.col}`, pt)
+    }
+  }
   const [dragOverSquare, setDragOverSquare] = useState<string | null>(null)
   const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)
 
@@ -166,10 +181,12 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
               const cell = board[row]?.[col]
               const tile = cell?.tile
               const placedTile = placedTiles.get(`${row},${col}`)
+              const preview = previewMap.get(`${row},${col}`)
               const displayTile = placedTile || tile
               const bonus = getBonusType(row, col)
               const isSelected = selectedSquare?.row === row && selectedSquare?.col === col
               const isNewlyPlaced = !!placedTile
+              const isPreview = !!preview && !displayTile
               const isCommitted = !!tile
               const isDragTarget = dragOverSquare === `${row},${col}` && !isCommitted && !isNewlyPlaced
 
@@ -190,9 +207,10 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
                   onDrop={(e) => handleDrop(e, row, col)}
                   className={cn(
                     'w-[30px] h-[30px] sm:w-[35px] sm:h-[35px] md:w-[40px] md:h-[40px] flex items-center justify-center cursor-pointer transition-all relative select-none',
-                    isSelected && !displayTile && 'ring-2 ring-white/80 z-10',
-                    !displayTile && !isCommitted && 'hover:brightness-110',
-                    isDragTarget && 'ring-2 ring-white z-10 brightness-125'
+                    isSelected && !displayTile && !isPreview && 'ring-2 ring-white/80 z-10',
+                    !displayTile && !isCommitted && !isPreview && 'hover:brightness-110',
+                    isDragTarget && 'ring-2 ring-white z-10 brightness-125',
+                    isPreview && 'animate-pulse z-10'
                   )}
                   style={displayTile ? {
                     background: isNewlyPlaced
@@ -203,6 +221,11 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
                       : 'inset 0 1px 1px rgba(255,255,255,0.3), inset 0 -1px 1px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.2)',
                     borderRadius: '3px',
                     cursor: isNewlyPlaced ? 'grab' : 'pointer',
+                  } : isPreview ? {
+                    background: 'linear-gradient(135deg, #c4b5fd 0%, #a78bfa 40%, #8b5cf6 100%)',
+                    boxShadow: 'inset 0 1px 2px rgba(255,255,255,0.3), 0 0 8px rgba(139,92,246,0.5), 0 0 0 1.5px #7c3aed',
+                    borderRadius: '3px',
+                    // pulse via Tailwind class below
                   } : {
                     background: bonusBg(bonus),
                     borderRadius: '2px',
@@ -230,6 +253,13 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
                         {displayTile.value || ''}
                       </span>
                     </>
+                  ) : isPreview ? (
+                    <span
+                      className="text-[14px] sm:text-[17px] md:text-[19px] font-black tracking-tight"
+                      style={{ color: '#ffffff', fontFamily: "'Playfair Display', serif", textShadow: '0 1px 2px rgba(0,0,0,0.3)' }}
+                    >
+                      {preview!.letter}
+                    </span>
                   ) : bonus ? (
                     <span
                       className={cn(
