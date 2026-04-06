@@ -112,6 +112,17 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
     return pm.tiles
   }, [game])
 
+  // Clear local suggestion tiles when a new move is played (move history grows)
+  const moveCount = (game?.move_history as unknown[] | undefined)?.length ?? 0
+  const prevMoveCountRef = useRef(moveCount)
+  useEffect(() => {
+    if (moveCount > prevMoveCountRef.current) {
+      setSuggestionTiles(new Map())
+      setSuggestionSquare(null)
+    }
+    prevMoveCountRef.current = moveCount
+  }, [moveCount])
+
   // Review mode: board and highlighted tiles for game history on the main board
   const moveHistory = (game?.move_history ?? []) as { player_id: string; player_name: string; type: 'play' | 'pass' | 'exchange'; words?: { word: string; score: number }[]; score?: number; board_snapshot: BoardCell[][]; tiles?: { row: number; col: number; letter: string }[]; timestamp: string }[]
 
@@ -1175,7 +1186,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
             </div>
             )
           })()}
-          {isActive && !isMyTurn && !isComputerTurn && (
+          {isActive && !isMyTurn && !isComputerTurn && !isApiTurn && (
             <div className="text-amber-300 text-sm font-medium px-4 py-2 rounded-lg bg-amber-900/20">
               Waiting for {currentTurnPlayer?.profiles.display_name} to play...
             </div>
