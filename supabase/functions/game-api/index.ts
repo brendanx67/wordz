@@ -461,7 +461,7 @@ async function handlePlayMove(req: Request): Promise<Response> {
   const supabase = getServiceClient();
   const { data: game, error: gErr } = await supabase
     .from("games")
-    .select("*")
+    .select("*, game_players(player_id, score)")
     .eq("id", auth.gameId)
     .single();
 

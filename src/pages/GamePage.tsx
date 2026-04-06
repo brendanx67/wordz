@@ -408,13 +408,18 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
         await supabase.from('game_players').update({ score: finalScore })
           .eq('game_id', gameId).eq('player_id', userId)
 
-        // Find winner (highest score)
-        const allScores = [
+        // Find winner (highest score) — include both human and computer/API players
+        const allScores: { id: string; score: number }[] = [
           { id: userId, score: finalScore },
           ...otherPlayers.map(op => {
             const opRack = (op.rack ?? []) as Tile[]
             const rackValue = opRack.reduce((sum, t) => sum + t.value, 0)
             return { id: op.player_id, score: Math.max(0, op.score - rackValue) }
+          }),
+          ...computerPlayers.map(cp => {
+            const cpRack = (cp.rack ?? []) as Tile[]
+            const rackValue = cpRack.reduce((sum, t) => sum + t.value, 0)
+            return { id: cp.id, score: Math.max(0, cp.score - rackValue) }
           }),
         ]
         const winner = allScores.reduce((best, p) => p.score > best.score ? p : best)
@@ -539,11 +544,14 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
 
       if (isGameOver) {
         updates.status = 'finished'
-        // Determine winner by score
-        const players = game.game_players ?? []
-        const winner = players.reduce((best, p) =>
-          p.score > best.score ? p : best, players[0])
-        updates.winner = winner.player_id
+        // Determine winner by score — include both human and computer/API players
+        const allPlayers = game.game_players ?? []
+        const allScores: { id: string; score: number }[] = [
+          ...allPlayers.map(p => ({ id: p.player_id, score: p.score })),
+          ...computerPlayers.map(cp => ({ id: cp.id, score: cp.score })),
+        ]
+        const winner = allScores.reduce((best, p) => p.score > best.score ? p : best, allScores[0])
+        updates.winner = winner.id
       }
 
       await supabase.from('games').update(updates).eq('id', gameId)
