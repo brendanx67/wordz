@@ -919,18 +919,23 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
               )}
             </div>
           )}
-          {game.status === 'finished' && (
+          {game.status === 'finished' && (() => {
+            // Determine actual winner by highest score
+            const allPlayerScores = [
+              ...players.map(p => ({ name: p.profiles.display_name, score: p.score })),
+              ...computerPlayers.map(cp => ({ name: cp.name, score: cp.score })),
+            ]
+            const actualWinner = allPlayerScores.reduce((best, p) => p.score > best.score ? p : best, allPlayerScores[0])
+            const isTie = allPlayerScores.filter(p => p.score === actualWinner?.score).length > 1
+            return (
             <div className="px-8 py-3 rounded-lg text-center border border-amber-600/40" style={{ background: 'linear-gradient(135deg, #5c3a1e 0%, #4a2e15 100%)', boxShadow: '0 0 0 2px #6b4226, 0 4px 16px rgba(0,0,0,0.3)' }}>
               <div className="text-xl font-bold text-amber-300" style={{ fontFamily: "'Playfair Display', serif" }}>Game Over!</div>
               <div className="text-sm mt-1 text-amber-200/80">
-                Winner: {
-                  players.find(p => p.player_id === game.winner)?.profiles.display_name
-                  ?? computerPlayers.find(cp => cp.id === game.winner)?.name
-                  ?? 'Unknown'
-                }
+                {isTie ? 'Tie!' : `Winner: ${actualWinner?.name ?? 'Unknown'}`}
               </div>
             </div>
-          )}
+            )
+          })()}
           {isActive && !isMyTurn && !isComputerTurn && (
             <div className="text-amber-300 text-sm font-medium px-4 py-2 rounded-lg bg-amber-900/20">
               Waiting for {currentTurnPlayer?.profiles.display_name} to play...
