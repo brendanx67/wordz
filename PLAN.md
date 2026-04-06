@@ -1,5 +1,16 @@
 # Wordz Refactor Plan (v1.0 → v2.0)
 
+## Status: COMPLETE ✅
+
+All 4 phases shipped. Tagged `v1.1-phase1` through `v1.4-phase4`.
+
+| Phase | File | Before | After | Tag |
+|---|---|---:|---:|---|
+| 1 | Edge Functions dedupe | — | `_shared/` symlinks | `v1.1-phase1` |
+| 2 | `src/pages/GamePage.tsx` | 1612 | 1120 (+ 8 new files) | `v1.2-phase2` |
+| 3 | `supabase/functions/game-api/index.ts` | 1495 | 29 (router only) | `v1.3-phase3` |
+| 4 | `mcp-server/index.ts` | 1204 | 39 (wiring only) | `v1.4-phase4` |
+
 ## Problem Summary
 
 The codebase has grown organically with significant duplication and oversized files:
