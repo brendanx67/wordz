@@ -404,7 +404,6 @@ function normalizeTile(t: RawTile): { row: number; col: number; letter: string; 
 }
 
 let cachedTrie: TrieNode | null = null;
-let wordListCache: string | null = null;
 
 async function getTrie(): Promise<TrieNode> {
   if (cachedTrie) return cachedTrie;
