@@ -98,6 +98,25 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response(null, { headers: cors });
 
   try {
+    // ─── AUTH: verify caller's JWT before touching the service-role client ─────
+    const authHeader = req.headers.get("Authorization");
+    if (!authHeader) {
+      return new Response(JSON.stringify({ error: "Missing auth header" }), {
+        status: 401, headers: { ...cors, "Content-Type": "application/json" },
+      });
+    }
+    const authClient = createClient(
+      Deno.env.get("SUPABASE_URL")!,
+      Deno.env.get("SUPABASE_ANON_KEY")!,
+      { global: { headers: { Authorization: authHeader } } },
+    );
+    const { data: { user }, error: authErr } = await authClient.auth.getUser();
+    if (authErr || !user) {
+      return new Response(JSON.stringify({ error: "Unauthorized" }), {
+        status: 401, headers: { ...cors, "Content-Type": "application/json" },
+      });
+    }
+
     const body = await req.json() as { game_id: string; player_id?: string };
     const { game_id, player_id } = body;
     if (!game_id) {
@@ -113,12 +132,21 @@ Deno.serve(async (req) => {
 
     const { data: game, error: gErr } = await supabase
       .from("games")
-      .select("*")
+      .select("*, game_players(player_id)")
       .eq("id", game_id)
       .single();
     if (gErr || !game) {
       return new Response(JSON.stringify({ error: "Game not found" }), {
         status: 404, headers: { ...cors, "Content-Type": "application/json" },
+      });
+    }
+
+    // ─── AUTHZ: caller must be a human player in this game ────────────────────
+    const gamePlayers = (game.game_players ?? []) as { player_id: string }[];
+    const isMember = gamePlayers.some((p) => p.player_id === user.id);
+    if (!isMember) {
+      return new Response(JSON.stringify({ error: "Forbidden: not a member of this game" }), {
+        status: 403, headers: { ...cors, "Content-Type": "application/json" },
       });
     }
 
