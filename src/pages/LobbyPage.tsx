@@ -89,7 +89,7 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
           </h1>
           <div className="flex items-center gap-4">
             <span className="text-amber-300/70 text-sm">{displayName}</span>
-            <Button variant="ghost" size="sm" onClick={onSignOut} className="text-amber-500/60 hover:text-amber-300">
+            <Button variant="ghost" size="sm" onClick={onSignOut} className="text-amber-400/80 hover:text-amber-300">
               <LogOut className="h-4 w-4" />
             </Button>
           </div>
@@ -131,7 +131,7 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
                 <Skeleton className="h-16 bg-amber-900/20" />
               </div>
             ) : !myGames?.length ? (
-              <p className="text-amber-600/60 text-center py-4">No active games. Create one or join from the lobby!</p>
+              <p className="text-amber-400 text-center py-4">No active games. Create one or join from the lobby!</p>
             ) : (
               <div className="space-y-3">
                 {myGames.map((game) => {
@@ -178,7 +178,7 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
                           )}
                         </div>
                         {!isWaiting && (
-                          <div className="text-xs text-amber-600/60 mt-1">
+                          <div className="text-xs text-amber-400 mt-1">
                             {players.map((p: { profiles: unknown; score: number }) =>
                               `${getDisplayName(p.profiles as { display_name: string })}: ${p.score}`
                             ).join(' | ')}
@@ -252,7 +252,7 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
                 .filter(g => !ignoredGames.has(g.id))
               return visibleGames.length === 0
             })() ? (
-              <p className="text-amber-600/60 text-center py-4">No open games right now. Be the first to create one!</p>
+              <p className="text-amber-400 text-center py-4">No open games right now. Be the first to create one!</p>
             ) : (
               <div className="space-y-3">
                 {(openGames ?? [])
@@ -269,7 +269,7 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
                           <span className="text-amber-200">
                             {players.map((p: { profiles: unknown }) => getDisplayName(p.profiles as { display_name: string })).join(', ')}
                           </span>
-                          <span className="text-amber-600/60 text-sm ml-2">({players.length}/4 players)</span>
+                          <span className="text-amber-400 text-sm ml-2">({players.length}/4 players)</span>
                         </div>
                         <div className="flex gap-2">
                           <Button
@@ -283,7 +283,7 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
                           <Button
                             size="sm"
                             onClick={() => handleIgnoreGame(game.id)}
-                            className="bg-amber-900/40 hover:bg-amber-800/50 text-amber-500/60 border border-amber-900/30"
+                            className="bg-amber-900/40 hover:bg-amber-800/50 text-amber-400/80 border border-amber-900/30"
                           >
                             <X className="h-3 w-3 mr-1" />
                             Ignore
@@ -311,7 +311,7 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
                 <Skeleton className="h-16 bg-amber-900/20" />
               </div>
             ) : !gameHistory?.length ? (
-              <p className="text-amber-600/60 text-center py-4">No completed games yet. Play some rounds!</p>
+              <p className="text-amber-400 text-center py-4">No completed games yet. Play some rounds!</p>
             ) : (
               <div className="space-y-3">
                 {gameHistory.map((game) => {
@@ -354,7 +354,7 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
                             {allScores.join(' | ')}
                           </span>
                         </div>
-                        <div className="text-xs text-amber-600/50 mt-1">
+                        <div className="text-xs text-amber-400/70 mt-1">
                           {new Date(game.updated_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })} {new Date(game.updated_at).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit' })} — Winner: {winnerDisplay}
                         </div>
                       </div>
@@ -447,7 +447,7 @@ function ApiSetupSection({ userId }: { userId: string }) {
           {/* API Key Management */}
           <div className="space-y-3">
             <h3 className="text-purple-200 font-semibold">Your API Keys</h3>
-            <p className="text-amber-400/60 text-xs">
+            <p className="text-amber-300 text-xs">
               Create a named API key to connect any AI assistant. One key works across all your games.
             </p>
 
@@ -500,7 +500,7 @@ function ApiSetupSection({ userId }: { userId: string }) {
                   size="sm"
                   variant="ghost"
                   onClick={() => setJustCreatedKey(null)}
-                  className="text-green-400/60 hover:text-green-300 text-xs h-7"
+                  className="text-green-400 hover:text-green-300 text-xs h-7"
                 >
                   I've saved it — dismiss
                 </Button>
@@ -519,7 +519,7 @@ function ApiSetupSection({ userId }: { userId: string }) {
                   >
                     <div>
                       <span className="text-purple-200 text-sm font-medium">{key.name}</span>
-                      <span className="text-purple-500/50 text-xs ml-2">
+                      <span className="text-purple-400/70 text-xs ml-2">
                         Created {new Date(key.created_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                       </span>
                     </div>
@@ -528,7 +528,7 @@ function ApiSetupSection({ userId }: { userId: string }) {
                       variant="ghost"
                       onClick={() => handleDeleteKey(key.id, key.name)}
                       disabled={deleteKey.isPending}
-                      className="text-red-400/60 hover:text-red-300 hover:bg-red-900/30 h-7 px-2"
+                      className="text-red-400 hover:text-red-300 hover:bg-red-900/30 h-7 px-2"
                     >
                       <X className="h-3 w-3 mr-1" />
                       Revoke
@@ -537,7 +537,7 @@ function ApiSetupSection({ userId }: { userId: string }) {
                 ))}
               </div>
             ) : !justCreatedKey ? (
-              <p className="text-purple-500/50 text-xs text-center py-2">No API keys yet. Create one to get started.</p>
+              <p className="text-purple-400/70 text-xs text-center py-2">No API keys yet. Create one to get started.</p>
             ) : null}
           </div>
 
@@ -562,7 +562,7 @@ function ApiSetupSection({ userId }: { userId: string }) {
           {/* Credentials */}
           <div className="space-y-3 border-t border-purple-800/20 pt-4">
             <h3 className="text-purple-200 font-semibold">credentials.json</h3>
-            <p className="text-amber-400/60">
+            <p className="text-amber-300">
               Create this file at <code className="text-purple-300 bg-purple-950/60 px-1 rounded">~/.wordz-mcp/credentials.json</code>:
             </p>
             <div className="relative">
@@ -587,7 +587,7 @@ function ApiSetupSection({ userId }: { userId: string }) {
           <div className="space-y-3 border-t border-purple-800/20 pt-4">
             <h3 className="text-purple-200 font-semibold">Add to Claude</h3>
             <div className="space-y-2">
-              <p className="text-amber-400/60">
+              <p className="text-amber-300">
                 <strong className="text-purple-300">Claude Code:</strong>
               </p>
               <div className="relative">
@@ -606,7 +606,7 @@ function ApiSetupSection({ userId }: { userId: string }) {
                   Copy
                 </Button>
               </div>
-              <p className="text-amber-400/60 pt-2">
+              <p className="text-amber-300 pt-2">
                 <strong className="text-purple-300">Claude Desktop:</strong> Add to config file
               </p>
               <div className="relative">
@@ -631,7 +631,7 @@ function ApiSetupSection({ userId }: { userId: string }) {
           {/* REST API */}
           <div className="space-y-3 border-t border-purple-800/20 pt-4">
             <h3 className="text-purple-200 font-semibold">REST API (ChatGPT, other LLMs)</h3>
-            <p className="text-amber-400/60">
+            <p className="text-amber-300">
               Any HTTP client can use the REST API directly. Include your API key and the game ID.
             </p>
             <div className="space-y-2">

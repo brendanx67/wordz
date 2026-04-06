@@ -78,7 +78,7 @@ export default function GameHistoryViewer({ moveHistory, emptyBoard }: GameHisto
   if (!moveHistory.length) {
     return (
       <Card className="border-amber-900/30 bg-amber-950/30">
-        <CardContent className="py-6 text-center text-amber-600/60 text-sm">
+        <CardContent className="py-6 text-center text-amber-400 text-sm">
           No move history recorded for this game.
         </CardContent>
       </Card>
@@ -131,7 +131,7 @@ export default function GameHistoryViewer({ moveHistory, emptyBoard }: GameHisto
           <ChevronLeft className="h-4 w-4" />
         </Button>
 
-        <span className="text-amber-300/70 text-xs min-w-[80px] text-center">
+        <span className="text-amber-300 text-xs min-w-[80px] text-center">
           Move {moveIndex + 1} / {moveHistory.length}
         </span>
 
@@ -161,21 +161,21 @@ export default function GameHistoryViewer({ moveHistory, emptyBoard }: GameHisto
           {currentMove.type === 'pass' && <> passed</>}
           {currentMove.type === 'exchange' && <> exchanged tiles</>}
           {timing && moveIndex > 0 && timing.elapsed[moveIndex] > 0 && (
-            <div className="text-[10px] text-amber-500/60 mt-0.5">
+            <div className="text-[10px] text-amber-400/70 mt-0.5">
               <Clock className="h-3 w-3 inline mr-0.5" />
               {formatDuration(timing.elapsed[moveIndex])}
             </div>
           )}
         </div>
       ) : (
-        <div className="text-center text-sm text-amber-500/60">
+        <div className="text-center text-sm text-amber-400">
           Board before first move
         </div>
       )}
 
       {/* Game timing stats */}
       {timing && (
-        <div className="flex justify-center gap-4 text-[10px] text-amber-500/60">
+        <div className="flex justify-center gap-4 text-[10px] text-amber-400/70">
           <span><Clock className="h-3 w-3 inline mr-0.5" />Total: {formatDuration(timing.totalSec)}</span>
           <span>Avg: {formatDuration(timing.avgSec)}/move</span>
         </div>
@@ -184,7 +184,7 @@ export default function GameHistoryViewer({ moveHistory, emptyBoard }: GameHisto
       {/* Move list */}
       <Card className="border-amber-900/30 bg-amber-950/30">
         <CardHeader className="py-2 px-3">
-          <CardTitle className="text-amber-400/80 text-xs">All Moves</CardTitle>
+          <CardTitle className="text-amber-300 text-xs">All Moves</CardTitle>
         </CardHeader>
         <CardContent className="px-3 pb-3 max-h-48 overflow-y-auto">
           <div className="space-y-1">
@@ -196,10 +196,10 @@ export default function GameHistoryViewer({ moveHistory, emptyBoard }: GameHisto
                   'w-full text-left px-2 py-1 rounded text-xs transition-colors',
                   i === moveIndex
                     ? 'bg-amber-800/40 text-amber-200'
-                    : 'text-amber-500/70 hover:bg-amber-900/20 hover:text-amber-300'
+                    : 'text-amber-400 hover:bg-amber-900/20 hover:text-amber-200'
                 )}
               >
-                <span className="text-amber-400/60 mr-1">{i + 1}.</span>
+                <span className="text-amber-300/80 mr-1">{i + 1}.</span>
                 <span className="font-medium">{move.player_name}</span>
                 {move.type === 'play' && move.words && (
                   <>: {move.words.map(w => w.word).join(', ')} ({move.score} pts)</>
@@ -207,7 +207,7 @@ export default function GameHistoryViewer({ moveHistory, emptyBoard }: GameHisto
                 {move.type === 'pass' && <>: Pass</>}
                 {move.type === 'exchange' && <>: Exchange</>}
                 {timing && i > 0 && timing.elapsed[i] > 0 && (
-                  <span className="text-amber-600/40 ml-1">{formatDuration(timing.elapsed[i])}</span>
+                  <span className="text-amber-500/60 ml-1">{formatDuration(timing.elapsed[i])}</span>
                 )}
               </button>
             ))}

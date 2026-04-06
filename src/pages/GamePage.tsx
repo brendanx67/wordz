@@ -730,7 +730,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                   }
                 }}
                 disabled={cancelGame.isPending}
-                className="text-red-400/60 hover:text-red-300 hover:bg-red-900/20 text-xs"
+                className="text-red-400 hover:text-red-300 hover:bg-red-900/20 text-xs"
               >
                 <LogOut className="h-3 w-3 mr-1" />
                 Resign
@@ -758,7 +758,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                 <div>
                   <div className={cn(
                     'font-medium text-sm',
-                    p.player_id === game.current_turn ? 'text-amber-200' : 'text-amber-400/70'
+                    p.player_id === game.current_turn ? 'text-amber-100' : 'text-amber-300'
                   )}>
                     {p.profiles.display_name}
                     {p.player_id === userId && ' (you)'}
@@ -784,7 +784,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                 <div>
                   <div className={cn(
                     'font-medium text-sm',
-                    game.current_turn === cp.id ? 'text-amber-200' : 'text-amber-400/70'
+                    game.current_turn === cp.id ? 'text-amber-100' : 'text-amber-300'
                   )}>
                     {cp.name}
                   </div>
@@ -802,11 +802,11 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
           {/* Recent moves */}
           {game.move_history && (game.move_history as unknown[]).length > 0 && !showHistory && (
             <CardContent className="px-4 pb-4 border-t border-amber-900/20 pt-3">
-              <p className="text-amber-400/60 text-xs font-medium mb-2">Recent Moves</p>
+              <p className="text-amber-300 text-xs font-medium mb-2">Recent Moves</p>
               <div className="space-y-1 max-h-40 overflow-y-auto">
                 {([...(game.move_history as { player_name: string; type: string; words?: { word: string; score: number }[]; score?: number }[])].reverse().slice(0, 10)).map((m, i) => (
-                  <div key={i} className="text-xs text-amber-500/60">
-                    <span className="text-amber-300/70">{m.player_name}</span>
+                  <div key={i} className="text-xs text-amber-400/80">
+                    <span className="text-amber-200">{m.player_name}</span>
                     {m.type === 'play' && (
                       <> played {m.words?.map(w => w.word).join(', ')} for <span className="text-amber-200">{m.score}</span> pts</>
                     )}
@@ -824,7 +824,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
               variant="ghost"
               size="sm"
               onClick={() => setShowHistory(!showHistory)}
-              className="w-full text-amber-400/70 hover:text-amber-300 hover:bg-amber-900/20 text-xs"
+              className="w-full text-amber-300 hover:text-amber-200 hover:bg-amber-900/20 text-xs"
             >
               <History className="h-3 w-3 mr-1" />
               {showHistory ? 'Hide History' : 'Game History'}
@@ -876,9 +876,9 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                   {startGame.isPending ? 'Starting...' : 'Start Game!'}
                 </Button>
               ) : game.created_by === userId ? (
-                <div className="text-amber-500/70 text-xs">Need at least 2 players to start</div>
+                <div className="text-amber-400 text-xs">Need at least 2 players to start</div>
               ) : (
-                <div className="text-amber-500/70 text-xs">Waiting for the game creator to start...</div>
+                <div className="text-amber-400 text-xs">Waiting for the game creator to start...</div>
               )}
             </div>
           )}
@@ -895,7 +895,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
             </div>
           )}
           {isActive && !isMyTurn && !isComputerTurn && (
-            <div className="text-amber-400/80 text-sm font-medium px-4 py-2 rounded-lg bg-amber-900/20">
+            <div className="text-amber-300 text-sm font-medium px-4 py-2 rounded-lg bg-amber-900/20">
               Waiting for {currentTurnPlayer?.profiles.display_name} to play...
             </div>
           )}
@@ -1028,7 +1028,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
           {/* Show computer rack when spectating (not a player) */}
           {isActive && !myPlayer && isComputerTurn && currentComputerPlayer && (
             <div className="space-y-2">
-              <div className="text-center text-xs text-amber-500/60">
+              <div className="text-center text-xs text-amber-400">
                 {currentComputerPlayer.name}&apos;s rack:
               </div>
               <TileRack
@@ -1043,7 +1043,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
           {/* Show API player racks for the owning user */}
           {isActive && myApiPlayers.length > 0 && myApiPlayers.map(ap => (
             <div key={ap.id} className="space-y-2">
-              <div className="text-center text-xs text-purple-400/60">
+              <div className="text-center text-xs text-purple-300">
                 {ap.name}&apos;s rack:
               </div>
               <TileRack
