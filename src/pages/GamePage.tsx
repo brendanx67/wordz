@@ -1069,8 +1069,8 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
             </div>
           )}
 
-          {/* Show API player racks for the owning user */}
-          {isActive && myApiPlayers.length > 0 && myApiPlayers.map(ap => (
+          {/* Show API player racks when spectating (not a player in the game) */}
+          {isActive && !myPlayer && myApiPlayers.length > 0 && myApiPlayers.map(ap => (
             <div key={ap.id} className="space-y-2">
               <div className="text-center text-xs text-purple-300">
                 {ap.name}&apos;s rack:
