@@ -318,8 +318,21 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
                   const players = game.game_players ?? []
                   const cpuPlayers = (game.computer_players ?? []) as ComputerPlayer[]
                   const isPlayer = players.some((p: { player_id: string }) => p.player_id === userId)
-                  const didWin = game.winner === userId
-                  const isSpectatorGame = !isPlayer
+                  const myApiPlayer = cpuPlayers.find(cp => cp.id.startsWith('api-') && (cp as ComputerPlayer & { owner_id?: string }).owner_id === userId)
+                  const didWin = game.winner === userId || (myApiPlayer && game.winner === myApiPlayer.id)
+                  const isSpectatorGame = !isPlayer && !myApiPlayer
+
+                  // Detect resignation: user was a player but their score was highest yet they "lost"
+                  const myPlayer = players.find((p: { player_id: string }) => p.player_id === userId)
+                  const myScore = myPlayer ? (myPlayer as { score: number }).score : 0
+                  const winnerScore = (() => {
+                    const hw = players.find((p: { player_id: string }) => p.player_id === game.winner)
+                    if (hw) return (hw as { score: number }).score
+                    const cw = cpuPlayers.find(cp => cp.id === game.winner)
+                    if (cw) return cw.score
+                    return 0
+                  })()
+                  const didResign = isPlayer && !didWin && myScore > winnerScore
 
                   // Build scores display combining humans and computers
                   const allScores: string[] = [
@@ -344,9 +357,11 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
                       <div className="flex-1">
                         <div className="flex items-center gap-3 flex-wrap">
                           {isSpectatorGame ? (
-                            <span className="text-blue-400/70 font-medium">Spectated</span>
+                            <span className="text-blue-400 font-medium">Spectated</span>
+                          ) : didResign ? (
+                            <span className="text-amber-400 font-medium">Resigned</span>
                           ) : (
-                            <span className={didWin ? 'text-green-400 font-medium' : 'text-red-400/70 font-medium'}>
+                            <span className={didWin ? 'text-green-400 font-medium' : 'text-red-400 font-medium'}>
                               {didWin ? 'Won!' : 'Lost'}
                             </span>
                           )}
