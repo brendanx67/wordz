@@ -80,7 +80,6 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
     }
   }
   const [dragOverSquare, setDragOverSquare] = useState<string | null>(null)
-  const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)
 
   const handleDragOver = (e: React.DragEvent, row: number, col: number) => {
     e.preventDefault()
@@ -207,8 +206,8 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
               return (
                 <div
                   key={`${row}-${col}`}
-                  draggable={isNewlyPlaced && !isTouchDevice}
-                  onDragStart={isNewlyPlaced && !isTouchDevice ? (e) => handleDragStartFromBoard(e, row, col, placedTile!) : undefined}
+                  draggable={isNewlyPlaced}
+                  onDragStart={isNewlyPlaced ? (e) => handleDragStartFromBoard(e, row, col, placedTile!) : undefined}
                   onClick={() => {
                     if (isNewlyPlaced) {
                       onPickupTile(row, col)

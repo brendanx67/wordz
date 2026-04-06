@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback, useEffect } from 'react'
+import { useState, useRef, useCallback } from 'react'
 import type { Tile } from '@/lib/gameConstants'
 import { cn } from '@/lib/utils'
 import { Shuffle } from 'lucide-react'
@@ -16,14 +16,9 @@ interface TileRackProps {
 export default function TileRack({ tiles, onTileClick, selectedTiles, isExchangeMode, onShuffle, onReorder, onReturnFromBoard }: TileRackProps) {
   const [draggedTileId, setDraggedTileId] = useState<string | null>(null)
   const [dropIndex, setDropIndex] = useState<number | null>(null)
-  const [isTouchDevice, setIsTouchDevice] = useState(false)
   const containerRef = useRef<HTMLDivElement>(null)
   const tileRefs = useRef<(HTMLDivElement | null)[]>([])
 
-  // Detect touch device
-  useEffect(() => {
-    setIsTouchDevice('ontouchstart' in window || navigator.maxTouchPoints > 0)
-  }, [])
   const handleDragStart = (e: React.DragEvent, tile: Tile) => {
     e.dataTransfer.setData('application/json', JSON.stringify(tile))
     e.dataTransfer.effectAllowed = 'move'
@@ -143,13 +138,13 @@ export default function TileRack({ tiles, onTileClick, selectedTiles, isExchange
 
             <div
               ref={(el) => { tileRefs.current[i] = el }}
-              draggable={!isTouchDevice}
+              draggable
               onDragStart={(e) => handleDragStart(e, tile)}
               onDragEnd={handleDragEnd}
               onClick={() => !isDragging && onTileClick(tile)}
               className={cn(
                 'w-12 h-12 sm:w-[54px] sm:h-[54px] md:w-[60px] md:h-[60px] rounded-[4px] flex items-center justify-center relative select-none transition-all duration-150',
-                isTouchDevice ? 'cursor-pointer active:scale-95' : 'cursor-grab active:cursor-grabbing',
+                'cursor-grab active:cursor-grabbing',
                 isSelected && isExchangeMode && 'ring-2 ring-red-400 -translate-y-1',
                 isSelected && !isExchangeMode && 'ring-2 ring-amber-400 -translate-y-2',
                 !isSelected && !isDragging && 'hover:-translate-y-1',
