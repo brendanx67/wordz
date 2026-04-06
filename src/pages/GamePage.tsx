@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useGame, useStartGame, isComputerPlayerId, isApiPlayerId, useCancelGame } from '@/hooks/useGames'
@@ -89,6 +89,29 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
 
   // API players owned by the current user (so we can show their rack)
   const myApiPlayers = computerPlayers.filter(cp => cp.id.startsWith('api-') && cp.owner_id === userId)
+
+  // Live turn timer
+  const [turnElapsed, setTurnElapsed] = useState(0)
+  const turnTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
+
+  useEffect(() => {
+    if (turnTimerRef.current) clearInterval(turnTimerRef.current)
+    if (!isActive || !game?.updated_at) {
+      setTurnElapsed(0)
+      return
+    }
+    const turnStart = new Date(game.updated_at).getTime()
+    const tick = () => setTurnElapsed(Math.floor((Date.now() - turnStart) / 1000))
+    tick()
+    turnTimerRef.current = setInterval(tick, 1000)
+    return () => { if (turnTimerRef.current) clearInterval(turnTimerRef.current) }
+  }, [game?.current_turn, game?.updated_at, isActive])
+
+  const formatTimer = (sec: number): string => {
+    const m = Math.floor(sec / 60)
+    const s = sec % 60
+    return `${m}:${s.toString().padStart(2, '0')}`
+  }
 
   // Trigger computer's turn automatically via Edge Function
   useEffect(() => {
@@ -764,7 +787,10 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                     {p.player_id === userId && ' (you)'}
                   </div>
                   {p.player_id === game.current_turn && isActive && (
-                    <div className="text-[10px] text-green-400 animate-pulse">Playing...</div>
+                    <div className="text-[10px] text-green-400 flex items-center gap-1.5">
+                      <span className="animate-pulse">Playing...</span>
+                      <span className="text-amber-400/80 font-mono tabular-nums">{formatTimer(turnElapsed)}</span>
+                    </div>
                   )}
                 </div>
                 <span className="text-xl font-bold text-amber-300" style={{ fontFamily: "'Playfair Display', serif" }}>
@@ -789,7 +815,10 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                     {cp.name}
                   </div>
                   {game.current_turn === cp.id && isActive && (
-                    <div className="text-[10px] text-green-400 animate-pulse">Thinking...</div>
+                    <div className="text-[10px] text-green-400 flex items-center gap-1.5">
+                      <span className="animate-pulse">Thinking...</span>
+                      <span className="text-amber-400/80 font-mono tabular-nums">{formatTimer(turnElapsed)}</span>
+                    </div>
                   )}
                 </div>
                 <span className="text-xl font-bold text-amber-300" style={{ fontFamily: "'Playfair Display', serif" }}>
