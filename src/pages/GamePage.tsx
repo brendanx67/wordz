@@ -940,7 +940,10 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
           )}
           {isActive && isMyTurn && (
             <div className="text-green-400 text-sm font-medium px-4 py-2 rounded-lg bg-green-900/15">
-              Your turn &mdash; place tiles on the board
+              {selectedSquare
+                ? <>Tap tiles in your rack to place them {direction === 'across' ? '\u2192' : '\u2193'}</>
+                : <>Tap a square on the board to start placing tiles</>
+              }
             </div>
           )}
 
