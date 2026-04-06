@@ -164,6 +164,35 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
     return { elapsed }
   }, [reviewMode, moveHistory])
 
+  // Review cumulative scores: running total per player at each move
+  const reviewScores = useMemo(() => {
+    if (!reviewMode || !moveHistory.length) return null
+    const scores: Record<string, number> = {}
+    const idx = Math.min(reviewMoveIndex, moveHistory.length - 1)
+    for (let i = 0; i <= idx; i++) {
+      const m = moveHistory[i]
+      if (m.score && m.score > 0) {
+        scores[m.player_id] = (scores[m.player_id] ?? 0) + m.score
+      }
+    }
+    return scores
+  }, [reviewMode, reviewMoveIndex, moveHistory])
+
+  // Review tiles remaining: 100 total - tiles on board at current snapshot
+  const reviewTilesRemaining = useMemo(() => {
+    if (!reviewMode) return null
+    if (reviewMoveIndex < 0) return 100 // before first move
+    const entry = moveHistory[Math.min(reviewMoveIndex, moveHistory.length - 1)]
+    if (!entry?.board_snapshot) return null
+    let onBoard = 0
+    for (let r = 0; r < 15; r++) {
+      for (let c = 0; c < 15; c++) {
+        if (entry.board_snapshot[r]?.[c]?.tile) onBoard++
+      }
+    }
+    return 100 - onBoard // tiles in bag + racks
+  }, [reviewMode, reviewMoveIndex, moveHistory])
+
   // Suggestion placement handlers
   const handleSuggestionSquareClick = useCallback((row: number, col: number) => {
     if (!isSpectatingApi) return
@@ -934,69 +963,102 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
         {/* Scoreboard sidebar */}
         <Card className="border-amber-900/30 bg-amber-950/30 w-full lg:w-56 shrink-0">
           <CardHeader className="py-3 px-4">
-            <CardTitle className="text-amber-300 text-sm">Scoreboard</CardTitle>
+            <CardTitle className="text-amber-300 text-sm flex items-center justify-between">
+              <span>Scoreboard</span>
+              {reviewMode && reviewTilesRemaining !== null && (
+                <span className="text-[11px] font-normal text-amber-400/70">
+                  {reviewTilesRemaining} tiles left
+                </span>
+              )}
+            </CardTitle>
           </CardHeader>
           <CardContent className="px-4 pb-4 space-y-2">
-            {players.map((p) => (
+            {players.map((p) => {
+              const isReviewActive = reviewMode && reviewCurrentMove?.player_id === p.player_id
+              const displayScore = reviewMode && reviewScores ? (reviewScores[p.player_id] ?? 0) : p.score
+              return (
               <div
                 key={p.player_id}
                 className={cn(
                   'flex items-center justify-between py-2 px-3 rounded-lg transition-colors',
-                  p.player_id === game.current_turn && 'bg-amber-800/20 ring-1 ring-amber-600/30'
+                  !reviewMode && p.player_id === game.current_turn && 'bg-amber-800/20 ring-1 ring-amber-600/30',
+                  isReviewActive && 'bg-amber-800/25 ring-1 ring-amber-500/40'
                 )}
               >
                 <div>
                   <div className={cn(
                     'font-medium text-sm',
-                    p.player_id === game.current_turn ? 'text-amber-100' : 'text-amber-300'
+                    isReviewActive ? 'text-amber-100' : (p.player_id === game.current_turn && !reviewMode) ? 'text-amber-100' : 'text-amber-300'
                   )}>
                     {p.profiles.display_name}
                     {p.player_id === userId && ' (you)'}
                   </div>
-                  {p.player_id === game.current_turn && isActive && (
+                  {!reviewMode && p.player_id === game.current_turn && isActive && (
                     <div className="text-[10px] text-green-400 flex items-center gap-1.5">
                       <span className="animate-pulse">Playing...</span>
                       <span className="text-amber-400/80 font-mono tabular-nums">{formatTimer(turnElapsed)}</span>
                     </div>
                   )}
+                  {isReviewActive && reviewCurrentMove?.type === 'play' && (
+                    <div className="text-[10px] text-amber-400/80">
+                      +{reviewCurrentMove.score ?? 0} pts
+                    </div>
+                  )}
                 </div>
-                <span className="text-xl font-bold text-amber-300" style={{ fontFamily: "'Playfair Display', serif" }}>
-                  {p.score}
+                <span className={cn(
+                  'text-xl font-bold transition-colors',
+                  isReviewActive ? 'text-amber-200' : 'text-amber-300'
+                )} style={{ fontFamily: "'Playfair Display', serif" }}>
+                  {displayScore}
                 </span>
               </div>
-            ))}
+              )
+            })}
             {/* Computer players in scoreboard */}
-            {computerPlayers.map((cp) => (
+            {computerPlayers.map((cp) => {
+              const isReviewActive = reviewMode && reviewCurrentMove?.player_id === cp.id
+              const displayScore = reviewMode && reviewScores ? (reviewScores[cp.id] ?? 0) : cp.score
+              return (
               <div
                 key={cp.id}
                 className={cn(
                   'flex items-center justify-between py-2 px-3 rounded-lg transition-colors',
-                  game.current_turn === cp.id && 'bg-amber-800/20 ring-1 ring-amber-600/30'
+                  !reviewMode && game.current_turn === cp.id && 'bg-amber-800/20 ring-1 ring-amber-600/30',
+                  isReviewActive && 'bg-amber-800/25 ring-1 ring-amber-500/40'
                 )}
               >
                 <div>
                   <div className={cn(
                     'font-medium text-sm',
-                    game.current_turn === cp.id ? 'text-amber-100' : 'text-amber-300'
+                    isReviewActive ? 'text-amber-100' : (game.current_turn === cp.id && !reviewMode) ? 'text-amber-100' : 'text-amber-300'
                   )}>
                     {cp.name}
                   </div>
-                  {game.current_turn === cp.id && isActive && (
+                  {!reviewMode && game.current_turn === cp.id && isActive && (
                     <div className="text-[10px] text-green-400 flex items-center gap-1.5">
                       <span className="animate-pulse">Thinking...</span>
                       <span className="text-amber-400/80 font-mono tabular-nums">{formatTimer(turnElapsed)}</span>
                     </div>
                   )}
+                  {isReviewActive && reviewCurrentMove?.type === 'play' && (
+                    <div className="text-[10px] text-amber-400/80">
+                      +{reviewCurrentMove.score ?? 0} pts
+                    </div>
+                  )}
                 </div>
-                <span className="text-xl font-bold text-amber-300" style={{ fontFamily: "'Playfair Display', serif" }}>
-                  {cp.score}
+                <span className={cn(
+                  'text-xl font-bold transition-colors',
+                  isReviewActive ? 'text-amber-200' : 'text-amber-300'
+                )} style={{ fontFamily: "'Playfair Display', serif" }}>
+                  {displayScore}
                 </span>
               </div>
-            ))}
+              )
+            })}
           </CardContent>
 
           {/* Recent moves */}
-          {game.move_history && (game.move_history as unknown[]).length > 0 && !showHistory && (
+          {game.move_history && (game.move_history as unknown[]).length > 0 && !showHistory && !reviewMode && (
             <CardContent className="px-4 pb-4 border-t border-amber-900/20 pt-3">
               <p className="text-amber-300 text-xs font-medium mb-2">Recent Moves</p>
               <div className="space-y-1 max-h-40 overflow-y-auto">
