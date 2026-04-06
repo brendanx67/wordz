@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo, useRef } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useGame, useStartGame, isComputerPlayerId, isApiPlayerId, useCancelGame } from '@/hooks/useGames'
@@ -11,12 +11,21 @@ import type { Tile, BoardCell, PlacedTile } from '@/lib/gameConstants'
 import GameBoard from '@/components/GameBoard'
 import TileRack from '@/components/TileRack'
 import { toast } from 'sonner'
-import { ArrowLeft, RotateCcw, Send, Flag, RefreshCw, Play, History, LogOut, Grid3X3, Lightbulb, X, Eye, ChevronsLeft, ChevronLeft, ChevronRight, ChevronsRight, Clock } from 'lucide-react'
+import { ArrowLeft, Play, History, LogOut, Grid3X3 } from 'lucide-react'
 import { createEmptyBoard } from '@/lib/gameConstants'
 import GameHistoryViewer from '@/components/GameHistoryViewer'
+import BlankTileDialog from '@/components/BlankTileDialog'
+import Scoreboard from '@/components/Scoreboard'
+import ReviewControls from '@/components/ReviewControls'
+import GameControls from '@/components/GameControls'
+import SuggestionControls from '@/components/SuggestionControls'
 import { cn } from '@/lib/utils'
 import { useGameRealtime } from '@/hooks/useGameRealtime'
 import { useComputerPlayer } from '@/hooks/useComputerPlayer'
+import { useTurnTimer } from '@/hooks/useTurnTimer'
+import { useReviewMode } from '@/hooks/useReviewMode'
+import type { MoveHistoryEntry } from '@/hooks/useReviewMode'
+import { useSuggestionMode } from '@/hooks/useSuggestionMode'
 
 interface GamePageProps {
   gameId: string
@@ -42,13 +51,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   const [submitting, setSubmitting] = useState(false)
   const [blankTileTarget, setBlankTileTarget] = useState<{ row: number; col: number; tile: Tile } | null>(null)
   const [showHistory, setShowHistory] = useState(false)
-  const [suggestionTiles, setSuggestionTiles] = useState<Map<string, Tile>>(new Map())
-  const [suggestionSquare, setSuggestionSquare] = useState<{ row: number; col: number } | null>(null)
-  const [suggestionDirection, setSuggestionDirection] = useState<'across' | 'down'>('across')
-  const [suggestionSent, setSuggestionSent] = useState(false)
   const [rackOrder, setRackOrder] = useState<string[] | null>(null)
-  const [reviewMode, setReviewMode] = useState(false)
-  const [reviewMoveIndex, setReviewMoveIndex] = useState(-1)
 
   // Rack tiles for current user (excluding placed tiles)
   const myPlayer = game?.game_players?.find(p => p.player_id === userId)
@@ -106,13 +109,28 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
     return pm.tiles
   }, [game])
 
+  const moveCount = (game?.move_history as unknown[] | undefined)?.length ?? 0
+
+  const {
+    suggestionTiles,
+    setSuggestionTiles,
+    suggestionSquare,
+    setSuggestionSquare,
+    suggestionDirection,
+    setSuggestionDirection,
+    suggestionSent,
+    handleSuggestionSquareClick,
+    handleSuggestionTileClick,
+    saveSuggestion,
+    clearSuggestion,
+  } = useSuggestionMode(gameId, userId, board, isSpectatingApi, moveCount)
+
   // Suggestion rack: API player's rack minus tiles already placed as suggestions
   // Also minus tiles the LLM is previewing, so the rack shows what it would look like after the move
   const suggestionPlacedIds = useMemo(() => new Set(Array.from(suggestionTiles.values()).map(t => t.id)), [suggestionTiles])
   const suggestionRack = useMemo(() => {
     if (!spectatingApiPlayer) return []
     let rack = spectatingApiPlayer.rack.filter(t => !suggestionPlacedIds.has(t.id))
-    // Remove previewed tiles from rack by letter matching
     if (previewedTiles && previewedTiles.length > 0) {
       const lettersToRemove = [...previewedTiles.map(t => t.is_blank ? '' : t.letter)]
       for (const letter of lettersToRemove) {
@@ -123,206 +141,24 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
     return rack
   }, [spectatingApiPlayer, suggestionPlacedIds, previewedTiles])
 
-  // Clear local suggestion tiles when a new move is played (move history grows)
-  const moveCount = (game?.move_history as unknown[] | undefined)?.length ?? 0
-  const prevMoveCountRef = useRef(moveCount)
-  useEffect(() => {
-    if (moveCount > prevMoveCountRef.current) {
-      setSuggestionTiles(new Map())
-      setSuggestionSquare(null)
-      setSuggestionSent(false)
-    }
-    prevMoveCountRef.current = moveCount
-  }, [moveCount])
-
   // Review mode: board and highlighted tiles for game history on the main board
-  const moveHistory = (game?.move_history ?? []) as { player_id: string; player_name: string; type: 'play' | 'pass' | 'exchange'; words?: { word: string; score: number }[]; score?: number; board_snapshot: BoardCell[][]; tiles?: { row: number; col: number; letter: string }[]; timestamp: string }[]
+  const moveHistory = (game?.move_history ?? []) as MoveHistoryEntry[]
 
-  const reviewBoard = useMemo(() => {
-    if (!reviewMode || !moveHistory.length) return board
-    if (reviewMoveIndex < 0) return createEmptyBoard()
-    const entry = moveHistory[Math.min(reviewMoveIndex, moveHistory.length - 1)]
-    return entry.board_snapshot || board
-  }, [reviewMode, reviewMoveIndex, moveHistory, board])
-
-  const reviewHighlightTiles = useMemo(() => {
-    if (!reviewMode || reviewMoveIndex < 0 || !moveHistory.length) return undefined
-    const entry = moveHistory[Math.min(reviewMoveIndex, moveHistory.length - 1)]
-    if (entry.type !== 'play') return undefined
-
-    // If the move has explicit tiles array, use that
-    if (entry.tiles && entry.tiles.length > 0) {
-      return entry.tiles.map(t => ({ row: t.row, col: t.col }))
-    }
-
-    // Otherwise diff with previous board snapshot
-    const currentSnapshot = entry.board_snapshot
-    if (!currentSnapshot) return undefined
-    const prevSnapshot = reviewMoveIndex > 0
-      ? moveHistory[reviewMoveIndex - 1].board_snapshot
-      : null
-
-    const highlights: { row: number; col: number }[] = []
-    for (let r = 0; r < 15; r++) {
-      for (let c = 0; c < 15; c++) {
-        const hasTileNow = currentSnapshot[r]?.[c]?.tile
-        const hadTileBefore = prevSnapshot ? prevSnapshot[r]?.[c]?.tile : null
-        if (hasTileNow && !hadTileBefore) {
-          highlights.push({ row: r, col: c })
-        }
-      }
-    }
-    return highlights.length > 0 ? highlights : undefined
-  }, [reviewMode, reviewMoveIndex, moveHistory])
-
-  const reviewCurrentMove = reviewMode && reviewMoveIndex >= 0 && reviewMoveIndex < moveHistory.length
-    ? moveHistory[reviewMoveIndex]
-    : null
-
-  // Review timing
-  const reviewTiming = useMemo(() => {
-    if (!reviewMode || moveHistory.length < 2) return null
-    const times = moveHistory.map(m => new Date(m.timestamp).getTime())
-    const elapsed = times.map((t, i) => i === 0 ? 0 : (t - times[i - 1]) / 1000)
-    return { elapsed }
-  }, [reviewMode, moveHistory])
-
-  // Review cumulative scores: running total per player at each move
-  const reviewScores = useMemo(() => {
-    if (!reviewMode || !moveHistory.length) return null
-    const scores: Record<string, number> = {}
-    const idx = Math.min(reviewMoveIndex, moveHistory.length - 1)
-    for (let i = 0; i <= idx; i++) {
-      const m = moveHistory[i]
-      if (m.score && m.score > 0) {
-        scores[m.player_id] = (scores[m.player_id] ?? 0) + m.score
-      }
-    }
-    return scores
-  }, [reviewMode, reviewMoveIndex, moveHistory])
-
-  // Review tiles remaining: 100 total - tiles on board at current snapshot
-  const reviewTilesRemaining = useMemo(() => {
-    if (!reviewMode) return null
-    if (reviewMoveIndex < 0) return 100 // before first move
-    const entry = moveHistory[Math.min(reviewMoveIndex, moveHistory.length - 1)]
-    if (!entry?.board_snapshot) return null
-    let onBoard = 0
-    for (let r = 0; r < 15; r++) {
-      for (let c = 0; c < 15; c++) {
-        if (entry.board_snapshot[r]?.[c]?.tile) onBoard++
-      }
-    }
-    return 100 - onBoard // tiles in bag + racks
-  }, [reviewMode, reviewMoveIndex, moveHistory])
-
-  // Suggestion placement handlers
-  const handleSuggestionSquareClick = useCallback((row: number, col: number) => {
-    if (!isSpectatingApi) return
-    const key = `${row},${col}`
-
-    // If there's a suggestion tile here, pick it up
-    if (suggestionTiles.has(key)) {
-      setSuggestionTiles(prev => {
-        const next = new Map(prev)
-        next.delete(key)
-        return next
-      })
-      return
-    }
-
-    // If square is occupied by committed tile, ignore
-    if (board[row]?.[col]?.tile) return
-
-    // Set or toggle selection
-    if (suggestionSquare?.row === row && suggestionSquare?.col === col) {
-      setSuggestionDirection(d => d === 'across' ? 'down' : 'across')
-    } else {
-      setSuggestionSquare({ row, col })
-    }
-  }, [isSpectatingApi, suggestionTiles, board, suggestionSquare])
-
-  const handleSuggestionTileClick = useCallback((tile: Tile) => {
-    if (!suggestionSquare) return
-    const key = `${suggestionSquare.row},${suggestionSquare.col}`
-    if (board[suggestionSquare.row]?.[suggestionSquare.col]?.tile) return
-    if (suggestionTiles.has(key)) return
-
-    setSuggestionTiles(prev => {
-      const next = new Map(prev)
-      next.set(key, tile)
-      return next
-    })
-
-    // Advance cursor
-    const dr = suggestionDirection === 'down' ? 1 : 0
-    const dc = suggestionDirection === 'across' ? 1 : 0
-    let nextRow = suggestionSquare.row + dr
-    let nextCol = suggestionSquare.col + dc
-    while (nextRow < 15 && nextCol < 15 && (board[nextRow]?.[nextCol]?.tile || suggestionTiles.has(`${nextRow},${nextCol}`))) {
-      nextRow += dr
-      nextCol += dc
-    }
-    if (nextRow < 15 && nextCol < 15) {
-      setSuggestionSquare({ row: nextRow, col: nextCol })
-    }
-  }, [suggestionSquare, suggestionDirection, board, suggestionTiles])
-
-  const saveSuggestion = useCallback(async () => {
-    if (!gameId || suggestionTiles.size === 0) return
-    const tiles = Array.from(suggestionTiles.entries()).map(([key, tile]) => {
-      const [row, col] = key.split(',').map(Number)
-      return {
-        cell: `${String.fromCharCode(65 + col)}${row + 1}`,
-        letter: tile.letter,
-        is_blank: tile.isBlank,
-      }
-    })
-    await supabase.from('games').update({
-      suggested_move: {
-        user_id: userId,
-        tiles: tiles.map(t => {
-          const match = t.cell.match(/^([A-O])(\d{1,2})$/)!
-          return { ...t, row: parseInt(match[2]) - 1, col: match[1].charCodeAt(0) - 65 }
-        }),
-        timestamp: new Date().toISOString(),
-      }
-    }).eq('id', gameId)
-    setSuggestionSent(true)
-    toast.success('Suggestion sent to LLM')
-  }, [gameId, suggestionTiles, userId])
-
-  const clearSuggestion = useCallback(async () => {
-    setSuggestionTiles(new Map())
-    setSuggestionSquare(null)
-    setSuggestionSent(false)
-    if (gameId) {
-      await supabase.from('games').update({ suggested_move: null }).eq('id', gameId)
-    }
-  }, [gameId])
+  const {
+    reviewMode,
+    setReviewMode,
+    reviewMoveIndex,
+    setReviewMoveIndex,
+    reviewBoard,
+    reviewHighlightTiles,
+    reviewCurrentMove,
+    reviewTiming,
+    reviewScores,
+    reviewTilesRemaining,
+  } = useReviewMode(moveHistory, board)
 
   // Live turn timer
-  const [turnElapsed, setTurnElapsed] = useState(0)
-  const turnTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
-
-  useEffect(() => {
-    if (turnTimerRef.current) clearInterval(turnTimerRef.current)
-    if (!isActive || !game?.updated_at) {
-      setTurnElapsed(0)
-      return
-    }
-    const turnStart = new Date(game.updated_at).getTime()
-    const tick = () => setTurnElapsed(Math.floor((Date.now() - turnStart) / 1000))
-    tick()
-    turnTimerRef.current = setInterval(tick, 1000)
-    return () => { if (turnTimerRef.current) clearInterval(turnTimerRef.current) }
-  }, [game?.current_turn, game?.updated_at, isActive])
-
-  const formatTimer = (sec: number): string => {
-    const m = Math.floor(sec / 60)
-    const s = sec % 60
-    return `${m}:${s.toString().padStart(2, '0')}`
-  }
+  const turnElapsed = useTurnTimer(game?.updated_at, isActive, game?.current_turn)
 
   // Trigger computer's turn automatically via Edge Function
   useEffect(() => {
@@ -1052,135 +888,21 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
       </header>
 
       <main className="container mx-auto px-2 py-4 flex flex-col lg:flex-row gap-4 items-start justify-center">
-        {/* Scoreboard sidebar */}
-        <Card className="border-amber-900/30 bg-amber-950/30 w-full lg:w-56 shrink-0">
-          <CardHeader className="py-3 px-4">
-            <CardTitle className="text-amber-300 text-sm flex items-center justify-between">
-              <span>Scoreboard</span>
-              {reviewMode && reviewTilesRemaining !== null && (
-                <span className="text-[11px] font-normal text-amber-400/70">
-                  {reviewTilesRemaining} tiles left
-                </span>
-              )}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="px-4 pb-4 space-y-2">
-            {players.map((p) => {
-              const isReviewActive = reviewMode && reviewCurrentMove?.player_id === p.player_id
-              const displayScore = reviewMode && reviewScores ? (reviewScores[p.player_id] ?? 0) : p.score
-              return (
-              <div
-                key={p.player_id}
-                className={cn(
-                  'flex items-center justify-between py-2 px-3 rounded-lg transition-colors',
-                  !reviewMode && p.player_id === game.current_turn && 'bg-amber-800/20 ring-1 ring-amber-600/30',
-                  isReviewActive && 'bg-amber-800/25 ring-1 ring-amber-500/40'
-                )}
-              >
-                <div>
-                  <div className={cn(
-                    'font-medium text-sm',
-                    isReviewActive ? 'text-amber-100' : (p.player_id === game.current_turn && !reviewMode) ? 'text-amber-100' : 'text-amber-300'
-                  )}>
-                    {p.profiles.display_name}
-                    {p.player_id === userId && ' (you)'}
-                  </div>
-                  {!reviewMode && p.player_id === game.current_turn && isActive && (
-                    <div className="text-[10px] text-green-400 flex items-center gap-1.5">
-                      <span className="animate-pulse">Playing...</span>
-                      <span className="text-amber-400/80 font-mono tabular-nums">{formatTimer(turnElapsed)}</span>
-                    </div>
-                  )}
-                  {isReviewActive && reviewCurrentMove?.type === 'play' && (
-                    <div className="text-[10px] text-amber-400/80">
-                      +{reviewCurrentMove.score ?? 0} pts
-                    </div>
-                  )}
-                </div>
-                <span className={cn(
-                  'text-xl font-bold transition-colors',
-                  isReviewActive ? 'text-amber-200' : 'text-amber-300'
-                )} style={{ fontFamily: "'Playfair Display', serif" }}>
-                  {displayScore}
-                </span>
-              </div>
-              )
-            })}
-            {/* Computer players in scoreboard */}
-            {computerPlayers.map((cp) => {
-              const isReviewActive = reviewMode && reviewCurrentMove?.player_id === cp.id
-              const displayScore = reviewMode && reviewScores ? (reviewScores[cp.id] ?? 0) : cp.score
-              return (
-              <div
-                key={cp.id}
-                className={cn(
-                  'flex items-center justify-between py-2 px-3 rounded-lg transition-colors',
-                  !reviewMode && game.current_turn === cp.id && 'bg-amber-800/20 ring-1 ring-amber-600/30',
-                  isReviewActive && 'bg-amber-800/25 ring-1 ring-amber-500/40'
-                )}
-              >
-                <div>
-                  <div className={cn(
-                    'font-medium text-sm',
-                    isReviewActive ? 'text-amber-100' : (game.current_turn === cp.id && !reviewMode) ? 'text-amber-100' : 'text-amber-300'
-                  )}>
-                    {cp.name}
-                  </div>
-                  {!reviewMode && game.current_turn === cp.id && isActive && (
-                    <div className="text-[10px] text-green-400 flex items-center gap-1.5">
-                      <span className="animate-pulse">Thinking...</span>
-                      <span className="text-amber-400/80 font-mono tabular-nums">{formatTimer(turnElapsed)}</span>
-                    </div>
-                  )}
-                  {isReviewActive && reviewCurrentMove?.type === 'play' && (
-                    <div className="text-[10px] text-amber-400/80">
-                      +{reviewCurrentMove.score ?? 0} pts
-                    </div>
-                  )}
-                </div>
-                <span className={cn(
-                  'text-xl font-bold transition-colors',
-                  isReviewActive ? 'text-amber-200' : 'text-amber-300'
-                )} style={{ fontFamily: "'Playfair Display', serif" }}>
-                  {displayScore}
-                </span>
-              </div>
-              )
-            })}
-          </CardContent>
-
-          {/* Recent moves */}
-          {game.move_history && (game.move_history as unknown[]).length > 0 && !showHistory && !reviewMode && (
-            <CardContent className="px-4 pb-4 border-t border-amber-900/20 pt-3">
-              <p className="text-amber-300 text-xs font-medium mb-2">Recent Moves</p>
-              <div className="space-y-1 max-h-40 overflow-y-auto">
-                {([...(game.move_history as { player_name: string; type: string; words?: { word: string; score: number }[]; score?: number }[])].reverse().slice(0, 10)).map((m, i) => (
-                  <div key={i} className="text-xs text-amber-400/80">
-                    <span className="text-amber-200">{m.player_name}</span>
-                    {m.type === 'play' && (
-                      <> played {m.words?.map(w => w.word).join(', ')} for <span className="text-amber-200">{m.score}</span> pts</>
-                    )}
-                    {m.type === 'pass' && <> passed</>}
-                    {m.type === 'exchange' && <> exchanged tiles</>}
-                  </div>
-                ))}
-              </div>
-            </CardContent>
-          )}
-
-          {/* History toggle */}
-          <CardContent className="px-4 pb-4 border-t border-amber-900/20 pt-3">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => setShowHistory(!showHistory)}
-              className="w-full text-amber-300 hover:text-amber-200 hover:bg-amber-900/20 text-xs"
-            >
-              <History className="h-3 w-3 mr-1" />
-              {showHistory ? 'Hide History' : 'Game History'}
-            </Button>
-          </CardContent>
-        </Card>
+        <Scoreboard
+          players={players}
+          computerPlayers={computerPlayers}
+          currentTurn={game.current_turn}
+          moveHistory={moveHistory}
+          userId={userId}
+          isActive={isActive}
+          turnElapsed={turnElapsed}
+          reviewMode={reviewMode}
+          reviewCurrentMove={reviewCurrentMove}
+          reviewScores={reviewScores}
+          reviewTilesRemaining={reviewTilesRemaining}
+          showHistory={showHistory}
+          setShowHistory={setShowHistory}
+        />
 
         {/* Game History Viewer */}
         {showHistory && (
@@ -1293,22 +1015,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
           )}
 
           {/* Blank tile chooser */}
-          {blankTileTarget && (
-            <div className="bg-amber-950/90 border border-amber-700/50 rounded-lg p-4 text-center">
-              <p className="text-amber-200 text-sm mb-2">Choose a letter for the blank tile:</p>
-              <div className="flex flex-wrap gap-1 justify-center max-w-xs">
-                {'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(letter => (
-                  <button
-                    key={letter}
-                    onClick={() => handleBlankLetterChoice(letter)}
-                    className="w-8 h-8 rounded bg-amber-800/40 text-amber-200 hover:bg-amber-700/60 text-sm font-bold transition-colors"
-                  >
-                    {letter}
-                  </button>
-                ))}
-              </div>
-            </div>
-          )}
+          {blankTileTarget && <BlankTileDialog onChoose={handleBlankLetterChoice} />}
 
           <div className="relative">
             <button
@@ -1338,86 +1045,14 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
             />
           </div>
 
-          {/* Review mode controls */}
           {reviewMode && (
-            <div className="flex flex-col items-center gap-3 w-full max-w-lg">
-              {/* Navigation */}
-              <div className="flex items-center gap-2">
-                <Button
-                  variant="ghost" size="icon"
-                  onClick={() => setReviewMoveIndex(-1)}
-                  disabled={reviewMoveIndex <= -1}
-                  className="h-9 w-9 text-amber-400 hover:text-amber-200 hover:bg-amber-900/30"
-                >
-                  <ChevronsLeft className="h-5 w-5" />
-                </Button>
-                <Button
-                  variant="ghost" size="icon"
-                  onClick={() => setReviewMoveIndex(i => Math.max(-1, i - 1))}
-                  disabled={reviewMoveIndex <= -1}
-                  className="h-9 w-9 text-amber-400 hover:text-amber-200 hover:bg-amber-900/30"
-                >
-                  <ChevronLeft className="h-5 w-5" />
-                </Button>
-
-                <span className="text-amber-300 text-sm min-w-[100px] text-center font-medium">
-                  Move {reviewMoveIndex + 1} / {moveHistory.length}
-                </span>
-
-                <Button
-                  variant="ghost" size="icon"
-                  onClick={() => setReviewMoveIndex(i => Math.min(moveHistory.length - 1, i + 1))}
-                  disabled={reviewMoveIndex >= moveHistory.length - 1}
-                  className="h-9 w-9 text-amber-400 hover:text-amber-200 hover:bg-amber-900/30"
-                >
-                  <ChevronRight className="h-5 w-5" />
-                </Button>
-                <Button
-                  variant="ghost" size="icon"
-                  onClick={() => setReviewMoveIndex(moveHistory.length - 1)}
-                  disabled={reviewMoveIndex >= moveHistory.length - 1}
-                  className="h-9 w-9 text-amber-400 hover:text-amber-200 hover:bg-amber-900/30"
-                >
-                  <ChevronsRight className="h-5 w-5" />
-                </Button>
-              </div>
-
-              {/* Move info */}
-              {reviewCurrentMove ? (
-                <div className="text-center px-4 py-2.5 rounded-lg bg-amber-950/40 border border-amber-900/30 w-full">
-                  <div className="text-amber-200 font-medium text-sm">
-                    {reviewCurrentMove.player_name}
-                  </div>
-                  {reviewCurrentMove.type === 'play' && reviewCurrentMove.words && (
-                    <div className="text-amber-300/90 text-sm mt-0.5">
-                      played <span className="text-amber-100 font-semibold">{reviewCurrentMove.words.map(w => w.word).join(', ')}</span> for <span className="text-amber-100 font-bold">{reviewCurrentMove.score}</span> pts
-                    </div>
-                  )}
-                  {reviewCurrentMove.type === 'pass' && (
-                    <div className="text-amber-400/80 text-sm mt-0.5">passed</div>
-                  )}
-                  {reviewCurrentMove.type === 'exchange' && (
-                    <div className="text-amber-400/80 text-sm mt-0.5">exchanged tiles</div>
-                  )}
-                  {reviewTiming && reviewMoveIndex > 0 && reviewTiming.elapsed[reviewMoveIndex] > 0 && (
-                    <div className="text-amber-500/70 text-xs mt-1 flex items-center justify-center gap-1">
-                      <Clock className="h-3 w-3" />
-                      {(() => {
-                        const sec = reviewTiming.elapsed[reviewMoveIndex]
-                        if (sec < 60) return `${sec.toFixed(1)}s`
-                        const m = Math.floor(sec / 60)
-                        const s = Math.round(sec % 60)
-                        return `${m}m ${s}s`
-                      })()}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="text-center text-sm text-amber-400 px-4 py-2 rounded-lg bg-amber-950/40 border border-amber-900/30 w-full">
-                  Board before first move
-                </div>
-              )}
-            </div>
+            <ReviewControls
+              moveHistory={moveHistory}
+              reviewMoveIndex={reviewMoveIndex}
+              setReviewMoveIndex={setReviewMoveIndex}
+              reviewCurrentMove={reviewCurrentMove}
+              reviewTiming={reviewTiming}
+            />
           )}
 
           {/* Rack */}
@@ -1433,71 +1068,18 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                 onReturnFromBoard={handlePickupTile}
               />
 
-              {/* Action buttons */}
               {isMyTurn && (
-                <div className="flex gap-2 justify-center flex-wrap">
-                  {placedTiles.size > 0 && (
-                    <>
-                      <Button
-                        onClick={handleSubmitMove}
-                        disabled={submitting}
-                        className="bg-green-700 hover:bg-green-600 text-white font-semibold px-5"
-                      >
-                        <Send className="h-4 w-4 mr-1" />
-                        {submitting ? 'Submitting...' : 'Submit Word'}
-                      </Button>
-                      <Button
-                        onClick={handleRecall}
-                        className="bg-amber-900/60 hover:bg-amber-800/70 text-amber-200 border border-amber-700/40 font-semibold"
-                      >
-                        <RotateCcw className="h-4 w-4 mr-1" />
-                        Recall
-                      </Button>
-                    </>
-                  )}
-                  {placedTiles.size === 0 && (
-                    <>
-                      <Button
-                        onClick={toggleExchangeMode}
-                        className={isExchangeMode
-                          ? 'bg-red-800 hover:bg-red-700 text-white font-semibold'
-                          : 'bg-amber-900/60 hover:bg-amber-800/70 text-amber-200 border border-amber-700/40 font-semibold'
-                        }
-                      >
-                        <RefreshCw className="h-4 w-4 mr-1" />
-                        {isExchangeMode ? 'Cancel Exchange' : 'Exchange'}
-                      </Button>
-                      {isExchangeMode && exchangeSelection.size > 0 && (
-                        <Button
-                          onClick={handlePass}
-                          disabled={submitting}
-                          className="bg-amber-700 hover:bg-amber-600 text-white font-semibold"
-                        >
-                          <RefreshCw className="h-4 w-4 mr-1" />
-                          Exchange {exchangeSelection.size} tile(s)
-                        </Button>
-                      )}
-                      {!isExchangeMode && (
-                        <>
-                          <Button
-                            onClick={handlePass}
-                            disabled={submitting}
-                            className="bg-amber-900/60 hover:bg-amber-800/70 text-amber-200 border border-amber-700/40 font-semibold"
-                          >
-                            <Flag className="h-4 w-4 mr-1" />
-                            Pass
-                          </Button>
-                          <Button
-                            onClick={handleChallenge}
-                            className="bg-red-900/60 hover:bg-red-800/70 text-red-200 border border-red-700/40 font-semibold"
-                          >
-                            Challenge
-                          </Button>
-                        </>
-                      )}
-                    </>
-                  )}
-                </div>
+                <GameControls
+                  hasPlacedTiles={placedTiles.size > 0}
+                  submitting={submitting}
+                  isExchangeMode={isExchangeMode}
+                  exchangeSelectionSize={exchangeSelection.size}
+                  onSubmit={handleSubmitMove}
+                  onRecall={handleRecall}
+                  onToggleExchange={toggleExchangeMode}
+                  onPass={handlePass}
+                  onChallenge={handleChallenge}
+                />
               )}
             </div>
           )}
@@ -1517,93 +1099,19 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
             </div>
           )}
 
-          {/* Show API player racks when spectating (not a player in the game) */}
           {isSpectatingApi && spectatingApiPlayer && (
-            <div className="space-y-2">
-              <div className="text-center text-xs text-purple-300">
-                {spectatingApiPlayer.name}&apos;s rack
-                {suggestionSquare && <span className="text-amber-400 ml-1">(tap tiles to suggest)</span>}
-              </div>
-              <TileRack
-                tiles={suggestionRack}
-                onTileClick={handleSuggestionTileClick}
-                selectedTiles={new Set()}
-                isExchangeMode={false}
-              />
-              {/* Suggestion controls */}
-              <div className="flex flex-col items-center gap-2">
-                {suggestionTiles.size > 0 && !suggestionSent && (
-                  <div className="flex justify-center gap-2 w-full">
-                    <Button
-                      size="sm"
-                      onClick={saveSuggestion}
-                      className="bg-purple-600 hover:bg-purple-500 text-white gap-1.5 animate-pulse shadow-lg shadow-purple-900/50 ring-2 ring-purple-400/50"
-                    >
-                      <Lightbulb className="h-4 w-4" />
-                      Send Suggestion
-                    </Button>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={clearSuggestion}
-                      className="text-amber-400 hover:text-amber-200 gap-1"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                      Clear
-                    </Button>
-                  </div>
-                )}
-                {suggestionTiles.size > 0 && !suggestionSent && (
-                  <div className="text-amber-400/80 text-[11px] font-medium">
-                    Suggestion not sent yet — click Send or press Enter
-                  </div>
-                )}
-                {suggestionSent && (
-                  <div className="flex items-center justify-center gap-2 w-full">
-                    <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-900/30 border border-green-700/40">
-                      <Lightbulb className="h-3.5 w-3.5 text-green-400" />
-                      <span className="text-green-300 text-xs font-medium">Suggestion sent</span>
-                    </div>
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      onClick={clearSuggestion}
-                      className="text-amber-400 hover:text-amber-200 gap-1"
-                    >
-                      <X className="h-3.5 w-3.5" />
-                      Clear
-                    </Button>
-                  </div>
-                )}
-                {suggestionTiles.size === 0 && !suggestionSquare && !previewedTiles?.length && (
-                  <div className="text-amber-500/60 text-xs">
-                    Tap a square on the board, then tap rack tiles to suggest a move
-                  </div>
-                )}
-              </div>
-              {/* LLM preview indicator with clear option */}
-              {previewedTiles && previewedTiles.length > 0 && (
-                <div className="flex items-center justify-center gap-2 px-3 py-2 rounded-lg bg-purple-900/20 border border-purple-700/30">
-                  <Eye className="h-3.5 w-3.5 text-purple-400" />
-                  <span className="text-purple-300 text-xs">
-                    LLM is considering: {previewedTiles.map(t => `${t.letter}(${String.fromCharCode(65 + t.col)}${t.row + 1})`).join(' ')}
-                  </span>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    onClick={async () => {
-                      if (gameId) {
-                        await supabase.from('games').update({ previewed_move: null }).eq('id', gameId)
-                      }
-                    }}
-                    className="text-purple-400 hover:text-purple-200 h-6 px-2 text-xs gap-1"
-                  >
-                    <X className="h-3 w-3" />
-                    Dismiss
-                  </Button>
-                </div>
-              )}
-            </div>
+            <SuggestionControls
+              gameId={gameId}
+              spectatingApiPlayerName={spectatingApiPlayer.name}
+              suggestionRack={suggestionRack}
+              suggestionTiles={suggestionTiles}
+              suggestionSquare={suggestionSquare}
+              suggestionSent={suggestionSent}
+              previewedTiles={previewedTiles}
+              onTileClick={handleSuggestionTileClick}
+              saveSuggestion={saveSuggestion}
+              clearSuggestion={clearSuggestion}
+            />
           )}
         </div>
       </main>
