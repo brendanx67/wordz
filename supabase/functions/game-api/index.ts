@@ -1,28 +1,16 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
+import type { Tile, BoardCell } from "./_shared/gameConstants.ts";
+import { BOARD_SIZE, RACK_SIZE, getBonusType } from "./_shared/gameConstants.ts";
+import type { TrieNode } from "./_shared/trie.ts";
+import { buildTrie, isWord } from "./_shared/trie.ts";
+import type { GeneratedMove } from "./_shared/moveGenerator.ts";
+import { generateAllMoves } from "./_shared/moveGenerator.ts";
 
 const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
     "authorization, x-client-info, apikey, content-type, x-api-key",
 };
-
-const BOARD_SIZE = 15;
-const RACK_SIZE = 7;
-
-type BonusType = "TW" | "DW" | "TL" | "DL" | "CENTER" | null;
-
-interface Tile {
-  letter: string;
-  value: number;
-  isBlank: boolean;
-  id: string;
-}
-
-interface BoardCell {
-  tile: Tile | null;
-  bonus: BonusType;
-  isNew: boolean;
-}
 
 interface ApiPlayer {
   id: string;
@@ -31,68 +19,7 @@ interface ApiPlayer {
   score: number;
 }
 
-// ─── BONUS MAP ────────────────────────────────────────────────────────────────
-const TW_POS = [[0,0],[0,7],[0,14],[7,0],[7,14],[14,0],[14,7],[14,14]];
-const DW_POS = [
-  [1,1],[2,2],[3,3],[4,4],[10,10],[11,11],[12,12],[13,13],
-  [1,13],[2,12],[3,11],[4,10],[10,4],[11,3],[12,2],[13,1],
-];
-const TL_POS = [
-  [1,5],[1,9],[5,1],[5,5],[5,9],[5,13],
-  [9,1],[9,5],[9,9],[9,13],[13,5],[13,9],
-];
-const DL_POS = [
-  [0,3],[0,11],[2,6],[2,8],[3,0],[3,7],[3,14],
-  [6,2],[6,6],[6,8],[6,12],[7,3],[7,11],
-  [8,2],[8,6],[8,8],[8,12],[11,0],[11,7],[11,14],
-  [12,6],[12,8],[14,3],[14,11],
-];
-
-const bonusMap = new Map<string, BonusType>();
-TW_POS.forEach(([r, c]) => bonusMap.set(`${r},${c}`, "TW"));
-DW_POS.forEach(([r, c]) => bonusMap.set(`${r},${c}`, "DW"));
-TL_POS.forEach(([r, c]) => bonusMap.set(`${r},${c}`, "TL"));
-DL_POS.forEach(([r, c]) => bonusMap.set(`${r},${c}`, "DL"));
-bonusMap.set("7,7", "CENTER");
-
-function getBonusType(row: number, col: number): BonusType {
-  return bonusMap.get(`${row},${col}`) ?? null;
-}
-
-// ─── TRIE (for word validation) ───────────────────────────────────────────────
-interface TrieNode {
-  children: Map<string, TrieNode>;
-  isTerminal: boolean;
-}
-
-function createTrieNode(): TrieNode {
-  return { children: new Map(), isTerminal: false };
-}
-
-function insertWord(root: TrieNode, word: string): void {
-  let node = root;
-  for (const ch of word) {
-    let child = node.children.get(ch);
-    if (!child) {
-      child = createTrieNode();
-      node.children.set(ch, child);
-    }
-    node = child;
-  }
-  node.isTerminal = true;
-}
-
-function isWord(root: TrieNode, word: string): boolean {
-  let node = root;
-  for (const ch of word) {
-    const child = node.children.get(ch);
-    if (!child) return false;
-    node = child;
-  }
-  return node.isTerminal;
-}
-
-// ─── Dictionary cache for move generator ─────────────────────────────────────
+// ─── Dictionary loader (uses shared Trie with built-in cache) ────────────────
 let wordListCache: string | null = null;
 
 async function getWordList(): Promise<string> {
@@ -104,276 +31,8 @@ async function getWordList(): Promise<string> {
   return wordListCache;
 }
 
-async function getMoveGenTrie(): Promise<TrieNode> {
-  const wl = await getWordList();
-  if (moveGenTrie) return moveGenTrie;
-  const root = createTrieNode();
-  for (const line of wl.split("\n")) {
-    const trimmed = line.trim().toUpperCase();
-    if (trimmed.length >= 2) insertWord(root, trimmed);
-  }
-  moveGenTrie = root;
-  return root;
-}
-let moveGenTrie: TrieNode | null = null;
-
-// ─── MOVE GENERATOR (Appel & Jacobson) ──────────────────────────────────────
-interface GeneratedMove {
-  tiles: { row: number; col: number; tile: Tile }[];
-  words: { word: string; score: number }[];
-  totalScore: number;
-}
-
-function getCrossCheckSet(
-  board: BoardCell[][], trie: TrieNode,
-  row: number, col: number, checkVertical: boolean
-): Set<string> {
-  let prefixStr = "", suffixStr = "";
-  if (checkVertical) {
-    let r = row - 1;
-    while (r >= 0 && board[r][col].tile) { prefixStr = board[r][col].tile!.letter + prefixStr; r--; }
-    r = row + 1;
-    while (r < BOARD_SIZE && board[r][col].tile) { suffixStr += board[r][col].tile!.letter; r++; }
-  } else {
-    let c = col - 1;
-    while (c >= 0 && board[row][c].tile) { prefixStr = board[row][c].tile!.letter + prefixStr; c--; }
-    c = col + 1;
-    while (c < BOARD_SIZE && board[row][c].tile) { suffixStr += board[row][c].tile!.letter; c++; }
-  }
-  if (!prefixStr && !suffixStr) return new Set("ABCDEFGHIJKLMNOPQRSTUVWXYZ".split(""));
-  const valid = new Set<string>();
-  for (const l of "ABCDEFGHIJKLMNOPQRSTUVWXYZ") {
-    if (isWord(trie, prefixStr + l + suffixStr)) valid.add(l);
-  }
-  return valid;
-}
-
-function computeCrossChecks(board: BoardCell[][], trie: TrieNode): Map<string, Set<string>> {
-  const checks = new Map<string, Set<string>>();
-  for (let r = 0; r < BOARD_SIZE; r++) {
-    for (let c = 0; c < BOARD_SIZE; c++) {
-      if (board[r][c].tile) continue;
-      checks.set(`h:${r},${c}`, getCrossCheckSet(board, trie, r, c, true));
-      checks.set(`v:${r},${c}`, getCrossCheckSet(board, trie, r, c, false));
-    }
-  }
-  return checks;
-}
-
-function findAnchors(board: BoardCell[][]): Set<string> {
-  const anchors = new Set<string>();
-  const hasAny = board.some(row => row.some(cell => cell.tile));
-  if (!hasAny) { anchors.add("7,7"); return anchors; }
-  for (let r = 0; r < BOARD_SIZE; r++) {
-    for (let c = 0; c < BOARD_SIZE; c++) {
-      if (board[r][c].tile) continue;
-      const nbrs = [[r-1,c],[r+1,c],[r,c-1],[r,c+1]];
-      if (nbrs.some(([nr,nc]) => nr>=0 && nr<BOARD_SIZE && nc>=0 && nc<BOARD_SIZE && board[nr][nc].tile)) {
-        anchors.add(`${r},${c}`);
-      }
-    }
-  }
-  return anchors;
-}
-
-function scoreWord(positions: { row: number; col: number; letter: string; value: number; isNew: boolean }[]): number {
-  let raw = 0, mult = 1;
-  for (const p of positions) {
-    let ls = p.value;
-    if (p.isNew) {
-      const b = getBonusType(p.row, p.col);
-      if (b === "DL") ls *= 2; else if (b === "TL") ls *= 3;
-      else if (b === "DW" || b === "CENTER") mult *= 2; else if (b === "TW") mult *= 3;
-    }
-    raw += ls;
-  }
-  return raw * mult;
-}
-
-function computeMoveScore(
-  board: BoardCell[][],
-  placedTiles2: { row: number; col: number; letter: string; value: number }[],
-  _trie: TrieNode
-): { words: { word: string; score: number }[]; totalScore: number } | null {
-  if (!placedTiles2.length) return null;
-  const tempBoard: (BoardCell & { placed?: { letter: string; value: number } })[][] =
-    board.map(row => row.map(cell => ({ ...cell })));
-  for (const pt of placedTiles2) {
-    tempBoard[pt.row][pt.col] = { ...tempBoard[pt.row][pt.col], placed: { letter: pt.letter, value: pt.value } };
-  }
-  const getTileAt = (r: number, c: number) => {
-    const cell = tempBoard[r][c];
-    if (cell.tile) return { letter: cell.tile.letter, value: cell.tile.value, isNew: false };
-    if ((cell as { placed?: { letter: string; value: number } }).placed) {
-      const p = (cell as { placed: { letter: string; value: number } }).placed;
-      return { letter: p.letter, value: p.value, isNew: true };
-    }
-    return null;
-  };
-  const hasTileAt = (r: number, c: number) => getTileAt(r, c) !== null;
-  const rows = new Set(placedTiles2.map(t => t.row));
-  const isHorizontal = rows.size === 1;
-
-  const getWordAlong = (startR: number, startC: number, horizontal: boolean) => {
-    let r = startR, c = startC;
-    if (horizontal) { while (c > 0 && hasTileAt(r, c-1)) c--; }
-    else { while (r > 0 && hasTileAt(r-1, c)) r--; }
-    const positions: { row: number; col: number; letter: string; value: number; isNew: boolean }[] = [];
-    let word = "";
-    while (r < BOARD_SIZE && c < BOARD_SIZE && hasTileAt(r, c)) {
-      const t = getTileAt(r, c)!; word += t.letter; positions.push({ row: r, col: c, ...t });
-      if (horizontal) c++; else r++;
-    }
-    if (word.length < 2) return null;
-    return { word, score: scoreWord(positions) };
-  };
-
-  const words: { word: string; score: number }[] = [];
-  const main = getWordAlong(placedTiles2[0].row, placedTiles2[0].col, isHorizontal);
-  if (main) words.push(main);
-  for (const pt of placedTiles2) {
-    const cross = getWordAlong(pt.row, pt.col, !isHorizontal);
-    if (cross) words.push(cross);
-  }
-  if (!words.length) return null;
-  let total = words.reduce((s, w) => s + w.score, 0);
-  if (placedTiles2.length === 7) total += 50;
-  return { words, totalScore: total };
-}
-
-function generateAllMoves(board: BoardCell[][], rack: Tile[], trie: TrieNode): GeneratedMove[] {
-  const moves: GeneratedMove[] = [];
-  const anchors = findAnchors(board);
-  const crossChecks = computeCrossChecks(board, trie);
-  const rackLetters: string[] = rack.map(t => t.isBlank ? "*" : t.letter);
-
-  for (const dir of ["horizontal", "vertical"] as const) {
-    for (const anchorStr of anchors) {
-      const [aR, aC] = anchorStr.split(",").map(Number);
-      let maxPrefix = 0;
-      if (dir === "horizontal") {
-        let c = aC - 1;
-        while (c >= 0 && !board[aR][c].tile && !anchors.has(`${aR},${c}`)) { maxPrefix++; c--; }
-      } else {
-        let r = aR - 1;
-        while (r >= 0 && !board[r][aC].tile && !anchors.has(`${r},${aC}`)) { maxPrefix++; r--; }
-      }
-      const existing = getExistingPrefix(board, aR, aC, dir);
-      if (existing) {
-        const node = getNode(trie, existing);
-        if (node) extendRight(board, trie, crossChecks, rackLetters, rack, aR, aC, node, existing, [], dir, moves, true);
-      } else {
-        generateWithPrefix(board, trie, crossChecks, rackLetters, rack, aR, aC, maxPrefix, dir, moves);
-      }
-    }
-  }
-
-  const seen = new Set<string>();
-  return moves.filter(m => {
-    const key = m.tiles.map(t => `${t.row},${t.col}:${t.tile.letter}`).sort().join("|");
-    if (seen.has(key)) return false; seen.add(key); return true;
-  });
-}
-
-function getExistingPrefix(board: BoardCell[][], aR: number, aC: number, dir: "horizontal"|"vertical"): string|null {
-  let prefix = "";
-  if (dir === "horizontal") {
-    let c = aC - 1; while (c >= 0 && board[aR][c].tile) { prefix = board[aR][c].tile!.letter + prefix; c--; }
-  } else {
-    let r = aR - 1; while (r >= 0 && board[r][aC].tile) { prefix = board[r][aC].tile!.letter + prefix; r--; }
-  }
-  return prefix || null;
-}
-
-function generateWithPrefix(
-  board: BoardCell[][], trie: TrieNode, cc: Map<string,Set<string>>,
-  rackLetters: string[], rack: Tile[],
-  aR: number, aC: number, maxPrefix: number,
-  dir: "horizontal"|"vertical", moves: GeneratedMove[]
-): void {
-  extendRight(board, trie, cc, rackLetters, rack, aR, aC, trie, "", [], dir, moves, true);
-
-  function buildPrefix(node: TrieNode, prefixTiles: { row:number;col:number;tile:Tile }[], remaining: string[], depth: number) {
-    if (depth > maxPrefix) return;
-    const pos = dir === "horizontal" ? { row: aR, col: aC - depth } : { row: aR - depth, col: aC };
-    if (pos.row < 0 || pos.col < 0) return;
-
-    for (const [letter, childNode] of node.children) {
-      const ccKey = dir === "horizontal" ? `h:${pos.row},${pos.col}` : `v:${pos.row},${pos.col}`;
-      const ccSet = cc.get(ccKey);
-      if (ccSet && !ccSet.has(letter)) continue;
-
-      const tryTile = (tile: Tile, asLetter: string, asValue: number) => {
-        const newRemaining = [...remaining];
-        const idx = newRemaining.indexOf(tile.isBlank ? "*" : tile.letter);
-        if (idx < 0) return;
-        newRemaining.splice(idx, 1);
-        const placed: Tile = { ...tile, letter: asLetter, value: asValue };
-        const newPT = [{ row: pos.row, col: pos.col, tile: placed }, ...prefixTiles];
-        const currentPrefix = newPT.map(t => t.tile.letter).join("");
-        extendRight(board, trie, cc, newRemaining, rack, aR, aC, childNode, currentPrefix, newPT, dir, moves, true);
-        buildPrefix(childNode, newPT, newRemaining, depth + 1);
-      };
-
-      const usedIds = new Set(prefixTiles.map(t => t.tile.id));
-      const reg = rack.find(t => !t.isBlank && t.letter === letter && !usedIds.has(t.id));
-      if (reg) tryTile(reg, letter, reg.value);
-      const blank = rack.find(t => t.isBlank && !usedIds.has(t.id));
-      if (blank) tryTile(blank, letter, 0);
-    }
-  }
-  buildPrefix(trie, [], rackLetters, 1);
-}
-
-function extendRight(
-  board: BoardCell[][], trie: TrieNode, crossChecks: Map<string,Set<string>>,
-  _rackLetters: string[], rack: Tile[],
-  row: number, col: number, node: TrieNode, _wordSoFar: string,
-  tilesPlaced: { row:number;col:number;tile:Tile }[],
-  dir: "horizontal"|"vertical", moves: GeneratedMove[], isAnchor: boolean
-): void {
-  if (row >= BOARD_SIZE || col >= BOARD_SIZE) {
-    if (node.isTerminal && tilesPlaced.length > 0) recordMove(board, trie, tilesPlaced, moves);
-    return;
-  }
-  const cell = board[row][col];
-  if (cell.tile) {
-    const child = node.children.get(cell.tile.letter);
-    if (child) {
-      const nR = dir === "vertical" ? row+1 : row, nC = dir === "horizontal" ? col+1 : col;
-      extendRight(board, trie, crossChecks, _rackLetters, rack, nR, nC, child, _wordSoFar + cell.tile.letter, tilesPlaced, dir, moves, false);
-    }
-    return;
-  }
-  if (node.isTerminal && tilesPlaced.length > 0 && !isAnchor) recordMove(board, trie, tilesPlaced, moves);
-
-  const ccKey = dir === "horizontal" ? `h:${row},${col}` : `v:${row},${col}`;
-  const ccSet = crossChecks.get(ccKey);
-  const usedIds = new Set(tilesPlaced.map(t => t.tile.id));
-  const nR = dir === "vertical" ? row+1 : row, nC = dir === "horizontal" ? col+1 : col;
-
-  for (const [letter, childNode] of node.children) {
-    if (ccSet && !ccSet.has(letter)) continue;
-    const reg = rack.find(t => !t.isBlank && t.letter === letter && !usedIds.has(t.id));
-    if (reg) {
-      extendRight(board, trie, crossChecks, _rackLetters, rack, nR, nC, childNode, _wordSoFar + letter,
-        [...tilesPlaced, { row, col, tile: reg }], dir, moves, false);
-    }
-    const blank2 = rack.find(t => t.isBlank && !usedIds.has(t.id));
-    if (blank2) {
-      const assigned: Tile = { ...blank2, letter, value: 0 };
-      extendRight(board, trie, crossChecks, _rackLetters, rack, nR, nC, childNode, _wordSoFar + letter,
-        [...tilesPlaced, { row, col, tile: assigned }], dir, moves, false);
-    }
-  }
-}
-
-function recordMove(board: BoardCell[][], trie: TrieNode, tilesPlaced: { row:number;col:number;tile:Tile }[], moves: GeneratedMove[]): void {
-  const placed = tilesPlaced.map(t => ({ row: t.row, col: t.col, letter: t.tile.letter, value: t.tile.value }));
-  const result = computeMoveScore(board, placed, trie);
-  if (!result) return;
-  for (const w of result.words) { if (!isWord(trie, w.word)) return; }
-  moves.push({ tiles: tilesPlaced, words: result.words, totalScore: result.totalScore });
+async function getTrie(): Promise<TrieNode> {
+  return buildTrie(await getWordList());
 }
 
 // ─── Cell notation support (accepts both "H8" cell format and {row, col} format) ───
@@ -401,25 +60,6 @@ function normalizeTile(t: RawTile): { row: number; col: number; letter: string; 
     throw new Error("Each tile must have either 'cell' (e.g. 'H8') or 'row' and 'col'");
   }
   return { row, col, letter: t.letter.toUpperCase(), is_blank: t.is_blank || false };
-}
-
-let cachedTrie: TrieNode | null = null;
-
-async function getTrie(): Promise<TrieNode> {
-  if (cachedTrie) return cachedTrie;
-  if (!wordListCache) {
-    const res = await fetch(
-      "https://raw.githubusercontent.com/cviebrock/wordlists/master/TWL06.txt"
-    );
-    wordListCache = await res.text();
-  }
-  const root = createTrieNode();
-  for (const line of wordListCache.split("\n")) {
-    const trimmed = line.trim().toUpperCase();
-    if (trimmed.length >= 2) insertWord(root, trimmed);
-  }
-  cachedTrie = root;
-  return root;
 }
 
 // ─── SCORING ──────────────────────────────────────────────────────────────────
@@ -1242,7 +882,7 @@ async function handleFindWords(req: Request): Promise<Response> {
   if (!myPlayer) return jsonError("Player not found in game", 404);
 
   const boardState = game.board as BoardCell[][];
-  const trie = await getMoveGenTrie();
+  const trie = await getTrie();
 
   const allMoves = generateAllMoves(boardState, myPlayer.rack, trie);
 
