@@ -723,7 +723,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
       {/* Header */}
       <header className="border-b border-amber-900/30 bg-amber-950/40 backdrop-blur sticky top-0 z-50">
         <div className="container mx-auto px-3 py-2.5 flex items-center justify-between">
-          <Button variant="ghost" size="sm" onClick={onBack} className="text-amber-200 hover:text-white hover:bg-amber-800/30">
+          <Button variant="ghost" size="sm" onClick={onBack} className="text-amber-200 hover:text-white hover:bg-amber-700/50">
             <ArrowLeft className="h-4 w-4 mr-1" />
             <span className="text-sm">Lobby</span>
           </Button>
