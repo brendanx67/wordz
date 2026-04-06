@@ -367,17 +367,34 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   }, [blankTileTarget])
 
   const handleDrop = useCallback((row: number, col: number, tile: Tile) => {
+    if (isSpectatingApi) {
+      // Drop in suggestion mode
+      const key = `${row},${col}`
+      if (board[row]?.[col]?.tile || suggestionTiles.has(key)) return
+      setSuggestionTiles(prev => {
+        const next = new Map(prev)
+        next.set(key, tile)
+        return next
+      })
+      return
+    }
     if (!isMyTurn || !isActive) return
     placeTileOnBoard(row, col, tile)
-  }, [isMyTurn, isActive, placeTileOnBoard])
+  }, [isMyTurn, isActive, isSpectatingApi, placeTileOnBoard, board, suggestionTiles])
 
-  // Keyboard support: type letters to place tiles
+  // Keyboard support: type letters to place tiles (works for both own turn and suggestion mode)
   useEffect(() => {
-    if (!isMyTurn || !isActive) return
+    const canType = (isMyTurn && isActive) || isSpectatingApi
+    if (!canType) return
+
+    const activeSquare = isSpectatingApi ? suggestionSquare : selectedSquare
+    const activeDirection = isSpectatingApi ? suggestionDirection : direction
+    const activeTiles = isSpectatingApi ? suggestionTiles : placedTiles
+    const activeRack = isSpectatingApi ? suggestionRack : rackTiles
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Blank tile letter selection
-      if (blankTileTarget) {
+      // Blank tile letter selection (own turn only)
+      if (!isSpectatingApi && blankTileTarget) {
         if (/^[a-zA-Z]$/.test(e.key)) {
           handleBlankLetterChoice(e.key)
         } else if (e.key === 'Escape') {
@@ -388,83 +405,119 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
 
       if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
         e.preventDefault()
-        setDirection(e.key === 'ArrowDown' ? 'down' : 'across')
+        if (isSpectatingApi) {
+          setSuggestionDirection(e.key === 'ArrowDown' ? 'down' : 'across')
+        } else {
+          setDirection(e.key === 'ArrowDown' ? 'down' : 'across')
+        }
         return
       }
 
       if (e.key === 'Backspace') {
         e.preventDefault()
-        // Remove the last placed tile
-        const entries = Array.from(placedTiles.entries())
+        const entries = Array.from(activeTiles.entries())
         if (entries.length > 0) {
           const lastKey = entries[entries.length - 1][0]
-          setPlacedTiles(prev => {
-            const next = new Map(prev)
-            next.delete(lastKey)
-            return next
-          })
-          // Move selection back
-          const [r, c] = lastKey.split(',').map(Number)
-          setSelectedSquare({ row: r, col: c })
+          if (isSpectatingApi) {
+            setSuggestionTiles(prev => {
+              const next = new Map(prev)
+              next.delete(lastKey)
+              return next
+            })
+            const [r, c] = lastKey.split(',').map(Number)
+            setSuggestionSquare({ row: r, col: c })
+          } else {
+            setPlacedTiles(prev => {
+              const next = new Map(prev)
+              next.delete(lastKey)
+              return next
+            })
+            const [r, c] = lastKey.split(',').map(Number)
+            setSelectedSquare({ row: r, col: c })
+          }
         }
         return
       }
 
       if (e.key === 'Enter') {
         e.preventDefault()
-        if (placedTiles.size > 0) handleSubmitMove()
+        if (isSpectatingApi) {
+          if (suggestionTiles.size > 0) saveSuggestion()
+        } else {
+          if (placedTiles.size > 0) handleSubmitMove()
+        }
         return
       }
 
       if (e.key === 'Escape') {
         e.preventDefault()
-        handleRecall()
+        if (isSpectatingApi) {
+          setSuggestionTiles(new Map())
+          setSuggestionSquare(null)
+        } else {
+          handleRecall()
+        }
         return
       }
 
-      if (!selectedSquare) return
+      if (!activeSquare) return
 
       const letter = e.key.toUpperCase()
       if (!/^[A-Z]$/.test(letter)) return
       e.preventDefault()
 
       // Find a matching tile in the rack
-      const matchingTile = rackTiles.find(t => t.letter === letter)
-      // Also check for blank tiles if no regular match
-      const tileToPlace = matchingTile || rackTiles.find(t => t.isBlank)
+      const matchingTile = activeRack.find(t => t.letter === letter)
+      const tileToPlace = matchingTile || activeRack.find(t => t.isBlank)
       if (!tileToPlace) return
 
-      if (tileToPlace.isBlank) {
-        // For blank, assign the typed letter
-        const blankAsLetter: Tile = { ...tileToPlace, letter, value: 0 }
-        setPlacedTiles(prev => {
+      const key = `${activeSquare.row},${activeSquare.col}`
+      if (board[activeSquare.row]?.[activeSquare.col]?.tile) return
+      if (activeTiles.has(key)) return
+
+      if (isSpectatingApi) {
+        const placed = tileToPlace.isBlank ? { ...tileToPlace, letter, value: 0 } : tileToPlace
+        setSuggestionTiles(prev => {
           const next = new Map(prev)
-          next.set(`${selectedSquare.row},${selectedSquare.col}`, blankAsLetter)
+          next.set(key, placed)
           return next
         })
       } else {
-        placeTileOnBoard(selectedSquare.row, selectedSquare.col, tileToPlace)
+        if (tileToPlace.isBlank) {
+          const blankAsLetter: Tile = { ...tileToPlace, letter, value: 0 }
+          setPlacedTiles(prev => {
+            const next = new Map(prev)
+            next.set(key, blankAsLetter)
+            return next
+          })
+        } else {
+          placeTileOnBoard(activeSquare.row, activeSquare.col, tileToPlace)
+        }
       }
 
       // Advance cursor
-      let nextRow = selectedSquare.row
-      let nextCol = selectedSquare.col
+      let nextRow = activeSquare.row
+      let nextCol = activeSquare.col
       do {
-        if (direction === 'across') nextCol++
+        if (activeDirection === 'across') nextCol++
         else nextRow++
       } while (
         nextRow < 15 && nextCol < 15 &&
-        (board[nextRow]?.[nextCol]?.tile || placedTiles.has(`${nextRow},${nextCol}`))
+        (board[nextRow]?.[nextCol]?.tile || activeTiles.has(`${nextRow},${nextCol}`))
       )
       if (nextRow < 15 && nextCol < 15) {
-        setSelectedSquare({ row: nextRow, col: nextCol })
+        if (isSpectatingApi) {
+          setSuggestionSquare({ row: nextRow, col: nextCol })
+        } else {
+          setSelectedSquare({ row: nextRow, col: nextCol })
+        }
       }
     }
 
     window.addEventListener('keydown', handleKeyDown)
     return () => window.removeEventListener('keydown', handleKeyDown)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isMyTurn, isActive, selectedSquare, direction, rackTiles, placedTiles, board, blankTileTarget])
+  }, [isMyTurn, isActive, isSpectatingApi, selectedSquare, suggestionSquare, direction, suggestionDirection, rackTiles, suggestionRack, placedTiles, suggestionTiles, board, blankTileTarget])
 
   const handleRecall = () => {
     setPlacedTiles(new Map())
@@ -473,6 +526,14 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
 
   const handlePickupTile = useCallback((row: number, col: number) => {
     const key = `${row},${col}`
+    if (isSpectatingApi && suggestionTiles.has(key)) {
+      setSuggestionTiles(prev => {
+        const next = new Map(prev)
+        next.delete(key)
+        return next
+      })
+      return
+    }
     if (placedTiles.has(key)) {
       setPlacedTiles(prev => {
         const next = new Map(prev)
@@ -480,7 +541,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
         return next
       })
     }
-  }, [placedTiles])
+  }, [placedTiles, isSpectatingApi, suggestionTiles])
 
   const handleSubmitMove = async () => {
     if (!game || !isMyTurn || placedTiles.size === 0) return
@@ -875,6 +936,12 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
         else next.add(tile.id)
         return next
       })
+      return
+    }
+
+    // If spectating, delegate to suggestion handler
+    if (isSpectatingApi) {
+      handleSuggestionTileClick(tile)
       return
     }
 
