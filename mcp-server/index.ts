@@ -210,9 +210,9 @@ function buildContextBriefing(level: "master" | "club" | "social"): string {
       `2. Find a good word you can make with your tiles`,
       `3. ALWAYS call validate_move first to check your move — it shows ALL words formed including cross-words`,
       `4. If valid, call play_word with the same tiles to commit`,
-      `5. Coordinates: row 1-15, column A-O`,
-      `6. First move must cross the center square (row 8, col H)`,
-      `7. All words formed (including cross-words) must be valid`,
+      `5. After your move, call wait_for_turn — it blocks until the opponent finishes and it's your turn again`,
+      `6. Coordinates: row 1-15, column A-O`,
+      `7. First move must cross the center square (row 8, col H)`,
       ``,
       `Enjoy the game!`,
     ].join("\n");
@@ -257,9 +257,10 @@ function buildContextBriefing(level: "master" | "club" | "social"): string {
       `2. Think about both the score AND your rack leave`,
       `3. ALWAYS call validate_move before committing — it reveals ALL cross-words that form`,
       `4. If valid, call play_word with the same tiles`,
-      `5. Coordinates: row 1-15, column A-O`,
-      `6. All played tiles must form a straight line (horizontal or vertical)`,
-      `7. First move must cross the center square (row 8, col H)`,
+      `5. After your move, call wait_for_turn — it blocks until the opponent finishes`,
+      `6. Coordinates: row 1-15, column A-O`,
+      `7. All played tiles must form a straight line (horizontal or vertical)`,
+      `8. First move must cross the center square (row 8, col H)`,
       ``,
       `Play well!`,
     ].join("\n");
@@ -357,9 +358,10 @@ function buildContextBriefing(level: "master" | "club" | "social"): string {
     `2. For EVERY candidate move, evaluate: score + rack leave quality + board implications`,
     `3. CRITICAL: ALWAYS call validate_move before play_word — it shows ALL words that form including cross-words you might miss`,
     `4. If validate_move confirms valid, call play_word with the same tiles`,
-    `5. Coordinates: row 1-15, column A-O`,
-    `6. All played tiles must form a straight line (horizontal or vertical)`,
-    `7. First move must cross the center square (row 8, col H)`,
+    `5. After your move, call wait_for_turn — it blocks until the opponent finishes and it's your turn again`,
+    `6. Coordinates: row 1-15, column A-O`,
+    `7. All played tiles must form a straight line (horizontal or vertical)`,
+    `8. First move must cross the center square (row 8, col H)`,
     ``,
     `=== TOURNAMENT MINDSET ===`,
     ``,
@@ -751,6 +753,64 @@ server.tool(
         isError: true,
       };
     }
+  }
+);
+
+server.tool(
+  "wait_for_turn",
+  "Wait until it's your turn, then return the game state. Polls every 5 seconds. Use this after making a move so you automatically resume when the opponent finishes.",
+  {
+    game_id: z.string().describe("Game ID (use list_games to find your games)"),
+    timeout_minutes: z.number().optional().default(30).describe("Max minutes to wait (default 30)"),
+  },
+  async ({ game_id, timeout_minutes }) => {
+    const deadline = Date.now() + (timeout_minutes ?? 30) * 60 * 1000;
+    let lastStatus = "";
+
+    while (Date.now() < deadline) {
+      try {
+        const state = (await apiCall("state", "GET", undefined, game_id)) as GameState;
+
+        if (state.status === "finished") {
+          const scores = state.players.map(p => `${p.name}: ${p.score}`).join(", ");
+          return {
+            content: [{ type: "text", text: `Game over! Final scores: ${scores}\nWinner: ${state.winner}` }],
+          };
+        }
+
+        if (state.is_your_turn) {
+          const rackText = state.your_rack
+            .map((t) => `${t.letter}(${t.value}${t.isBlank ? ",blank" : ""})`)
+            .join(" ");
+          return {
+            content: [{
+              type: "text",
+              text: [
+                `It's your turn!`,
+                `Your rack: ${rackText}`,
+                `Tiles in bag: ${state.tiles_remaining}`,
+                `Scores: ${state.players.map(p => `${p.name}: ${p.score}`).join(", ")}`,
+                ``,
+                `Use get_game_state for the full board, or go straight to planning your move.`,
+              ].join("\n"),
+            }],
+          };
+        }
+
+        const newStatus = `Waiting... opponent's turn (${state.players.map(p => `${p.name}: ${p.score}`).join(", ")})`;
+        if (newStatus !== lastStatus) {
+          lastStatus = newStatus;
+        }
+      } catch {
+        // Network hiccup — just retry
+      }
+
+      await new Promise(resolve => setTimeout(resolve, 5000));
+    }
+
+    return {
+      content: [{ type: "text", text: `Timed out after ${timeout_minutes} minutes. Use get_game_state to check manually.` }],
+    };
   }
 );
 

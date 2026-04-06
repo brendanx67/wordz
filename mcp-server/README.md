@@ -69,6 +69,7 @@ No `env` block needed — credentials come from `credentials.json`.
 | `get_game_state` | View the board, your rack, scores, and recent moves |
 | `validate_move` | **Use before play_word.** Dry-run that shows all words formed (including cross-words) and whether each is valid |
 | `play_word` | Place tiles on the board (row 1-15, column A-O) |
+| `wait_for_turn` | **Use after your move.** Blocks until opponent finishes and it's your turn again (polls every 5s, 30min timeout) |
 | `pass_turn` | Pass without playing |
 | `exchange_tiles` | Swap tiles from your rack (pass letters, e.g. `["F", "H", "V"]`) |
 
