@@ -722,12 +722,12 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
     <div className="min-h-screen" style={{ background: 'linear-gradient(145deg, #1a1208 0%, #2d1f0e 50%, #1a1208 100%)' }}>
       {/* Header */}
       <header className="border-b border-amber-900/30 bg-amber-950/40 backdrop-blur sticky top-0 z-50">
-        <div className="container mx-auto px-3 py-2 flex items-center justify-between">
-          <Button variant="ghost" size="sm" onClick={onBack} className="text-amber-400/80 hover:text-amber-200">
+        <div className="container mx-auto px-3 py-2.5 flex items-center justify-between">
+          <Button variant="ghost" size="sm" onClick={onBack} className="text-amber-200 hover:text-white hover:bg-amber-800/30">
             <ArrowLeft className="h-4 w-4 mr-1" />
-            Lobby
+            <span className="text-sm">Lobby</span>
           </Button>
-          <h1 className="text-lg font-bold tracking-widest text-amber-400" style={{ fontFamily: "'Playfair Display', serif" }}>
+          <h1 className="text-xl font-bold tracking-widest text-amber-300" style={{ fontFamily: "'Playfair Display', serif" }}>
             WORDZ
           </h1>
           <div className="flex items-center gap-3">
@@ -737,13 +737,13 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                   navigator.clipboard.writeText(gameId)
                   toast.success('Game ID copied!')
                 }}
-                className="text-[10px] text-purple-300/70 hover:text-purple-200 font-mono cursor-pointer"
+                className="text-xs text-purple-300 hover:text-purple-100 font-mono cursor-pointer"
                 title="Click to copy game ID for API/MCP use"
               >
                 ID: {gameId.slice(0, 8)}...
               </button>
             )}
-            <span className="text-xs text-amber-400/70">
+            <span className="text-sm font-medium text-amber-200">
               {tileBag.length} tiles left
             </span>
             {isActive && myPlayer && (
@@ -761,9 +761,9 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                   }
                 }}
                 disabled={cancelGame.isPending}
-                className="text-red-400 hover:text-red-300 hover:bg-red-900/20 text-xs"
+                className="text-red-300 hover:text-red-100 hover:bg-red-900/30 text-sm"
               >
-                <LogOut className="h-3 w-3 mr-1" />
+                <LogOut className="h-3.5 w-3.5 mr-1" />
                 Resign
               </Button>
             )}
