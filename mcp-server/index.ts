@@ -160,6 +160,16 @@ function renderBoard(tiles: TileOnBoard[]): string {
   return lines.join("\n");
 }
 
+// ─── Cell notation parser (e.g. "H8" → { row: 7, col: 7 }) ──────────────
+function parseCell(cell: string): { row: number; col: number } {
+  const match = cell.toUpperCase().match(/^([A-O])(\d{1,2})$/);
+  if (!match) throw new Error(`Invalid cell "${cell}" — use format like H8 (column A-O, row 1-15)`);
+  const col = match[1].charCodeAt(0) - 65;
+  const row = parseInt(match[2]) - 1;
+  if (row < 0 || row > 14) throw new Error(`Invalid row in "${cell}" — must be 1-15`);
+  return { row, col };
+}
+
 // ─── MCP Server ───────────────────────────────────────────────────────────────
 
 const server = new McpServer({
@@ -221,8 +231,8 @@ function buildContextBriefing(level: "master" | "club" | "social"): string {
       `3. ALWAYS call validate_move first to check your move — it shows ALL words formed including cross-words`,
       `4. If valid, call play_word with the same tiles to commit`,
       `5. After your move, call wait_for_turn — it blocks until the opponent finishes and it's your turn again`,
-      `6. Coordinates: row 1-15, column A-O`,
-      `7. First move must cross the center square (row 8, col H)`,
+      `6. Coordinates: cell notation like H8 (column letter A-O + row number 1-15)`,
+      `7. First move must cross the center square (H8)`,
       ``,
       `Enjoy the game!`,
     ].join("\n");
@@ -296,9 +306,9 @@ function buildContextBriefing(level: "master" | "club" | "social"): string {
       `4. ALWAYS call validate_move before committing — it reveals ALL cross-words that form`,
       `5. If valid, call play_word with the same tiles`,
       `6. After your move, call wait_for_turn — it blocks until the opponent finishes`,
-      `7. Coordinates: row 1-15, column A-O`,
+      `7. Coordinates: cell notation like H8 (column A-O + row 1-15)`,
       `8. All played tiles must form a straight line (horizontal or vertical)`,
-      `9. First move must cross the center square (row 8, col H)`,
+      `9. First move must cross the center square (H8)`,
       ``,
       `Play well!`,
     ].join("\n");
@@ -497,7 +507,7 @@ function buildContextBriefing(level: "master" | "club" | "social"): string {
     `6. Call play_word with the best validated move`,
     `7. Call wait_for_turn — it blocks until the opponent finishes`,
     ``,
-    `Coordinates: row 1-15, column A-O. First move must cross center (row 8, col H).`,
+    `Coordinates: cell notation like H8 (column A-O + row 1-15). First move must cross center (H8).`,
     `All played tiles must form a straight line (horizontal or vertical).`,
     ``,
     `=== TOURNAMENT MINDSET ===`,
@@ -677,11 +687,12 @@ server.tool(
       ``,
       `--- REMEMBER ---`,
       `Think about RACK LEAVE — what tiles remain after your play matters as much as the score.`,
-      `Coordinates: row is 1-15, column is A-O (A=0, B=1, ... O=14)`,
-      `To play a word, use the play_word tool with tiles placed at specific positions.`,
-      `Each tile needs: row (1-15), col (A-O), letter.`,
-      `Example: to play "CAT" horizontally starting at row 8 col H:`,
-      `  tiles: [{row: 8, col: "H", letter: "C"}, {row: 8, col: "I", letter: "A"}, {row: 8, col: "J", letter: "T"}]`,
+      `Coordinates use Excel-style cell notation: column letter (A-O) + row number (1-15).`,
+      `Example: H8 = column H, row 8 (the center square).`,
+      `To play a word, use the play_word tool with tiles placed at specific cells.`,
+      `Each tile needs: cell (e.g. "H8"), letter.`,
+      `Example: to play "CAT" horizontally starting at H8:`,
+      `  tiles: [{cell: "H8", letter: "C"}, {cell: "I8", letter: "A"}, {cell: "J8", letter: "T"}]`,
     ].join("\n");
 
     return { content: [{ type: "text", text }] };
@@ -696,8 +707,7 @@ server.tool(
     tiles: z
       .array(
         z.object({
-          row: z.number().min(1).max(15).describe("Row number (1-15)"),
-          col: z.string().length(1).describe("Column letter (A-O)"),
+          cell: z.string().describe("Cell in Excel notation, e.g. 'H8' (column A-O, row 1-15)"),
           letter: z.string().length(1).describe("The letter to play"),
           is_blank: z.boolean().optional().describe("Set to true if using a blank tile"),
         })
@@ -706,12 +716,10 @@ server.tool(
       .describe("Tiles to test on the board"),
   },
   async ({ game_id, tiles }) => {
-    const apiTiles = tiles.map((t) => ({
-      row: t.row - 1,
-      col: t.col.toUpperCase().charCodeAt(0) - 65,
-      letter: t.letter.toUpperCase(),
-      is_blank: t.is_blank || false,
-    }));
+    const apiTiles = tiles.map((t) => {
+      const { row, col } = parseCell(t.cell);
+      return { row, col, letter: t.letter.toUpperCase(), is_blank: t.is_blank || false };
+    });
 
     try {
       const result = (await apiCall("validate", "POST", { tiles: apiTiles }, game_id)) as {
@@ -755,14 +763,13 @@ server.tool(
 
 server.tool(
   "play_word",
-  "Play tiles on the board. Each tile needs row (1-15), col (A-O), and letter. All words formed must be valid. The first move must cross the center square (row 8, col H). TIP: Use validate_move first to check for invalid cross-words!",
+  "Play tiles on the board. Each tile needs a cell (e.g. 'H8') and letter. All words formed must be valid. The first move must cross the center square (H8). TIP: Use validate_move first to check for invalid cross-words!",
   {
     game_id: z.string().describe("Game ID (use list_games to find your games)"),
     tiles: z
       .array(
         z.object({
-          row: z.number().min(1).max(15).describe("Row number (1-15)"),
-          col: z.string().length(1).describe("Column letter (A-O)"),
+          cell: z.string().describe("Cell in Excel notation, e.g. 'H8' (column A-O, row 1-15)"),
           letter: z.string().length(1).describe("The letter to play"),
           is_blank: z
             .boolean()
@@ -774,13 +781,10 @@ server.tool(
       .describe("Tiles to place on the board"),
   },
   async ({ game_id, tiles }) => {
-    // Convert column letters to numbers (A=0, B=1, ... O=14)
-    const apiTiles = tiles.map((t) => ({
-      row: t.row - 1, // Convert 1-indexed to 0-indexed
-      col: t.col.toUpperCase().charCodeAt(0) - 65,
-      letter: t.letter.toUpperCase(),
-      is_blank: t.is_blank || false,
-    }));
+    const apiTiles = tiles.map((t) => {
+      const { row, col } = parseCell(t.cell);
+      return { row, col, letter: t.letter.toUpperCase(), is_blank: t.is_blank || false };
+    });
 
     try {
       const result = (await apiCall("move", "POST", {

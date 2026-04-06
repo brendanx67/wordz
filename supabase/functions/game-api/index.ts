@@ -92,6 +92,33 @@ function isWord(root: TrieNode, word: string): boolean {
   return node.isTerminal;
 }
 
+// ─── Cell notation support (accepts both "H8" cell format and {row, col} format) ───
+interface RawTile {
+  row?: number;
+  col?: number;
+  cell?: string;
+  letter: string;
+  is_blank?: boolean;
+}
+
+function normalizeTile(t: RawTile): { row: number; col: number; letter: string; is_blank: boolean } {
+  let row: number;
+  let col: number;
+  if (t.cell) {
+    const match = t.cell.toUpperCase().match(/^([A-O])(\d{1,2})$/);
+    if (!match) throw new Error(`Invalid cell "${t.cell}" — use format like H8`);
+    col = match[1].charCodeAt(0) - 65;
+    row = parseInt(match[2]) - 1;
+    if (row < 0 || row > 14) throw new Error(`Invalid row in cell "${t.cell}"`);
+  } else if (t.row !== undefined && t.col !== undefined) {
+    row = t.row;
+    col = t.col;
+  } else {
+    throw new Error("Each tile must have either 'cell' (e.g. 'H8') or 'row' and 'col'");
+  }
+  return { row, col, letter: t.letter.toUpperCase(), is_blank: t.is_blank || false };
+}
+
 let cachedTrie: TrieNode | null = null;
 let wordListCache: string | null = null;
 
@@ -580,23 +607,30 @@ async function handlePlayMove(req: Request): Promise<Response> {
     return jsonError("Must specify tiles to play", 400);
   }
 
+  // Normalize tiles — accept both cell notation ("H8") and row/col format
+  let normalizedTiles: { row: number; col: number; letter: string; is_blank: boolean }[];
+  try {
+    normalizedTiles = tiles.map(normalizeTile);
+  } catch (err) {
+    return jsonError((err as Error).message, 400);
+  }
+
   // Map submitted tiles to actual rack tiles
   const placedTiles: { row: number; col: number; tile: Tile }[] = [];
   const usedRackTileIds = new Set<string>();
 
-  for (const t of tiles) {
+  for (const t of normalizedTiles) {
     let rackTile: Tile | undefined;
     if (t.is_blank) {
       rackTile = myPlayer.rack.find(
         (rt: Tile) => rt.isBlank && !usedRackTileIds.has(rt.id)
       );
       if (!rackTile) return jsonError(`No blank tile in rack`, 400);
-      // Set the chosen letter on the blank
-      rackTile = { ...rackTile, letter: t.letter.toUpperCase(), value: 0 };
+      rackTile = { ...rackTile, letter: t.letter, value: 0 };
     } else {
       rackTile = myPlayer.rack.find(
         (rt: Tile) =>
-          rt.letter === t.letter.toUpperCase() &&
+          rt.letter === t.letter &&
           !rt.isBlank &&
           !usedRackTileIds.has(rt.id)
       );
@@ -820,22 +854,30 @@ async function handleValidateMove(req: Request): Promise<Response> {
 
   const boardState = game.board as BoardCell[][];
 
+  // Normalize tiles — accept both cell notation ("H8") and row/col format
+  let normalizedTiles: { row: number; col: number; letter: string; is_blank: boolean }[];
+  try {
+    normalizedTiles = tiles.map(normalizeTile);
+  } catch (err) {
+    return jsonError((err as Error).message, 400);
+  }
+
   // Map submitted tiles to rack tiles (same as play)
   const placedTiles: { row: number; col: number; tile: Tile }[] = [];
   const usedRackTileIds = new Set<string>();
 
-  for (const t of tiles) {
+  for (const t of normalizedTiles) {
     let rackTile: Tile | undefined;
     if (t.is_blank) {
       rackTile = myPlayer.rack.find(
         (rt: Tile) => rt.isBlank && !usedRackTileIds.has(rt.id)
       );
       if (!rackTile) return jsonError("No blank tile in rack", 400);
-      rackTile = { ...rackTile, letter: t.letter.toUpperCase(), value: 0 };
+      rackTile = { ...rackTile, letter: t.letter, value: 0 };
     } else {
       rackTile = myPlayer.rack.find(
         (rt: Tile) =>
-          rt.letter === t.letter.toUpperCase() &&
+          rt.letter === t.letter &&
           !rt.isBlank &&
           !usedRackTileIds.has(rt.id)
       );

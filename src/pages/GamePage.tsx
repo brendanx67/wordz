@@ -11,7 +11,7 @@ import type { Tile, BoardCell, PlacedTile } from '@/lib/gameConstants'
 import GameBoard from '@/components/GameBoard'
 import TileRack from '@/components/TileRack'
 import { toast } from 'sonner'
-import { ArrowLeft, RotateCcw, Send, Flag, RefreshCw, Play, History, LogOut } from 'lucide-react'
+import { ArrowLeft, RotateCcw, Send, Flag, RefreshCw, Play, History, LogOut, Grid3X3 } from 'lucide-react'
 import { createEmptyBoard } from '@/lib/gameConstants'
 import GameHistoryViewer from '@/components/GameHistoryViewer'
 import { cn } from '@/lib/utils'
@@ -36,6 +36,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   const [placedTiles, setPlacedTiles] = useState<Map<string, Tile>>(new Map())
   const [selectedSquare, setSelectedSquare] = useState<{ row: number; col: number } | null>(null)
   const [direction, setDirection] = useState<'across' | 'down'>('across')
+  const [showLabels, setShowLabels] = useState(false)
   const [isExchangeMode, setIsExchangeMode] = useState(false)
   const [exchangeSelection, setExchangeSelection] = useState<Set<string>>(new Set())
   const [submitting, setSubmitting] = useState(false)
@@ -978,15 +979,31 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
             </div>
           )}
 
-          <GameBoard
-            board={board}
-            selectedSquare={selectedSquare}
-            onSquareClick={handleSquareClick}
-            onDrop={handleDrop}
-            onPickupTile={handlePickupTile}
-            placedTiles={placedTiles}
-            direction={direction}
-          />
+          <div className="relative">
+            <button
+              onClick={() => setShowLabels(l => !l)}
+              className={cn(
+                'absolute -top-7 right-0 flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium transition-colors',
+                showLabels
+                  ? 'bg-amber-700/60 text-amber-100'
+                  : 'bg-amber-900/30 text-amber-400/60 hover:text-amber-300 hover:bg-amber-900/50'
+              )}
+              title="Toggle coordinate labels (A-O, 1-15)"
+            >
+              <Grid3X3 className="h-3 w-3" />
+              A1
+            </button>
+            <GameBoard
+              board={board}
+              selectedSquare={selectedSquare}
+              onSquareClick={handleSquareClick}
+              onDrop={handleDrop}
+              onPickupTile={handlePickupTile}
+              placedTiles={placedTiles}
+              direction={direction}
+              showLabels={showLabels}
+            />
+          </div>
 
           {/* Rack */}
           {isActive && myPlayer && (

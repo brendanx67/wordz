@@ -11,6 +11,7 @@ interface GameBoardProps {
   onPickupTile: (row: number, col: number) => void
   placedTiles: Map<string, Tile>
   direction: 'across' | 'down'
+  showLabels?: boolean
 }
 
 function bonusLabel(bonus: string | null): string {
@@ -47,7 +48,9 @@ function bonusTextColor(bonus: string | null): string {
   }
 }
 
-export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop, onPickupTile, placedTiles, direction }: GameBoardProps) {
+const COL_LETTERS = Array.from({ length: BOARD_SIZE }, (_, i) => String.fromCharCode(65 + i))
+
+export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop, onPickupTile, placedTiles, direction, showLabels = false }: GameBoardProps) {
   const [dragOverSquare, setDragOverSquare] = useState<string | null>(null)
   const isTouchDevice = typeof window !== 'undefined' && ('ontouchstart' in window || navigator.maxTouchPoints > 0)
 
@@ -105,106 +108,152 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
       }}
       onDragEnd={handleDragEnd}
     >
-      <div
-        className="grid"
-        style={{
-          gridTemplateColumns: `repeat(${BOARD_SIZE}, minmax(0, 1fr))`,
-          gap: '1.5px',
-          background: '#0d3d2d',
-          borderRadius: '4px',
-          padding: '1.5px',
-        }}
-      >
-        {Array.from({ length: BOARD_SIZE }).map((_, row) =>
-          Array.from({ length: BOARD_SIZE }).map((_, col) => {
-            const cell = board[row]?.[col]
-            const tile = cell?.tile
-            const placedTile = placedTiles.get(`${row},${col}`)
-            const displayTile = placedTile || tile
-            const bonus = getBonusType(row, col)
-            const isSelected = selectedSquare?.row === row && selectedSquare?.col === col
-            const isNewlyPlaced = !!placedTile
-            const isCommitted = !!tile
-            const isDragTarget = dragOverSquare === `${row},${col}` && !isCommitted && !isNewlyPlaced
+      {/* Column labels */}
+      {showLabels && (
+        <div
+          className="grid mb-0.5"
+          style={{
+            gridTemplateColumns: `20px repeat(${BOARD_SIZE}, minmax(0, 1fr))`,
+            paddingLeft: '0px',
+            paddingRight: '1.5px',
+          }}
+        >
+          <div /> {/* spacer for row labels column */}
+          {COL_LETTERS.map(letter => (
+            <div
+              key={letter}
+              className="flex items-center justify-center text-[9px] sm:text-[10px] md:text-[11px] font-bold"
+              style={{ color: '#c4a46c' }}
+            >
+              {letter}
+            </div>
+          ))}
+        </div>
+      )}
 
-            return (
+      <div className="flex">
+        {/* Row labels */}
+        {showLabels && (
+          <div
+            className="flex flex-col mr-0.5"
+            style={{ gap: '1.5px', paddingTop: '1.5px' }}
+          >
+            {Array.from({ length: BOARD_SIZE }, (_, i) => (
               <div
-                key={`${row}-${col}`}
-                draggable={isNewlyPlaced && !isTouchDevice}
-                onDragStart={isNewlyPlaced && !isTouchDevice ? (e) => handleDragStartFromBoard(e, row, col, placedTile!) : undefined}
-                onClick={() => {
-                  if (isNewlyPlaced) {
-                    onPickupTile(row, col)
-                  } else {
-                    onSquareClick(row, col)
-                  }
-                }}
-                onDragOver={(e) => handleDragOver(e, row, col)}
-                onDragLeave={handleDragLeave}
-                onDrop={(e) => handleDrop(e, row, col)}
-                className={cn(
-                  'w-[30px] h-[30px] sm:w-[35px] sm:h-[35px] md:w-[40px] md:h-[40px] flex items-center justify-center cursor-pointer transition-all relative select-none',
-                  isSelected && !displayTile && 'ring-2 ring-white/80 z-10',
-                  !displayTile && !isCommitted && 'hover:brightness-110',
-                  isDragTarget && 'ring-2 ring-white z-10 brightness-125'
-                )}
-                style={displayTile ? {
-                  background: isNewlyPlaced
-                    ? 'linear-gradient(135deg, #f5deb3 0%, #e8c97a 40%, #d4a853 100%)'
-                    : 'linear-gradient(135deg, #f0dcc0 0%, #dcc8a0 40%, #c8b080 100%)',
-                  boxShadow: isNewlyPlaced
-                    ? 'inset 0 1px 2px rgba(255,255,255,0.4), inset 0 -1px 2px rgba(0,0,0,0.15), 0 2px 4px rgba(0,0,0,0.3), 0 0 0 1.5px #b8942e'
-                    : 'inset 0 1px 1px rgba(255,255,255,0.3), inset 0 -1px 1px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.2)',
-                  borderRadius: '3px',
-                  cursor: isNewlyPlaced ? 'grab' : 'pointer',
-                } : {
-                  background: bonusBg(bonus),
-                  borderRadius: '2px',
-                }}
-                title={
-                  isNewlyPlaced
-                    ? 'Click to return to rack, or drag to reposition'
-                    : undefined
-                }
+                key={i}
+                className="w-[18px] h-[30px] sm:h-[35px] md:h-[40px] flex items-center justify-center text-[9px] sm:text-[10px] md:text-[11px] font-bold"
+                style={{ color: '#c4a46c' }}
               >
-                {displayTile ? (
-                  <>
-                    <span
-                      className="text-[14px] sm:text-[17px] md:text-[19px] font-black tracking-tight"
-                      style={{ color: '#3d2b1a', fontFamily: "'Playfair Display', serif", textShadow: '0 1px 0 rgba(255,255,255,0.3)' }}
-                    >
-                      {displayTile.letter || ''}
-                    </span>
-                    <span
-                      className="absolute text-[6px] sm:text-[7px] md:text-[8px] font-bold"
-                      style={{ bottom: '1px', right: '2px', color: '#6b4f30' }}
-                    >
-                      {displayTile.value || ''}
-                    </span>
-                  </>
-                ) : bonus ? (
-                  <span
-                    className={cn(
-                      'font-extrabold text-center leading-[1.15] whitespace-pre-line',
-                      isSelected && 'opacity-0',
-                      bonus === 'CENTER' ? 'text-[14px] sm:text-[16px] md:text-[18px]' : 'text-[6px] sm:text-[7px] md:text-[8px]'
-                    )}
-                    style={{ color: bonusTextColor(bonus) }}
-                  >
-                    {bonusLabel(bonus)}
-                  </span>
-                ) : null}
-                {isSelected && !displayTile && (
-                  <div className="absolute inset-0 flex items-center justify-center bg-white/25 rounded-sm">
-                    <span className="text-white font-black text-[18px] sm:text-[20px] md:text-[22px] drop-shadow-lg">
-                      {direction === 'across' ? '\u2192' : '\u2193'}
-                    </span>
-                  </div>
-                )}
+                {i + 1}
               </div>
-            )
-          })
+            ))}
+          </div>
         )}
+
+        {/* Board grid */}
+        <div
+          className="grid flex-1"
+          style={{
+            gridTemplateColumns: `repeat(${BOARD_SIZE}, minmax(0, 1fr))`,
+            gap: '1.5px',
+            background: '#0d3d2d',
+            borderRadius: '4px',
+            padding: '1.5px',
+          }}
+        >
+          {Array.from({ length: BOARD_SIZE }).map((_, row) =>
+            Array.from({ length: BOARD_SIZE }).map((_, col) => {
+              const cell = board[row]?.[col]
+              const tile = cell?.tile
+              const placedTile = placedTiles.get(`${row},${col}`)
+              const displayTile = placedTile || tile
+              const bonus = getBonusType(row, col)
+              const isSelected = selectedSquare?.row === row && selectedSquare?.col === col
+              const isNewlyPlaced = !!placedTile
+              const isCommitted = !!tile
+              const isDragTarget = dragOverSquare === `${row},${col}` && !isCommitted && !isNewlyPlaced
+
+              return (
+                <div
+                  key={`${row}-${col}`}
+                  draggable={isNewlyPlaced && !isTouchDevice}
+                  onDragStart={isNewlyPlaced && !isTouchDevice ? (e) => handleDragStartFromBoard(e, row, col, placedTile!) : undefined}
+                  onClick={() => {
+                    if (isNewlyPlaced) {
+                      onPickupTile(row, col)
+                    } else {
+                      onSquareClick(row, col)
+                    }
+                  }}
+                  onDragOver={(e) => handleDragOver(e, row, col)}
+                  onDragLeave={handleDragLeave}
+                  onDrop={(e) => handleDrop(e, row, col)}
+                  className={cn(
+                    'w-[30px] h-[30px] sm:w-[35px] sm:h-[35px] md:w-[40px] md:h-[40px] flex items-center justify-center cursor-pointer transition-all relative select-none',
+                    isSelected && !displayTile && 'ring-2 ring-white/80 z-10',
+                    !displayTile && !isCommitted && 'hover:brightness-110',
+                    isDragTarget && 'ring-2 ring-white z-10 brightness-125'
+                  )}
+                  style={displayTile ? {
+                    background: isNewlyPlaced
+                      ? 'linear-gradient(135deg, #f5deb3 0%, #e8c97a 40%, #d4a853 100%)'
+                      : 'linear-gradient(135deg, #f0dcc0 0%, #dcc8a0 40%, #c8b080 100%)',
+                    boxShadow: isNewlyPlaced
+                      ? 'inset 0 1px 2px rgba(255,255,255,0.4), inset 0 -1px 2px rgba(0,0,0,0.15), 0 2px 4px rgba(0,0,0,0.3), 0 0 0 1.5px #b8942e'
+                      : 'inset 0 1px 1px rgba(255,255,255,0.3), inset 0 -1px 1px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.2)',
+                    borderRadius: '3px',
+                    cursor: isNewlyPlaced ? 'grab' : 'pointer',
+                  } : {
+                    background: bonusBg(bonus),
+                    borderRadius: '2px',
+                  }}
+                  title={
+                    isNewlyPlaced
+                      ? 'Click to return to rack, or drag to reposition'
+                      : showLabels
+                        ? `${COL_LETTERS[col]}${row + 1}`
+                        : undefined
+                  }
+                >
+                  {displayTile ? (
+                    <>
+                      <span
+                        className="text-[14px] sm:text-[17px] md:text-[19px] font-black tracking-tight"
+                        style={{ color: '#3d2b1a', fontFamily: "'Playfair Display', serif", textShadow: '0 1px 0 rgba(255,255,255,0.3)' }}
+                      >
+                        {displayTile.letter || ''}
+                      </span>
+                      <span
+                        className="absolute text-[6px] sm:text-[7px] md:text-[8px] font-bold"
+                        style={{ bottom: '1px', right: '2px', color: '#6b4f30' }}
+                      >
+                        {displayTile.value || ''}
+                      </span>
+                    </>
+                  ) : bonus ? (
+                    <span
+                      className={cn(
+                        'font-extrabold text-center leading-[1.15] whitespace-pre-line',
+                        isSelected && 'opacity-0',
+                        bonus === 'CENTER' ? 'text-[14px] sm:text-[16px] md:text-[18px]' : 'text-[6px] sm:text-[7px] md:text-[8px]'
+                      )}
+                      style={{ color: bonusTextColor(bonus) }}
+                    >
+                      {bonusLabel(bonus)}
+                    </span>
+                  ) : null}
+                  {isSelected && !displayTile && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-white/25 rounded-sm">
+                      <span className="text-white font-black text-[18px] sm:text-[20px] md:text-[22px] drop-shadow-lg">
+                        {direction === 'across' ? '\u2192' : '\u2193'}
+                      </span>
+                    </div>
+                  )}
+                </div>
+              )
+            })
+          )}
+        </div>
       </div>
     </div>
   )
