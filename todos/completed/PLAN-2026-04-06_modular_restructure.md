@@ -1,7 +1,5 @@
 # Wordz Refactor Plan (v1.0 → v2.0)
 
-## Status: COMPLETE ✅
-
 All 4 phases shipped. Tagged `v1.1-phase1` through `v1.4-phase4`.
 
 | Phase | File | Before | After | Tag |
