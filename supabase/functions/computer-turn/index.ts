@@ -141,12 +141,13 @@ Deno.serve(async (req) => {
       });
     }
 
-    // ─── AUTHZ: caller must be a human player OR owner of an API player in this game
+    // ─── AUTHZ: caller must be a human player, an API player owner, OR the game creator
     const gamePlayers = (game.game_players ?? []) as { player_id: string }[];
     const cpForAuth = (game.computer_players ?? []) as { id: string; owner_id?: string }[];
     const isHumanMember = gamePlayers.some((p) => p.player_id === user.id);
     const isApiOwner = cpForAuth.some((cp) => cp.owner_id === user.id);
-    if (!isHumanMember && !isApiOwner) {
+    const isCreator = game.created_by === user.id;
+    if (!isHumanMember && !isApiOwner && !isCreator) {
       return new Response(JSON.stringify({ error: "Forbidden: not a member of this game" }), {
         status: 403, headers: { ...cors, "Content-Type": "application/json" },
       });
