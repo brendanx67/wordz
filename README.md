@@ -9,7 +9,7 @@ Live at [word-z.com](https://word-z.com). Source code is MIT-licensed — see [L
 ## What makes it interesting
 
 - **Three kinds of player, one game model.** Every seat at the board is a row in `game_players` or `computer_players`. A game can be all humans, all computers, one human versus an LLM, or any mix. The turn loop doesn't care who's on the clock.
-- **Real move generation, not random plays.** The computer opponent uses the [Appel & Jacobson (1988)](https://www.cs.cmu.edu/afs/cs/academic/class/15451-s06/www/lectures/scrabble.pdf) algorithm: a GADDAG-style trie walk with cross-checks and anchor squares, generating every legal move on the board in milliseconds. Difficulty is a percentile cutoff over that sorted list, not a handicap on the search itself.
+- **Real move generation, not random plays.** The computer opponent uses the [Appel & Jacobson (1988)](https://doi.org/10.1145/42411.42420) anchor-based algorithm (*Communications of the ACM* 31(5), 572–578). A plain forward trie is walked from each anchor square using cross-check sets for each column, generating every legal move on the board in milliseconds. It's simpler than a DAWG or GADDAG — Wordz trades a little per-move work for a much smaller dictionary structure — and it's more than fast enough for a 15×15 board. Difficulty is a percentile cutoff over the sorted move list, not a handicap on the search itself.
 - **LLMs get the same engine as a tool.** The MCP server exposes `find_words`, which runs the full Appel & Jacobson search from the model's current rack and returns the top legal moves. Claude, with that tool available, plays noticeably faster and stronger than Claude without it. Use it or don't — the interesting experiment is "does access to a good search help, and by how much."
 - **Suggestion mode for co-play.** Humans can stage a move on their own rack and board, then hand it to their LLM teammate as a starting point. The LLM sees the suggestion, decides whether to play it verbatim, modify it, or reject it, and explains why in the game log.
 
@@ -48,7 +48,7 @@ The shared engine code lives in `supabase/functions/_shared/`:
 - `moveGenerator.ts` — Appel & Jacobson anchor-based move generation with cross-check sets (283 lines).
 - `gameConstants.ts` — `LETTER_VALUES`, `TILE_DISTRIBUTION`, `PREMIUM_SQUARES`, board size.
 
-`computer-turn/_shared` is a symlink to `../_shared`; `game-api/_shared` contains an equivalent copy because the Supabase Edge Function deploy path doesn't follow symlinks from within `game-api/`. Both bodies of code are identical and get tested together.
+The shared engine code at `supabase/functions/_shared/` is consumed by all three Edge Functions through symlinks: `computer-turn/_shared`, `game-api/_shared`, and `validate-word/_shared` all point at `../_shared`. The Supabase CLI follows these symlinks during `supabase functions deploy` and bundles the linked files into each function's deploy artifact, so the engine code is authored once and ships to every function.
 
 **MCP server (`mcp-server/`).** A Node/Bun stdio MCP server that wraps `game-api`. Each tool is one file under `mcp-server/tools/`:
 
@@ -116,17 +116,24 @@ supabase functions deploy validate-word
 
 ## MCP server setup
 
-The MCP server is a separate Bun/Node project. See [`mcp-server/README.md`](./mcp-server/README.md). Short version:
+The MCP server is packaged as a standalone Node project. The canonical install is to download `wordz-mcp.zip` from [word-z.com](https://word-z.com), extract it to `~/.wordz-mcp/`, and point Claude at it:
+
+```bash
+cd ~/.wordz-mcp && npm install
+claude mcp add wordz -- npx tsx ~/.wordz-mcp/index.ts
+```
+
+Create an API key from the "Connect an AI" section of [word-z.com](https://word-z.com) and put it in `~/.wordz-mcp/credentials.json` (or pass via `WORDZ_API_URL` / `WORDZ_API_KEY` env vars). See [`mcp-server/README.md`](./mcp-server/README.md) for the full setup.
+
+**Running from this repo (for MCP server development):**
 
 ```bash
 cd mcp-server
 bun install
 cp .env.example .env
 # Fill in WORDZ_API_URL and WORDZ_API_KEY
-claude mcp add wordz -- bun ~/path/to/wordz/mcp-server/index.ts
+claude mcp add wordz-dev -- bun /absolute/path/to/wordz/mcp-server/index.ts
 ```
-
-Create an API key from the "Connect an AI" section of the Wordz website.
 
 ## Release history
 

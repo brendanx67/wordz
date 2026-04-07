@@ -55,8 +55,8 @@ supabase/functions/               # Deno Edge Functions
 ├── game-api/                     # Main router
 │   ├── index.ts                  # Router shell (~30 lines after Phase 3)
 │   ├── api-helpers.ts            # Auth, error wrappers
-│   ├── scoring.ts                # Server-side scoring (mirror of src/lib/scoring.ts)
-│   ├── _shared/                  # COPY of ../_shared (see "Symlink quirk" below)
+│   ├── scoring.ts                # Server-side scoring (diverged from src/lib/scoring.ts — see "Known incomplete refactors")
+│   ├── _shared -> ../_shared     # Symlink → ../_shared
 │   └── handlers/
 │       ├── play-move.ts          # Commit a move (includes endgame rack penalty)
 │       ├── preview-move.ts       # Score without committing
@@ -67,8 +67,10 @@ supabase/functions/               # Deno Edge Functions
 │       └── list-games.ts
 ├── computer-turn/                # Single-shot computer-turn execution
 │   ├── index.ts                  # Auth-gated; runs the move generator
-│   └── _shared -> ../_shared     # Real symlink — works inside computer-turn
+│   └── _shared -> ../_shared     # Symlink → ../_shared
 └── validate-word/                # Cheap dictionary lookup for the suggestion UI
+    ├── index.ts
+    └── _shared -> ../_shared     # Symlink → ../_shared
 
 mcp-server/                       # Stdio MCP server, one tool per file
 ├── index.ts                      # Server wiring (~40 lines after Phase 4)
@@ -108,12 +110,19 @@ mcp-server/                       # Stdio MCP server, one tool per file
 | `bun install` | Install dependencies |
 | `bun run dev` | Vite dev server on port 3000 |
 | `bun run build` | `tsc -b && vite build` — **always run before committing** |
+| `bun run build:mcp` | Rebuild `public/wordz-mcp.zip` from `mcp-server/` (run when MCP server source changes before publishing) |
 
 **Run `bun run build` before committing.** The dev server doesn't run `tsc`, so type errors only surface here. CI also runs this — if it fails locally, it'll fail in CI.
 
-## Symlink quirk
+## Shared engine via symlinks
 
-`computer-turn/_shared` is a real symlink to `../_shared`. `game-api/_shared` is a copy. The reason: when `supabase functions deploy game-api` packages files, it doesn't follow symlinks that point outside the function's own directory, so we keep a copy there. If you change anything in `_shared/`, **also update `game-api/_shared/`** to match. There's no script enforcing this yet — if a CI check shows up, that's why.
+The trie, move generator, and game constants live in `supabase/functions/_shared/`. Each Edge Function that needs them has a symlink — `game-api/_shared`, `computer-turn/_shared`, and `validate-word/_shared` all point at `../_shared`. The Supabase CLI follows these symlinks during `supabase functions deploy` and bundles the linked files into each function's deploy artifact, so the engine code ships once at the source level but ends up in every function's runtime.
+
+If you edit anything under `_shared/`, every function picks it up automatically — no manual sync. Don't replace any of these symlinks with copies; deploys would still work, but you'd reintroduce the duplication that Phase 1 of the refactor removed.
+
+## Known incomplete refactors
+
+**Scoring dedup never landed.** The Phase-1 plan called for a single scoring module shared between the frontend and Edge Functions, but `supabase/functions/game-api/scoring.ts` (138 lines) and `src/lib/scoring.ts` (170 lines) have drifted independently — different function names (`scoreMove` vs `validateAndScoreMove`), different imported types (`Tile` vs `PlacedTile`), and different internal details. Any scoring bug fix currently has to be applied to both files by hand. A future refactor cycle should pull scoring into `_shared/` like the trie and move generator, so both sides consume one source. Until then: **when you touch one scoring file, check the other**, and write a regression test that exercises the same input on both paths.
 
 ## Known oversized files
 

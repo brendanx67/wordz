@@ -5,13 +5,13 @@ Play Wordz (Scrabble) through Claude or any MCP-compatible AI assistant.
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) v18+
-- An API key from your Wordz account (create one in the "Connect an AI" section on the website)
+- An API key from your Wordz account — create one in the "Connect an AI" section at [word-z.com](https://word-z.com)
 
 ## Setup
 
 1. **Download and extract** to `~/.wordz-mcp/`:
    ```bash
-   # Download wordz-mcp.zip from the Wordz website
+   # Download wordz-mcp.zip from word-z.com
    # Extract contents to ~/.wordz-mcp/
    ```
 
@@ -19,11 +19,12 @@ Play Wordz (Scrabble) through Claude or any MCP-compatible AI assistant.
    ```bash
    cd ~/.wordz-mcp && npm install
    ```
+   This uses `npm` rather than `bun` so end-user setup works on any Node install — you don't need a second package manager just to run the MCP server.
 
 3. **Create `~/.wordz-mcp/credentials.json`:**
    ```json
    {
-     "api_url": "https://your-project.supabase.co/functions/v1/game-api",
+     "api_url": "https://your-project-ref.supabase.co/functions/v1/game-api",
      "api_key": "your-api-key-here",
      "game_id": "optional-default-game-id"
    }
@@ -71,6 +72,7 @@ No `env` block needed — credentials come from `credentials.json`.
 | `play_word` | Place tiles on the board using cell notation (e.g. `H8`) |
 | `find_words` | Search ALL legal moves using the A&J algorithm (filters: score, length, letter, cell) |
 | `preview_move` | Show a candidate move to the owner on their board (purple highlight) |
+| `validate_suggestion` | Inspect the owner's staged suggestion (and all words/cross-words it forms) before deciding whether to play it |
 | `play_suggestion` | Play the move the owner suggested (tiles they placed on the board) |
 | `wait_for_turn` | **Use after your move.** Blocks until opponent finishes (polls every 5s, 30min timeout) |
 | `pass_turn` | Pass without playing |
@@ -115,7 +117,7 @@ Include your API key in the `x-api-key` header. Include `game_id` as a query par
 **GET /state** — Get current game state
 ```bash
 curl -H "x-api-key: YOUR_KEY" \
-  "https://your-project.supabase.co/functions/v1/game-api/state?game_id=GAME_ID"
+  "https://your-project-ref.supabase.co/functions/v1/game-api/state?game_id=GAME_ID"
 ```
 
 **POST /move** — Make a move (accepts both `cell` and `row`/`col` formats)
@@ -130,7 +132,7 @@ curl -X POST -H "x-api-key: YOUR_KEY" \
       {"cell": "I8", "letter": "I"}
     ]
   }' \
-  https://your-project.supabase.co/functions/v1/game-api/move
+  https://your-project-ref.supabase.co/functions/v1/game-api/move
 ```
 
 **POST /find-words** — Find all legal moves (requires word_finder_enabled)
@@ -142,7 +144,7 @@ curl -X POST -H "x-api-key: YOUR_KEY" \
     "sort_by": "score",
     "limit": 10
   }' \
-  https://your-project.supabase.co/functions/v1/game-api/find-words
+  https://your-project-ref.supabase.co/functions/v1/game-api/find-words
 ```
 
 **POST /preview** — Preview a move on the owner's board
