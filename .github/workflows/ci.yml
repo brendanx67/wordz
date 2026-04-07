@@ -31,3 +31,6 @@ jobs:
           VITE_SUPABASE_URL: https://ci.example.supabase.co
           VITE_SUPABASE_PUBLISHABLE_KEY: sb_publishable_ci_dummy_value
         run: bun run build
+
+      - name: Run tests
+        run: bun test

@@ -1,5 +1,6 @@
 import type { Tile, BoardCell } from "../_shared/gameConstants.ts";
 import { getBonusType } from "../_shared/gameConstants.ts";
+import { applyEndgameScoring, type EndgamePlayer } from "../_shared/endgame.ts";
 import { isWord } from "../_shared/trie.ts";
 import type { ApiPlayer } from "../api-helpers.ts";
 import {
@@ -230,41 +231,45 @@ export async function handlePlayMove(req: Request): Promise<Response> {
 
   const gameOver = newRack.length === 0 && remaining.length === 0;
 
-  // End-game scoring: if this player emptied their rack, sum all other players'
-  // remaining rack values, deduct from each of them, add total to this player.
+  // End-game scoring: if this player emptied their rack, delegate the arithmetic
+  // to the pure applyEndgameScoring() function and then persist both sides of the
+  // result. Historically these two branches (computer deduction, human deduction)
+  // lived inline with the DB calls, which made the asymmetry hard to audit and
+  // impossible to unit-test. See supabase/functions/_shared/endgame.test.ts.
   let finalCp = updatedCp;
-  let finalScoreForMe = newScore;
   if (gameOver) {
-    let bonusFromOthers = 0;
-
-    // Deduct from each other computer/API player's rack
-    finalCp = updatedCp.map((p: ApiPlayer) => {
-      if (p.id === auth.playerId) return p;
-      const rack = (p.rack ?? []) as Tile[];
-      const rackValue = rack.reduce((sum, t) => sum + (t.value ?? 0), 0);
-      bonusFromOthers += rackValue;
-      return { ...p, score: Math.max(0, p.score - rackValue) };
-    });
-
-    // Deduct from each human player's rack (fetch their racks first)
-    const { data: humans } = await supabase
+    const { data: humansRaw } = await supabase
       .from("game_players")
       .select("player_id, score, rack")
       .eq("game_id", auth.gameId);
-    for (const hp of (humans ?? []) as { player_id: string; score: number; rack: Tile[] }[]) {
-      const rack = (hp.rack ?? []) as Tile[];
-      const rackValue = rack.reduce((sum, t) => sum + (t.value ?? 0), 0);
-      bonusFromOthers += rackValue;
+    const humansBefore: EndgamePlayer[] = (
+      (humansRaw ?? []) as { player_id: string; score: number; rack: Tile[] | null }[]
+    ).map((h) => ({
+      id: h.player_id,
+      score: h.score,
+      rack: (h.rack ?? []) as Tile[],
+    }));
+
+    const endgame = applyEndgameScoring({
+      outPlayerId: auth.playerId,
+      outPlayerScoreBeforeBonus: newScore,
+      computers: updatedCp as unknown as EndgamePlayer[],
+      humans: humansBefore,
+    });
+
+    // Persist updated human scores
+    for (const h of endgame.humans) {
       await supabase
         .from("game_players")
-        .update({ score: Math.max(0, hp.score - rackValue) })
+        .update({ score: h.score })
         .eq("game_id", auth.gameId)
-        .eq("player_id", hp.player_id);
+        .eq("player_id", h.id);
     }
 
-    finalScoreForMe = newScore + bonusFromOthers;
-    finalCp = finalCp.map((p: ApiPlayer) =>
-      p.id === auth.playerId ? { ...p, score: finalScoreForMe } : p
+    // Merge updated scores back into the ApiPlayer objects (preserves rack etc.)
+    const scoreById = new Map(endgame.computers.map((p) => [p.id, p.score]));
+    finalCp = updatedCp.map((p: ApiPlayer) =>
+      scoreById.has(p.id) ? { ...p, score: scoreById.get(p.id)! } : p
     );
   }
 
