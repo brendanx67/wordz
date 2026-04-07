@@ -230,10 +230,48 @@ export async function handlePlayMove(req: Request): Promise<Response> {
 
   const gameOver = newRack.length === 0 && remaining.length === 0;
 
+  // End-game scoring: if this player emptied their rack, sum all other players'
+  // remaining rack values, deduct from each of them, add total to this player.
+  let finalCp = updatedCp;
+  let finalScoreForMe = newScore;
+  if (gameOver) {
+    let bonusFromOthers = 0;
+
+    // Deduct from each other computer/API player's rack
+    finalCp = updatedCp.map((p: ApiPlayer) => {
+      if (p.id === auth.playerId) return p;
+      const rack = (p.rack ?? []) as Tile[];
+      const rackValue = rack.reduce((sum, t) => sum + (t.value ?? 0), 0);
+      bonusFromOthers += rackValue;
+      return { ...p, score: Math.max(0, p.score - rackValue) };
+    });
+
+    // Deduct from each human player's rack (fetch their racks first)
+    const { data: humans } = await supabase
+      .from("game_players")
+      .select("player_id, score, rack")
+      .eq("game_id", auth.gameId);
+    for (const hp of (humans ?? []) as { player_id: string; score: number; rack: Tile[] }[]) {
+      const rack = (hp.rack ?? []) as Tile[];
+      const rackValue = rack.reduce((sum, t) => sum + (t.value ?? 0), 0);
+      bonusFromOthers += rackValue;
+      await supabase
+        .from("game_players")
+        .update({ score: Math.max(0, hp.score - rackValue) })
+        .eq("game_id", auth.gameId)
+        .eq("player_id", hp.player_id);
+    }
+
+    finalScoreForMe = newScore + bonusFromOthers;
+    finalCp = finalCp.map((p: ApiPlayer) =>
+      p.id === auth.playerId ? { ...p, score: finalScoreForMe } : p
+    );
+  }
+
   const updateData: Record<string, unknown> = {
     board: newBoard,
     tile_bag: remaining,
-    computer_players: updatedCp,
+    computer_players: finalCp,
     current_turn: gameOver ? null : nextPlayer,
     turn_index: nextIndex,
     consecutive_passes: 0,
@@ -252,7 +290,16 @@ export async function handlePlayMove(req: Request): Promise<Response> {
 
   if (gameOver) {
     updateData.status = "finished";
-    updateData.winner = findWinner({ ...game, computer_players: updatedCp });
+    // Re-fetch humans for findWinner (their scores were just updated above)
+    const { data: humansAfter } = await supabase
+      .from("game_players")
+      .select("player_id, score")
+      .eq("game_id", auth.gameId);
+    updateData.winner = findWinner({
+      ...game,
+      game_players: humansAfter ?? [],
+      computer_players: finalCp,
+    });
   }
 
   const { error } = await supabase

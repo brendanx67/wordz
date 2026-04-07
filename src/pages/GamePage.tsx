@@ -118,10 +118,11 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
     setSuggestionSquare,
     suggestionDirection,
     setSuggestionDirection,
-    suggestionSent,
+    suggestionBlankTarget,
+    setSuggestionBlankTarget,
     handleSuggestionSquareClick,
     handleSuggestionTileClick,
-    saveSuggestion,
+    handleSuggestionBlankChoice,
     clearSuggestion,
   } = useSuggestionMode(gameId, userId, board, isSpectatingApi, moveCount)
 
@@ -221,6 +222,11 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
       // Drop in suggestion mode
       const key = `${row},${col}`
       if (board[row]?.[col]?.tile || suggestionTiles.has(key)) return
+      // Blank tile → prompt for letter assignment
+      if (tile.isBlank) {
+        setSuggestionBlankTarget({ row, col, tile })
+        return
+      }
       setSuggestionTiles(prev => {
         const next = new Map(prev)
         next.set(key, tile)
@@ -230,7 +236,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
     }
     if (!isMyTurn || !isActive) return
     placeTileOnBoard(row, col, tile)
-  }, [isMyTurn, isActive, isSpectatingApi, placeTileOnBoard, board, suggestionTiles])
+  }, [isMyTurn, isActive, isSpectatingApi, placeTileOnBoard, board, suggestionTiles, setSuggestionTiles, setSuggestionBlankTarget])
 
   // Keyboard support: type letters to place tiles (works for both own turn and suggestion mode)
   useEffect(() => {
@@ -243,12 +249,21 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
     const activeRack = isSpectatingApi ? suggestionRack : rackTiles
 
     const handleKeyDown = (e: KeyboardEvent) => {
-      // Blank tile letter selection (own turn only)
+      // Blank tile letter selection (own turn)
       if (!isSpectatingApi && blankTileTarget) {
         if (/^[a-zA-Z]$/.test(e.key)) {
           handleBlankLetterChoice(e.key)
         } else if (e.key === 'Escape') {
           setBlankTileTarget(null)
+        }
+        return
+      }
+      // Blank tile letter selection (suggestion mode)
+      if (isSpectatingApi && suggestionBlankTarget) {
+        if (/^[a-zA-Z]$/.test(e.key)) {
+          handleSuggestionBlankChoice(e.key)
+        } else if (e.key === 'Escape') {
+          setSuggestionBlankTarget(null)
         }
         return
       }
@@ -291,11 +306,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
 
       if (e.key === 'Enter') {
         e.preventDefault()
-        if (isSpectatingApi) {
-          if (suggestionTiles.size > 0) saveSuggestion()
-        } else {
-          if (placedTiles.size > 0) handleSubmitMove()
-        }
+        if (!isSpectatingApi && placedTiles.size > 0) handleSubmitMove()
         return
       }
 
@@ -501,10 +512,12 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
       // Check if game is over: player emptied rack and bag is empty
       const gameOver = newRack.length === 0 && remaining.length === 0
       if (gameOver) {
-        // End-game scoring: deduct remaining tile values from other players, add to this player
+        // End-game scoring: deduct remaining tile values from other players, add sum to this player
         let bonusFromOthers = 0
-        const otherPlayers = players.filter(p => p.player_id !== userId)
-        for (const op of otherPlayers) {
+
+        // Human opponents
+        const otherHumans = players.filter(p => p.player_id !== userId)
+        for (const op of otherHumans) {
           const opRack = (op.rack ?? []) as Tile[]
           const rackValue = opRack.reduce((sum, t) => sum + t.value, 0)
           bonusFromOthers += rackValue
@@ -513,6 +526,14 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
           }).eq('game_id', gameId).eq('player_id', op.player_id)
         }
 
+        // Computer/API players — update the computer_players JSON on the game row
+        const adjustedComputerPlayers = computerPlayers.map(cp => {
+          const cpRack = (cp.rack ?? []) as Tile[]
+          const rackValue = cpRack.reduce((sum, t) => sum + t.value, 0)
+          bonusFromOthers += rackValue
+          return { ...cp, score: Math.max(0, cp.score - rackValue) }
+        })
+
         const finalScore = myNewScore + bonusFromOthers
         await supabase.from('game_players').update({ score: finalScore })
           .eq('game_id', gameId).eq('player_id', userId)
@@ -520,22 +541,19 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
         // Find winner (highest score) — include both human and computer/API players
         const allScores: { id: string; score: number }[] = [
           { id: userId, score: finalScore },
-          ...otherPlayers.map(op => {
+          ...otherHumans.map(op => {
             const opRack = (op.rack ?? []) as Tile[]
             const rackValue = opRack.reduce((sum, t) => sum + t.value, 0)
             return { id: op.player_id, score: Math.max(0, op.score - rackValue) }
           }),
-          ...computerPlayers.map(cp => {
-            const cpRack = (cp.rack ?? []) as Tile[]
-            const rackValue = cpRack.reduce((sum, t) => sum + t.value, 0)
-            return { id: cp.id, score: Math.max(0, cp.score - rackValue) }
-          }),
+          ...adjustedComputerPlayers.map(cp => ({ id: cp.id, score: cp.score })),
         ]
         const winner = allScores.reduce((best, p) => p.score > best.score ? p : best)
 
         await supabase.from('games').update({
           status: 'finished',
           winner: winner.id,
+          computer_players: adjustedComputerPlayers,
           updated_at: new Date().toISOString(),
         }).eq('id', gameId)
       }
@@ -1016,6 +1034,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
 
           {/* Blank tile chooser */}
           {blankTileTarget && <BlankTileDialog onChoose={handleBlankLetterChoice} />}
+          {suggestionBlankTarget && <BlankTileDialog onChoose={handleSuggestionBlankChoice} />}
 
           <div className="relative">
             <button
@@ -1106,10 +1125,9 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
               suggestionRack={suggestionRack}
               suggestionTiles={suggestionTiles}
               suggestionSquare={suggestionSquare}
-              suggestionSent={suggestionSent}
               previewedTiles={previewedTiles}
               onTileClick={handleSuggestionTileClick}
-              saveSuggestion={saveSuggestion}
+              onReturnFromBoard={handlePickupTile}
               clearSuggestion={clearSuggestion}
             />
           )}

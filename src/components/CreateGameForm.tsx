@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Bot, User, Play, X, Sparkles, Search } from 'lucide-react'
-import { Switch } from '@/components/ui/switch'
+import { cn } from '@/lib/utils'
 
 export type PlayerSlotType =
   | 'me'
@@ -144,7 +144,7 @@ export default function CreateGameForm({ onCreateGame, onCancel, isPending }: Cr
       <CardContent className="space-y-4">
         {/* Player slots */}
         <div className="space-y-3">
-          <Label className="text-amber-400/80 text-xs uppercase tracking-wider">Players</Label>
+          <Label className="text-amber-200 text-xs uppercase tracking-wider font-semibold">Players</Label>
           {slots.map((slot, i) => (
             <div key={i} className="flex items-center gap-3">
               <div className="w-8 h-8 rounded-full bg-amber-900/30 border border-amber-800/30 flex items-center justify-center text-amber-500/60 text-xs font-bold shrink-0">
@@ -215,7 +215,7 @@ export default function CreateGameForm({ onCreateGame, onCancel, isPending }: Cr
         {/* Computer delay */}
         {hasComputer && (
           <div className="space-y-2 pt-2 border-t border-amber-900/20">
-            <Label className="text-amber-400/80 text-xs uppercase tracking-wider">
+            <Label className="text-amber-200 text-xs uppercase tracking-wider font-semibold">
               Computer Player Delay
             </Label>
             <div className="flex items-center gap-3">
@@ -227,9 +227,9 @@ export default function CreateGameForm({ onCreateGame, onCancel, isPending }: Cr
                 onChange={(e) => setComputerDelay(Math.max(0, Math.min(30, parseInt(e.target.value) || 0)))}
                 className="bg-amber-950/60 border-amber-800/30 text-amber-200 w-20 h-9 text-center"
               />
-              <span className="text-amber-500/70 text-sm">seconds between moves</span>
+              <span className="text-amber-300 text-sm">seconds between moves</span>
             </div>
-            <p className="text-amber-600/50 text-xs">
+            <p className="text-amber-400/90 text-xs">
               Add a delay to watch computer players think. Set to 0 for instant play.
             </p>
           </div>
@@ -241,16 +241,31 @@ export default function CreateGameForm({ onCreateGame, onCancel, isPending }: Cr
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Search className="h-4 w-4 text-purple-400" />
-                <Label className="text-amber-400/80 text-xs uppercase tracking-wider">
+                <Label className="text-amber-200 text-xs uppercase tracking-wider font-semibold">
                   Word Finder
                 </Label>
               </div>
-              <Switch
-                checked={wordFinderEnabled}
-                onCheckedChange={setWordFinderEnabled}
-              />
+              <button
+                type="button"
+                onClick={() => setWordFinderEnabled(v => !v)}
+                className={cn(
+                  'flex items-center gap-2 px-3 py-1.5 rounded-md text-xs font-bold uppercase tracking-wider border-2 transition-colors',
+                  wordFinderEnabled
+                    ? 'bg-purple-600 border-purple-400 text-white shadow-lg shadow-purple-900/50'
+                    : 'bg-amber-950/60 border-amber-700/60 text-amber-400/70 hover:text-amber-200'
+                )}
+                aria-pressed={wordFinderEnabled}
+              >
+                <span
+                  className={cn(
+                    'inline-block w-2 h-2 rounded-full',
+                    wordFinderEnabled ? 'bg-white' : 'bg-amber-700'
+                  )}
+                />
+                {wordFinderEnabled ? 'ON — LLM has access' : 'OFF — disabled'}
+              </button>
             </div>
-            <p className="text-amber-600/50 text-xs">
+            <p className="text-amber-400/90 text-xs">
               Give the LLM access to the A&amp;J algorithm to find all legal moves.
               Enables strategic play over raw word-finding.
             </p>
@@ -259,12 +274,12 @@ export default function CreateGameForm({ onCreateGame, onCancel, isPending }: Cr
 
         {/* Summary */}
         <div className="pt-2 border-t border-amber-900/20">
-          <div className="flex items-center gap-2 text-sm text-amber-400/70 mb-3">
+          <div className="flex items-center gap-2 text-sm text-amber-300 mb-3">
             {activePlayers.map((p, i) => (
               <span key={i} className="flex items-center gap-1">
-                {i > 0 && <span className="text-amber-700">vs</span>}
+                {i > 0 && <span className="text-amber-500">vs</span>}
                 {getSlotIcon(p.type)}
-                <span className={p.type === 'me' ? 'text-amber-200' : ''}>{p.label}</span>
+                <span className={p.type === 'me' ? 'text-amber-100 font-semibold' : 'text-amber-200'}>{p.label}</span>
               </span>
             ))}
           </div>

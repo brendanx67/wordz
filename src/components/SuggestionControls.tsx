@@ -10,10 +10,9 @@ interface SuggestionControlsProps {
   suggestionRack: Tile[]
   suggestionTiles: Map<string, Tile>
   suggestionSquare: { row: number; col: number } | null
-  suggestionSent: boolean
   previewedTiles: { row: number; col: number; letter: string; is_blank?: boolean }[] | undefined
   onTileClick: (tile: Tile) => void
-  saveSuggestion: () => void
+  onReturnFromBoard: (row: number, col: number) => void
   clearSuggestion: () => void
 }
 
@@ -23,10 +22,9 @@ export default function SuggestionControls({
   suggestionRack,
   suggestionTiles,
   suggestionSquare,
-  suggestionSent,
   previewedTiles,
   onTileClick,
-  saveSuggestion,
+  onReturnFromBoard,
   clearSuggestion,
 }: SuggestionControlsProps) {
   return (
@@ -40,39 +38,14 @@ export default function SuggestionControls({
         onTileClick={onTileClick}
         selectedTiles={new Set()}
         isExchangeMode={false}
+        onReturnFromBoard={onReturnFromBoard}
       />
       <div className="flex flex-col items-center gap-2">
-        {suggestionTiles.size > 0 && !suggestionSent && (
-          <>
-            <div className="flex justify-center gap-2 w-full">
-              <Button
-                size="sm"
-                onClick={saveSuggestion}
-                className="bg-purple-600 hover:bg-purple-500 text-white gap-1.5 animate-pulse shadow-lg shadow-purple-900/50 ring-2 ring-purple-400/50"
-              >
-                <Lightbulb className="h-4 w-4" />
-                Send Suggestion
-              </Button>
-              <Button
-                size="sm"
-                variant="ghost"
-                onClick={clearSuggestion}
-                className="text-amber-400 hover:text-amber-200 gap-1"
-              >
-                <X className="h-3.5 w-3.5" />
-                Clear
-              </Button>
-            </div>
-            <div className="text-amber-400/80 text-[11px] font-medium">
-              Suggestion not sent yet — click Send or press Enter
-            </div>
-          </>
-        )}
-        {suggestionSent && (
+        {suggestionTiles.size > 0 && (
           <div className="flex items-center justify-center gap-2 w-full">
             <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-green-900/30 border border-green-700/40">
               <Lightbulb className="h-3.5 w-3.5 text-green-400" />
-              <span className="text-green-300 text-xs font-medium">Suggestion sent</span>
+              <span className="text-green-300 text-xs font-medium">Suggestion live — LLM can see it</span>
             </div>
             <Button
               size="sm"
