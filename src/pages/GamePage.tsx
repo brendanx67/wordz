@@ -161,19 +161,43 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   // Live turn timer
   const turnElapsed = useTurnTimer(game?.updated_at, isActive, game?.current_turn)
 
-  // Trigger computer's turn automatically via Edge Function
+  // Trigger computer's turn automatically via Edge Function.
+  // Deps include move_history length so every completed turn re-evaluates,
+  // and the turnKey passed to playComputerTurn dedupes per-turn (StrictMode
+  // double-fire) without blocking the next turn.
   useEffect(() => {
     if (!game || !isActive || !isComputerTurn) return
     const cpId = game.current_turn as string
     const delay = Math.max(1500, (game.computer_delay ?? 0) * 1000)
+    const turnKey = `${cpId}:${moveCount}`
 
     const timer = setTimeout(() => {
-      playComputerTurn(cpId)
+      playComputerTurn(cpId, turnKey)
     }, delay)
 
     return () => clearTimeout(timer)
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [game?.current_turn, game?.status])
+  }, [game?.current_turn, game?.status, moveCount])
+
+  // Watchdog: if the game has been stuck on a computer's turn for 15 seconds
+  // (longer than any legitimate move), re-trigger. Catches any missed realtime
+  // update, race condition, or transient failure.
+  useEffect(() => {
+    if (!game || !isActive || !isComputerTurn) return
+    const cpId = game.current_turn as string
+    const updatedAt = game.updated_at ? new Date(game.updated_at).getTime() : Date.now()
+    const stallMs = Date.now() - updatedAt
+    const delay = Math.max(0, 15000 - stallMs)
+
+    const timer = setTimeout(() => {
+      // Force a refetch first in case the cache is stale, then retry
+      queryClient.invalidateQueries({ queryKey: ['game', gameId] })
+      playComputerTurn(cpId, `watchdog:${cpId}:${Date.now()}`)
+    }, delay)
+
+    return () => clearTimeout(timer)
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [game?.current_turn, game?.status, game?.updated_at, moveCount])
 
   const handleSquareClick = useCallback((row: number, col: number) => {
     // If there's already a committed tile, ignore

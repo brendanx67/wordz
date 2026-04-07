@@ -13,11 +13,16 @@ export function getComputerPlayerId(): string {
 
 export function useComputerPlayer(gameId: string) {
   const queryClient = useQueryClient()
-  const isThinking = useRef(false)
+  // Track by per-turn key so we dedupe the same turn (StrictMode / rerender)
+  // but NEVER block a new turn from firing. The previous `isThinking` boolean
+  // could stay stuck across a turn boundary if a refetch raced the finally
+  // block, deadlocking all-computer games. The key `${playerId}:${moveCount}`
+  // is unique per turn, so a different turn is never mistaken for a duplicate.
+  const triggeredKey = useRef<string | null>(null)
 
-  const playComputerTurn = useCallback(async (computerPlayerId: string) => {
-    if (isThinking.current) return
-    isThinking.current = true
+  const playComputerTurn = useCallback(async (computerPlayerId: string, turnKey?: string) => {
+    if (turnKey && triggeredKey.current === turnKey) return
+    if (turnKey) triggeredKey.current = turnKey
 
     try {
       const { data, error } = await supabase.functions.invoke('computer-turn', {
@@ -27,6 +32,8 @@ export function useComputerPlayer(gameId: string) {
       if (error) {
         console.error('Computer turn error:', error)
         toast.error('Computer player encountered an error')
+        // Clear dedupe key on failure so a retry (e.g. from the watchdog) is allowed
+        if (turnKey) triggeredKey.current = null
         return
       }
 
@@ -42,10 +49,9 @@ export function useComputerPlayer(gameId: string) {
     } catch (err) {
       console.error('Computer player error:', err)
       toast.error('Computer player encountered an error')
-    } finally {
-      isThinking.current = false
+      if (turnKey) triggeredKey.current = null
     }
   }, [gameId, queryClient])
 
-  return { playComputerTurn, isThinking: isThinking.current }
+  return { playComputerTurn }
 }
