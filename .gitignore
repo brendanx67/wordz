@@ -21,3 +21,8 @@ vite.config.d.ts
 .playwright-mcp/
 test-results/
 playwright-report/
+
+# Source snapshot — regenerated from a fresh clone before each publish
+# (see "Source code" section in src/pages/LobbyPage.tsx). Tracking this
+# in git would embed every previous snapshot in .git history forever.
+public/wordz-source.zip
