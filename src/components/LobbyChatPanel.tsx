@@ -1,7 +1,14 @@
 import { useState, useMemo, useEffect } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipProvider,
+  TooltipTrigger,
+} from '@/components/ui/tooltip'
 import { MessageSquare, ChevronDown, ChevronUp } from 'lucide-react'
 import { useChatChannels, type ChatChannel } from '@/hooks/useChatChannel'
+import { useMyGames, type ComputerPlayer } from '@/hooks/useGames'
 import ChatChannelView from './ChatChannelView'
 
 interface LobbyChatPanelProps {
@@ -17,10 +24,55 @@ function channelSortKey(c: ChatChannel): number {
   return 3
 }
 
+// Subset of GameRow that we need to render game-channel labels and tooltips.
+// Comes from useMyGames, which only fetches active/waiting games — finished
+// games fall back to the short-id label.
+interface GameInfo {
+  title: string // "Word Player 1 vs Computer 1 (Easy)"
+  startedAt: string // localized date-time
+  status: string
+}
+
+function getDisplayName(
+  profiles: { display_name: string } | { display_name: string }[] | null
+): string {
+  if (!profiles) return 'Unknown'
+  if (Array.isArray(profiles)) return profiles[0]?.display_name ?? 'Unknown'
+  return profiles.display_name
+}
+
+function buildGameInfo(game: {
+  status: string
+  created_at: string
+  game_players?: { profiles: unknown }[] | null
+  computer_players?: unknown
+}): GameInfo {
+  const humans = (game.game_players ?? []).map((p) =>
+    getDisplayName(p.profiles as { display_name: string })
+  )
+  const cps = (game.computer_players ?? []) as ComputerPlayer[]
+  const computers = cps.map((cp) => cp.name)
+  const title = [...humans, ...computers].join(' vs ') || 'Game'
+  return {
+    title,
+    startedAt: new Date(game.created_at).toLocaleString(),
+    status: game.status,
+  }
+}
+
 export default function LobbyChatPanel({ userId, onOpenGame }: LobbyChatPanelProps) {
   const [expanded, setExpanded] = useState(false)
   const { data: channels, isLoading } = useChatChannels()
+  const { data: myGames } = useMyGames(userId)
   const [selectedName, setSelectedName] = useState<string>('suggestions')
+
+  // Map game id → enriched info so we can show real titles + tooltips for
+  // each game-* channel instead of just the short hash.
+  const gameInfoById = useMemo(() => {
+    const m = new Map<string, GameInfo>()
+    for (const g of myGames ?? []) m.set(g.id, buildGameInfo(g))
+    return m
+  }, [myGames])
 
   const sortedChannels = useMemo(() => {
     if (!channels) return []
@@ -79,57 +131,126 @@ export default function LobbyChatPanel({ userId, onOpenGame }: LobbyChatPanelPro
       </CardHeader>
       {expanded && (
         <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-[180px_1fr] gap-4">
-            {/* Channel switcher */}
-            <div className="space-y-1 md:border-r md:border-amber-900/20 md:pr-4">
-              {isLoading ? (
-                <p className="text-amber-500/60 text-xs">Loading channels…</p>
-              ) : sortedChannels.length === 0 ? (
-                <p className="text-amber-500/60 text-xs">No channels.</p>
-              ) : (
-                sortedChannels.map((c) => {
-                  const isSelected = c.name === selectedName
-                  const label = formatChannelLabel(c)
-                  return (
-                    <button
-                      type="button"
-                      key={c.id}
-                      onClick={() => setSelectedName(c.name)}
-                      className={
-                        'w-full text-left px-2 py-1.5 rounded text-sm transition-colors ' +
-                        (isSelected
-                          ? 'bg-amber-800/50 text-amber-100 font-semibold'
-                          : 'text-amber-300/80 hover:bg-amber-900/30 hover:text-amber-200')
-                      }
-                    >
-                      <span className="text-amber-500/60 mr-1">{channelPrefix(c)}</span>
-                      {label}
-                    </button>
-                  )
-                })
-              )}
-            </div>
+          <TooltipProvider delayDuration={300}>
+            <div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-4">
+              {/* Channel switcher */}
+              <div className="space-y-1 md:border-r md:border-amber-900/20 md:pr-4">
+                {isLoading ? (
+                  <p className="text-amber-500/60 text-xs">Loading channels…</p>
+                ) : sortedChannels.length === 0 ? (
+                  <p className="text-amber-500/60 text-xs">No channels.</p>
+                ) : (
+                  sortedChannels.map((c) => {
+                    const isSelected = c.name === selectedName
+                    const gameInfo = gameInfoForChannel(c, gameInfoById)
+                    const label = formatChannelLabel(c, gameInfo)
+                    const button = (
+                      <button
+                        type="button"
+                        onClick={() => setSelectedName(c.name)}
+                        className={
+                          'w-full text-left px-2 py-1.5 rounded text-sm transition-colors truncate ' +
+                          (isSelected
+                            ? 'bg-amber-800/50 text-amber-100 font-semibold'
+                            : 'text-amber-300/80 hover:bg-amber-900/30 hover:text-amber-200')
+                        }
+                      >
+                        <span className="text-amber-500/60 mr-1">{channelPrefix(c)}</span>
+                        {label}
+                      </button>
+                    )
+                    if (gameInfo) {
+                      return (
+                        <Tooltip key={c.id}>
+                          <TooltipTrigger asChild>{button}</TooltipTrigger>
+                          <TooltipContent side="right" className="max-w-xs">
+                            <div className="space-y-0.5">
+                              <div className="font-semibold">{gameInfo.title}</div>
+                              <div className="text-xs opacity-80">
+                                Started {gameInfo.startedAt}
+                              </div>
+                              <div className="text-xs opacity-60 capitalize">
+                                Status: {gameInfo.status}
+                              </div>
+                            </div>
+                          </TooltipContent>
+                        </Tooltip>
+                      )
+                    }
+                    return <div key={c.id}>{button}</div>
+                  })
+                )}
+              </div>
 
-            {/* Active channel content */}
-            <div>
-              {selectedName ? (
-                <ChatChannelView
-                  key={selectedName}
-                  channelName={selectedName}
-                  currentUserId={userId}
-                  active={expanded}
-                  onOpenGame={onOpenGame}
-                />
-              ) : (
-                <p className="text-amber-500/60 text-sm">Pick a channel.</p>
-              )}
+              {/* Active channel content */}
+              <div>
+                {selectedName ? (
+                  <ActiveChannelPane
+                    channel={sortedChannels.find((c) => c.name === selectedName)}
+                    channelName={selectedName}
+                    gameInfo={(() => {
+                      const c = sortedChannels.find((c) => c.name === selectedName)
+                      return c ? gameInfoForChannel(c, gameInfoById) : null
+                    })()}
+                    userId={userId}
+                    expanded={expanded}
+                    onOpenGame={onOpenGame}
+                  />
+                ) : (
+                  <p className="text-amber-500/60 text-sm">Pick a channel.</p>
+                )}
+              </div>
             </div>
-          </div>
+          </TooltipProvider>
         </CardContent>
       )}
     </Card>
   )
 }
+
+// ─── Active channel pane ────────────────────────────────────────────────────
+
+function ActiveChannelPane({
+  channel,
+  channelName,
+  gameInfo,
+  userId,
+  expanded,
+  onOpenGame,
+}: {
+  channel: ChatChannel | undefined
+  channelName: string
+  gameInfo: GameInfo | null
+  userId: string
+  expanded: boolean
+  onOpenGame?: (gameId: string) => void
+}) {
+  return (
+    <div className="space-y-2">
+      {gameInfo ? (
+        <div className="border-b border-amber-900/30 pb-2">
+          <h3 className="text-amber-200 font-semibold text-sm">{gameInfo.title}</h3>
+          <p className="text-amber-500/70 text-xs">
+            Started {gameInfo.startedAt} · {gameInfo.status}
+          </p>
+        </div>
+      ) : channel && channel.name !== 'suggestions' ? (
+        <div className="border-b border-amber-900/30 pb-2">
+          <h3 className="text-amber-200 font-semibold text-sm">{channel.display_name}</h3>
+        </div>
+      ) : null}
+      <ChatChannelView
+        key={channelName}
+        channelName={channelName}
+        currentUserId={userId}
+        active={expanded}
+        onOpenGame={onOpenGame}
+      />
+    </div>
+  )
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
 function channelPrefix(c: ChatChannel): string {
   if (c.visibility === 'direct') return '@'
@@ -137,10 +258,20 @@ function channelPrefix(c: ChatChannel): string {
   return '#'
 }
 
-function formatChannelLabel(c: ChatChannel): string {
+function gameInfoForChannel(
+  c: ChatChannel,
+  byId: Map<string, GameInfo>
+): GameInfo | null {
+  if (!c.name.startsWith('game-')) return null
+  const id = c.name.slice('game-'.length)
+  return byId.get(id) ?? null
+}
+
+function formatChannelLabel(c: ChatChannel, gameInfo: GameInfo | null): string {
   if (c.name.startsWith('game-')) {
-    // The display_name comes back as 'Game Chat' for every game channel — show
-    // a short id suffix so the user can tell them apart.
+    if (gameInfo) return gameInfo.title
+    // Fall back to a short hash for games we don't have details for (e.g.
+    // finished games whose channels still exist but aren't in useMyGames).
     const id = c.name.slice('game-'.length)
     return `Game ${id.slice(0, 4)}`
   }
