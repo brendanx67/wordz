@@ -123,6 +123,10 @@ export function useChatChannel(channelName: string): UseChatChannelResult {
       return data
     },
     refetchInterval: POLL_INTERVAL_MS, // realtime fallback
+    // 404 (channel not found) shouldn't retry — it's not transient. Retrying
+    // also stretches the "loading" window across the retry-backoff period,
+    // which causes panels keyed off `isLoading` to flap on every poll.
+    retry: false,
   })
 
   // Realtime: subscribe once we know the channel id. Filter on channel_id so

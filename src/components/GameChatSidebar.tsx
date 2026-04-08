@@ -19,15 +19,19 @@ export default function GameChatSidebar({ gameId, userId, gameStatus }: GameChat
   const channelName = `game-${gameId}`
   const { messages, unreadCount, isError, isLoading } = useChatChannel(channelName)
 
-  // The channel may not exist if the game is still in 'waiting' state — the
-  // trigger only fires once status flips to 'active'. Hide the panel until
-  // it does, rather than rendering a "Channel not found" error.
-  if (isError && !isLoading) return null
+  // Don't render anything until we have a definitive answer about the chat
+  // channel. Without this guard, every polling refetch on an errored query
+  // re-enters `isLoading=true, isError=false` for several seconds (TanStack's
+  // retry-with-backoff window), causing the panel to flicker visible/hidden
+  // every poll cycle. This also covers:
+  //   - 'waiting' games where the channel hasn't been created yet (isError)
+  //   - finished games whose channel never existed (isError)
+  if (isLoading || isError) return null
 
   // Once a game is finished, the chat is only useful as a record of what was
   // said during play. If nothing was said, hide the panel entirely so the
   // post-game review screen isn't cluttered with an empty chat.
-  if (gameStatus === 'finished' && !isLoading && messages.length === 0) return null
+  if (gameStatus === 'finished' && messages.length === 0) return null
 
   return (
     <Card className="border-amber-900/30 bg-amber-950/30">
