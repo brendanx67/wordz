@@ -19,7 +19,7 @@ interface GameBoardProps {
   board: BoardCell[][]
   selectedSquare: { row: number; col: number } | null
   onSquareClick: (row: number, col: number) => void
-  onDrop: (row: number, col: number, tile: Tile) => void
+  onDrop: (row: number, col: number, tile: Tile, source?: { row: number; col: number }) => void
   onPickupTile: (row: number, col: number) => void
   placedTiles: Map<string, Tile>
   previewTiles?: PreviewTile[]
@@ -99,21 +99,21 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
 
   const handleDrop = (e: React.DragEvent, row: number, col: number) => {
     e.preventDefault()
+    e.stopPropagation()
     setDragOverSquare(null)
     const tileData = e.dataTransfer.getData('application/json')
     if (!tileData) return
 
     const parsed = JSON.parse(tileData) as Tile & { fromBoard?: string }
+    const { fromBoard, ...tile } = parsed
 
-    if (parsed.fromBoard) {
-      onPickupTile(
-        parseInt(parsed.fromBoard.split(',')[0]),
-        parseInt(parsed.fromBoard.split(',')[1])
-      )
+    let source: { row: number; col: number } | undefined
+    if (fromBoard) {
+      const [sr, sc] = fromBoard.split(',').map(Number)
+      source = { row: sr, col: sc }
     }
 
-    const { fromBoard: _, ...tile } = parsed
-    onDrop(row, col, tile as Tile)
+    onDrop(row, col, tile as Tile, source)
   }
 
   const handleDragStartFromBoard = (e: React.DragEvent, row: number, col: number, tile: Tile) => {
@@ -201,7 +201,10 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
               const isPreview = !!preview && !displayTile
               const isCommitted = !!tile
               const isHighlighted = highlightSet.has(`${row},${col}`) && isCommitted
-              const isDragTarget = dragOverSquare === `${row},${col}` && !isCommitted && !isNewlyPlaced
+              // Allow drag-target highlight on any non-locked square, including
+              // ones holding a live (newly-placed) tile — that tile gets
+              // displaced back to the rack on drop.
+              const isDragTarget = dragOverSquare === `${row},${col}` && !isCommitted
 
               return (
                 <div
@@ -258,13 +261,13 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
                   {displayTile ? (
                     <>
                       <span
-                        className="text-[14px] sm:text-[17px] md:text-[19px] font-black tracking-tight"
+                        className="text-[14px] sm:text-[17px] md:text-[19px] font-black tracking-tight pointer-events-none"
                         style={{ color: '#3d2b1a', fontFamily: "'Playfair Display', serif", textShadow: '0 1px 0 rgba(255,255,255,0.3)' }}
                       >
                         {displayTile.letter || ''}
                       </span>
                       <span
-                        className="absolute text-[6px] sm:text-[7px] md:text-[8px] font-bold"
+                        className="absolute text-[6px] sm:text-[7px] md:text-[8px] font-bold pointer-events-none"
                         style={{ bottom: '1px', right: '2px', color: '#6b4f30' }}
                       >
                         {displayTile.value || ''}
@@ -272,7 +275,7 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
                     </>
                   ) : isPreview ? (
                     <span
-                      className="text-[14px] sm:text-[17px] md:text-[19px] font-black tracking-tight"
+                      className="text-[14px] sm:text-[17px] md:text-[19px] font-black tracking-tight pointer-events-none"
                       style={{ color: '#ffffff', fontFamily: "'Playfair Display', serif", textShadow: '0 1px 2px rgba(0,0,0,0.3)' }}
                     >
                       {preview!.letter}
@@ -280,7 +283,7 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
                   ) : bonus ? (
                     <span
                       className={cn(
-                        'font-extrabold text-center leading-[1.15] whitespace-pre-line',
+                        'font-extrabold text-center leading-[1.15] whitespace-pre-line pointer-events-none',
                         isSelected && 'opacity-0',
                         bonus === 'CENTER' ? 'text-[14px] sm:text-[16px] md:text-[18px]' : 'text-[6px] sm:text-[7px] md:text-[8px]'
                       )}
@@ -290,7 +293,7 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
                     </span>
                   ) : null}
                   {isSelected && !displayTile && (
-                    <div className="absolute inset-0 flex items-center justify-center bg-white/25 rounded-sm">
+                    <div className="absolute inset-0 flex items-center justify-center bg-white/25 rounded-sm pointer-events-none">
                       <span className="text-white font-black text-[18px] sm:text-[20px] md:text-[22px] drop-shadow-lg">
                         {direction === 'across' ? '\u2192' : '\u2193'}
                       </span>

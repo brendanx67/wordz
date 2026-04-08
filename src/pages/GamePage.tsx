@@ -241,26 +241,47 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
     setBlankTileTarget(null)
   }, [blankTileTarget])
 
-  const handleDrop = useCallback((row: number, col: number, tile: Tile) => {
+  const handleDrop = useCallback((row: number, col: number, tile: Tile, source?: { row: number; col: number }) => {
+    // Reject drops onto locked (committed) tiles. Live tiles are always
+    // movable until the move is committed.
+    if (board[row]?.[col]?.tile) return
+    // No-op: dropped back on the same square it came from.
+    if (source && source.row === row && source.col === col) return
+
     if (isSpectatingApi) {
-      // Drop in suggestion mode
-      const key = `${row},${col}`
-      if (board[row]?.[col]?.tile || suggestionTiles.has(key)) return
-      // Blank tile → prompt for letter assignment
-      if (tile.isBlank) {
+      // Blank tile from rack → prompt for letter assignment.
+      if (tile.isBlank && !source && !tile.letter) {
         setSuggestionBlankTarget({ row, col, tile })
         return
       }
+      // Atomic move: remove from source (if any) and place at destination
+      // in a single state update. If the destination already had a live
+      // tile, it's overwritten — that tile drops out of the suggestion
+      // map and reappears in the rack via the filter.
       setSuggestionTiles(prev => {
         const next = new Map(prev)
-        next.set(key, tile)
+        if (source) next.delete(`${source.row},${source.col}`)
+        next.set(`${row},${col}`, tile)
         return next
       })
       return
     }
+
     if (!isMyTurn || !isActive) return
-    placeTileOnBoard(row, col, tile)
-  }, [isMyTurn, isActive, isSpectatingApi, placeTileOnBoard, board, suggestionTiles, setSuggestionTiles, setSuggestionBlankTarget])
+
+    // Blank tile from rack → prompt for letter assignment.
+    if (tile.isBlank && !source && !tile.letter) {
+      setBlankTileTarget({ row, col, tile })
+      return
+    }
+
+    setPlacedTiles(prev => {
+      const next = new Map(prev)
+      if (source) next.delete(`${source.row},${source.col}`)
+      next.set(`${row},${col}`, tile)
+      return next
+    })
+  }, [isMyTurn, isActive, isSpectatingApi, board, setSuggestionTiles, setSuggestionBlankTarget])
 
   // Keyboard support: type letters to place tiles (works for both own turn and suggestion mode)
   useEffect(() => {
