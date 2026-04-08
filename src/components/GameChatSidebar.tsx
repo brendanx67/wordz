@@ -7,21 +7,27 @@ import { useChatChannel } from '@/hooks/useChatChannel'
 interface GameChatSidebarProps {
   gameId: string
   userId: string
+  gameStatus: string
 }
 
 // Lightweight collapsible chat panel for the game page. Loads the
 // per-game chat channel (`game-<uuid>`) which is auto-provisioned by the
 // migration trigger when the game becomes active. Members are every human
 // player + every API-key owner.
-export default function GameChatSidebar({ gameId, userId }: GameChatSidebarProps) {
+export default function GameChatSidebar({ gameId, userId, gameStatus }: GameChatSidebarProps) {
   const [expanded, setExpanded] = useState(false)
   const channelName = `game-${gameId}`
-  const { unreadCount, isError, isLoading } = useChatChannel(channelName)
+  const { messages, unreadCount, isError, isLoading } = useChatChannel(channelName)
 
   // The channel may not exist if the game is still in 'waiting' state — the
   // trigger only fires once status flips to 'active'. Hide the panel until
   // it does, rather than rendering a "Channel not found" error.
   if (isError && !isLoading) return null
+
+  // Once a game is finished, the chat is only useful as a record of what was
+  // said during play. If nothing was said, hide the panel entirely so the
+  // post-game review screen isn't cluttered with an empty chat.
+  if (gameStatus === 'finished' && !isLoading && messages.length === 0) return null
 
   return (
     <Card className="border-amber-900/30 bg-amber-950/30">

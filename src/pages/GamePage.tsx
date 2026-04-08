@@ -1190,7 +1190,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
 
         {/* Per-game chat (auto-provisioned when game becomes active) */}
         <div className="w-full lg:w-72 shrink-0">
-          <GameChatSidebar gameId={gameId} userId={userId} />
+          <GameChatSidebar gameId={gameId} userId={userId} gameStatus={game.status} />
         </div>
       </main>
     </div>
