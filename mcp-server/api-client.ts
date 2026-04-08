@@ -72,3 +72,29 @@ export async function apiCall(
   }
   return data;
 }
+
+// Chat MCP tools set this header so that messages posted via the MCP server
+// are attributed with `posted_by_agent = "claude-code"` even though the caller
+// authenticates with an api_key whose name might be different.
+export const MCP_AGENT_NAME = "claude-code";
+
+export async function chatApiCall(
+  path: string,
+  method: "GET" | "POST" = "GET",
+  body?: unknown,
+): Promise<unknown> {
+  const res = await fetch(`${API_URL}/${path}`, {
+    method,
+    headers: {
+      "x-api-key": API_KEY,
+      "Content-Type": "application/json",
+      "x-posted-by-agent": MCP_AGENT_NAME,
+    },
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.error || `API error: ${res.status}`);
+  }
+  return data;
+}

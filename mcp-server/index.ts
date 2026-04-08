@@ -16,6 +16,9 @@ import { registerFindWordsTool } from "./tools/find-words.js";
 import { registerPreviewMoveTool } from "./tools/preview-move.js";
 import { registerValidateSuggestionTool } from "./tools/validate-suggestion.js";
 import { registerPlaySuggestionTool } from "./tools/play-suggestion.js";
+import { registerListChatChannelsTool } from "./tools/list-chat-channels.js";
+import { registerReadChatMessagesTool } from "./tools/read-chat-messages.js";
+import { registerPostChatMessageTool } from "./tools/post-chat-message.js";
 
 const server = new McpServer({
   name: "wordz",
@@ -34,6 +37,9 @@ registerFindWordsTool(server);
 registerPreviewMoveTool(server);
 registerValidateSuggestionTool(server);
 registerPlaySuggestionTool(server);
+registerListChatChannelsTool(server);
+registerReadChatMessagesTool(server);
+registerPostChatMessageTool(server);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

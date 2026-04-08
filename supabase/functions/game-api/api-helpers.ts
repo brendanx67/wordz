@@ -7,7 +7,7 @@ import { buildTrie } from "./_shared/trie.ts";
 export const cors = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers":
-    "authorization, x-client-info, apikey, content-type, x-api-key",
+    "authorization, x-client-info, apikey, content-type, x-api-key, x-posted-by-agent",
 };
 
 // ─── TYPES ───────────────────────────────────────────────────────────────────
@@ -147,6 +147,57 @@ export async function authenticateApiKey(
     playerId: myApiPlayer.id,
     playerName: myApiPlayer.name,
   };
+}
+
+// ─── CHAT AUTH ───────────────────────────────────────────────────────────────
+// Chat endpoints accept either a Supabase session JWT (web UI) or an api_key
+// (MCP clients). Both paths resolve to the same human user_id; the optional
+// posted_by_agent annotation reveals which interface the message was authored
+// through.
+//
+// Resolution order for posted_by_agent:
+//   1. explicit x-posted-by-agent header (set by browser-session tooling)
+//   2. api_key.name when authenticating via x-api-key
+//   3. null (plain web UI session)
+export interface ChatAuthContext {
+  userId: string;
+  agent: string | null;
+}
+
+export async function authenticateChatUser(
+  req: Request
+): Promise<ChatAuthContext | null> {
+  const supabase = getServiceClient();
+  const explicitAgent = req.headers.get("x-posted-by-agent");
+
+  // Path 1: api_key
+  const apiKey = req.headers.get("x-api-key");
+  if (apiKey) {
+    const { data, error } = await supabase
+      .from("api_keys")
+      .select("user_id, name")
+      .eq("api_key", apiKey)
+      .single();
+    if (error || !data) return null;
+    return {
+      userId: data.user_id,
+      agent: explicitAgent ?? data.name ?? null,
+    };
+  }
+
+  // Path 2: Supabase Auth JWT
+  const authHeader = req.headers.get("authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.slice("Bearer ".length);
+    const { data, error } = await supabase.auth.getUser(token);
+    if (error || !data.user) return null;
+    return {
+      userId: data.user.id,
+      agent: explicitAgent ?? null,
+    };
+  }
+
+  return null;
 }
 
 // ─── GAME HELPERS ────────────────────────────────────────────────────────────
