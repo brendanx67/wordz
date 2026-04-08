@@ -10,6 +10,7 @@ import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import CreateGameForm from '@/components/CreateGameForm'
 import type { GameConfig } from '@/components/CreateGameForm'
+import SuggestionsChatPanel from '@/components/SuggestionsChatPanel'
 
 function getDisplayName(profiles: { display_name: string } | { display_name: string }[] | null): string {
   if (!profiles) return 'Unknown'
@@ -387,6 +388,10 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
             )}
           </CardContent>
         </Card>
+
+        {/* Suggestions chat */}
+        <SuggestionsChatPanel userId={userId} />
+
         {/* API & MCP Setup */}
         <ApiSetupSection userId={userId} />
       </main>
