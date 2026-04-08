@@ -38,13 +38,18 @@ export async function handleFindWords(req: Request): Promise<Response> {
     .single();
 
   if (gErr || !game) return jsonError("Game not found", 404);
-  if (!game.word_finder_enabled) {
-    return jsonError("Word finder is not enabled for this game. The game creator can enable it in game settings.", 403);
-  }
 
-  const cpPlayers = (game.computer_players ?? []) as ApiPlayer[];
-  const myPlayer = cpPlayers.find((p: ApiPlayer) => p.id === auth.playerId);
+  const cpPlayers = (game.computer_players ?? []) as (ApiPlayer & {
+    find_words_enabled?: boolean;
+  })[];
+  const myPlayer = cpPlayers.find((p) => p.id === auth.playerId);
   if (!myPlayer) return jsonError("Player not found in game", 404);
+  if (!myPlayer.find_words_enabled) {
+    return jsonError(
+      "Word finder is not enabled for this seat. The game creator can enable it when configuring this player.",
+      403,
+    );
+  }
 
   const boardState = game.board as BoardCell[][];
   const trie = await getTrie();

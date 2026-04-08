@@ -15,14 +15,16 @@ export async function handleGetGame(req: Request): Promise<Response> {
   const supabase = getServiceClient();
   const { data: game, error } = await supabase
     .from("games")
-    .select("id, status, board, current_turn, turn_order, turn_index, tile_bag, consecutive_passes, winner, computer_players, move_history, suggested_move, word_finder_enabled, game_players(player_id, score, profiles(display_name))")
+    .select("id, status, board, current_turn, turn_order, turn_index, tile_bag, consecutive_passes, winner, computer_players, move_history, suggested_move, game_players(player_id, score, profiles(display_name))")
     .eq("id", auth.gameId)
     .single();
 
   if (error || !game) return jsonError("Game not found", 404);
 
-  const allPlayers = (game.computer_players ?? []) as ApiPlayer[];
-  const myPlayer = allPlayers.find((p: ApiPlayer) => p.id === auth.playerId);
+  const allPlayers = (game.computer_players ?? []) as (ApiPlayer & {
+    find_words_enabled?: boolean;
+  })[];
+  const myPlayer = allPlayers.find((p) => p.id === auth.playerId);
 
   const boardView: {
     row: number; col: number;
@@ -110,7 +112,9 @@ export async function handleGetGame(req: Request): Promise<Response> {
     players: [...humanPlayers, ...aiPlayers],
     recent_moves: moveHistory,
     winner: game.winner,
-    word_finder_enabled: game.word_finder_enabled ?? false,
+    // Per-seat (issue #9). This reflects whether the caller's own seat has
+    // find_words access — not any other seat's.
+    find_words_enabled: !!myPlayer?.find_words_enabled,
     suggested_move: game.suggested_move ?? null,
     previewed_move: game.previewed_move ?? null,
   });

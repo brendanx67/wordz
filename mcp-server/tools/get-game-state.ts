@@ -115,10 +115,10 @@ export function registerGetGameStateTool(server: McpServer) {
               `Use validate_suggestion to check it, or play_suggestion to play it directly.`,
             ]
           : []),
-        ...(state.word_finder_enabled
+        ...(state.find_words_enabled
           ? [
               ``,
-              `[Word finder is ENABLED — use find_words to search all legal moves with the A&J algorithm]`,
+              `[Word finder is ENABLED for this seat — use find_words to search all legal moves with the A&J algorithm]`,
             ]
           : []),
         ``,

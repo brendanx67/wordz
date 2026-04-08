@@ -131,8 +131,20 @@ export function useCreateConfiguredGame() {
         }
       })
 
-      // Create API players (stored alongside computer players)
-      const apiPlayers: { id: string; name: string; rack: Tile[]; score: number; strategyLevel?: string; owner_id: string }[] = apiSlots.map((slot, i) => {
+      // Create API players (stored alongside computer players in the same
+      // JSONB array). The per-seat find_words_enabled flag lives here — the
+      // game-wide word_finder_enabled column on games was removed in #9.
+      // The CreateGameForm toggle is still game-wide in v1; it fans out to
+      // every API seat on create. A future change can make it per-seat.
+      const apiPlayers: {
+        id: string
+        name: string
+        rack: Tile[]
+        score: number
+        strategyLevel?: string
+        owner_id: string
+        find_words_enabled: boolean
+      }[] = apiSlots.map((slot, i) => {
         const { drawn, remaining } = drawTiles(bag, RACK_SIZE)
         bag = remaining
         const name = slot.apiPlayerName || 'Claude'
@@ -143,6 +155,7 @@ export function useCreateConfiguredGame() {
           score: 0,
           strategyLevel: slot.strategyLevel || 'master',
           owner_id: userId,
+          find_words_enabled: config.wordFinderEnabled ?? false,
         }
       })
 
@@ -198,7 +211,6 @@ export function useCreateConfiguredGame() {
           has_computer: computerPlayers.length > 0 || apiPlayers.length > 0,
           computer_players: allNonHumanPlayers,
           computer_delay: config.computerDelay,
-          word_finder_enabled: config.wordFinderEnabled ?? false,
           // Legacy single-computer fields (for backward compat)
           computer_difficulty: computerPlayers[0]?.difficulty ?? null,
           computer_rack: computerPlayers[0]?.rack ?? [],

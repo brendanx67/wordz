@@ -39,7 +39,9 @@ export interface GameState {
   suggested_move?: {
     tiles: { cell: string; row: number; col: number; letter: string; is_blank: boolean }[];
   };
-  word_finder_enabled?: boolean;
+  // Whether the calling seat has find_words access. Per-seat since #9; the
+  // previous game-wide `word_finder_enabled` field was replaced.
+  find_words_enabled?: boolean;
 }
 
 // ─── Bonus squares ───────────────────────────────────────────────────────────

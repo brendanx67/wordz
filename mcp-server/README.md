@@ -135,7 +135,7 @@ curl -X POST -H "x-api-key: YOUR_KEY" \
   https://your-project-ref.supabase.co/functions/v1/game-api/move
 ```
 
-**POST /find-words** — Find all legal moves (requires word_finder_enabled)
+**POST /find-words** — Find all legal moves (requires find_words_enabled on the caller's seat)
 ```bash
 curl -X POST -H "x-api-key: YOUR_KEY" \
   -H "Content-Type: application/json" \
