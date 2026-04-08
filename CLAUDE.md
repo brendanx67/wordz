@@ -111,6 +111,7 @@ mcp-server/                       # Stdio MCP server, one tool per file
 | `bun run dev` | Vite dev server on port 3000 |
 | `bun run build` | `tsc -b && vite build` — **always run before committing** |
 | `bun run build:mcp` | Rebuild `public/wordz-mcp.zip` from `mcp-server/` (run when MCP server source changes before publishing) |
+| `bun run build:source` | Rebuild `public/wordz-source.zip` — a flat, gitignore-respecting snapshot of `HEAD` via `git archive`. **Always use this script — never hand-roll the zip**, since the structure has to stay consistent (flat, no wrapper folder) for downstream consumers. |
 
 **Run `bun run build` before committing.** The dev server doesn't run `tsc`, so type errors only surface here. CI also runs this — if it fails locally, it'll fail in CI.
 
