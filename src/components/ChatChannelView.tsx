@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState, useMemo } from 'react'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Textarea } from '@/components/ui/textarea'
 import { Skeleton } from '@/components/ui/skeleton'
@@ -9,7 +8,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { MessageSquare, Send, ChevronDown, ChevronUp } from 'lucide-react'
+import { Send } from 'lucide-react'
 import { useChatChannel, type ChatMessage } from '@/hooks/useChatChannel'
 import { toast } from 'sonner'
 
@@ -17,24 +16,38 @@ const MESSAGE_MAX = 4000
 const COUNTER_THRESHOLD = MESSAGE_MAX - 500
 const GITHUB_REPO_URL = 'https://github.com/brendanx67/wordz'
 
-interface SuggestionsChatPanelProps {
-  userId: string
+interface ChatChannelViewProps {
+  channelName: string
+  currentUserId: string
+  // Outer container controls visibility/expand state; this view assumes it
+  // should mark messages read whenever it's mounted (the panel above is
+  // already responsible for hiding it when collapsed).
+  active?: boolean
+  // Optional callback so the parent can navigate to a referenced game.
+  onOpenGame?: (gameId: string) => void
+  // Optional height override for the message scroll area.
+  scrollHeightClass?: string
 }
 
-export default function SuggestionsChatPanel({ userId }: SuggestionsChatPanelProps) {
-  const [expanded, setExpanded] = useState(false)
+export default function ChatChannelView({
+  channelName,
+  currentUserId,
+  active = true,
+  onOpenGame,
+  scrollHeightClass = 'h-80',
+}: ChatChannelViewProps) {
   const [draft, setDraft] = useState('')
 
-  const { channel, messages, isLoading, isError, postMessage, isPosting, markRead, unreadCount } =
-    useChatChannel('suggestions')
+  const { messages, isLoading, isError, postMessage, isPosting, markRead, unreadCount } =
+    useChatChannel(channelName)
 
-  // Mark as read once the panel opens AND messages have hydrated. Re-runs
-  // whenever the unread count drops to zero so we don't spam the endpoint.
+  // Mark as read once messages have hydrated. Re-runs whenever the unread
+  // count drops to zero so we don't spam the endpoint.
   useEffect(() => {
-    if (!expanded || isLoading || messages.length === 0) return
+    if (!active || isLoading || messages.length === 0) return
     if (unreadCount > 0) markRead()
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [expanded, isLoading, messages.length, unreadCount])
+  }, [active, isLoading, messages.length, unreadCount])
 
   const handleSend = async () => {
     const body = draft.trim()
@@ -49,7 +62,6 @@ export default function SuggestionsChatPanel({ userId }: SuggestionsChatPanelPro
     try {
       await postMessage({ body, ...refs })
     } catch (err) {
-      // Restore the draft so the user doesn't lose their text.
       setDraft(previous)
       toast.error(`Failed to send: ${(err as Error).message}`)
     }
@@ -66,86 +78,63 @@ export default function SuggestionsChatPanel({ userId }: SuggestionsChatPanelPro
   const showCounter = draft.length >= COUNTER_THRESHOLD
 
   return (
-    <Card className="border-amber-900/30 bg-amber-950/30">
-      <CardHeader
-        className="cursor-pointer select-none"
-        onClick={() => setExpanded((e) => !e)}
-      >
-        <CardTitle className="text-amber-300 flex items-center justify-between">
-          <span className="flex items-center gap-2">
-            <MessageSquare className="h-5 w-5" />
-            Suggestions
-            {unreadCount > 0 && !expanded && (
-              <span className="ml-1 px-2 py-0.5 rounded-full bg-amber-700 text-amber-50 text-xs font-semibold">
-                {unreadCount}
+    <div className="space-y-4">
+      {isLoading ? (
+        <div className="space-y-2">
+          <Skeleton className="h-12 bg-amber-900/20" />
+          <Skeleton className="h-12 bg-amber-900/20" />
+          <Skeleton className="h-12 bg-amber-900/20" />
+        </div>
+      ) : isError ? (
+        <p className="text-red-400 text-sm">Failed to load messages.</p>
+      ) : (
+        <MessageList
+          messages={messages}
+          currentUserId={currentUserId}
+          onOpenGame={onOpenGame}
+          scrollHeightClass={scrollHeightClass}
+        />
+      )}
+
+      <div className="space-y-2">
+        <Textarea
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="Share a message. Enter to send, Shift+Enter for newline. Reference issues with #N."
+          maxLength={MESSAGE_MAX}
+          rows={3}
+          className="bg-amber-950/40 border-amber-900/30 text-amber-100 placeholder:text-amber-500/40 focus-visible:ring-amber-600"
+          disabled={isPosting}
+        />
+        <div className="flex items-center justify-between">
+          <div className="text-xs text-amber-500/60">
+            {showCounter && (
+              <span
+                className={
+                  charsRemaining < 0
+                    ? 'text-red-400 font-semibold'
+                    : charsRemaining < 100
+                      ? 'text-amber-300'
+                      : 'text-amber-500/60'
+                }
+              >
+                {charsRemaining} characters left
               </span>
             )}
-          </span>
-          {expanded ? (
-            <ChevronUp className="h-5 w-5 text-amber-400/60" />
-          ) : (
-            <ChevronDown className="h-5 w-5 text-amber-400/60" />
-          )}
-        </CardTitle>
-        {channel?.description && (
-          <p className="text-amber-400/70 text-xs mt-1">{channel.description}</p>
-        )}
-      </CardHeader>
-      {expanded && (
-        <CardContent className="space-y-4">
-          {isLoading ? (
-            <div className="space-y-2">
-              <Skeleton className="h-12 bg-amber-900/20" />
-              <Skeleton className="h-12 bg-amber-900/20" />
-              <Skeleton className="h-12 bg-amber-900/20" />
-            </div>
-          ) : isError ? (
-            <p className="text-red-400 text-sm">Failed to load messages.</p>
-          ) : (
-            <MessageList messages={messages} currentUserId={userId} />
-          )}
-
-          <div className="space-y-2">
-            <Textarea
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder="Share feedback or ideas. Enter to send, Shift+Enter for newline. Reference issues with #N."
-              maxLength={MESSAGE_MAX}
-              rows={3}
-              className="bg-amber-950/40 border-amber-900/30 text-amber-100 placeholder:text-amber-500/40 focus-visible:ring-amber-600"
-              disabled={isPosting}
-            />
-            <div className="flex items-center justify-between">
-              <div className="text-xs text-amber-500/60">
-                {showCounter && (
-                  <span
-                    className={
-                      charsRemaining < 0
-                        ? 'text-red-400 font-semibold'
-                        : charsRemaining < 100
-                          ? 'text-amber-300'
-                          : 'text-amber-500/60'
-                    }
-                  >
-                    {charsRemaining} characters left
-                  </span>
-                )}
-              </div>
-              <Button
-                onClick={handleSend}
-                disabled={!draft.trim() || isPosting || draft.length > MESSAGE_MAX}
-                size="sm"
-                className="bg-amber-700 hover:bg-amber-600 text-amber-50 font-semibold"
-              >
-                <Send className="h-4 w-4 mr-1" />
-                {isPosting ? 'Sending…' : 'Send'}
-              </Button>
-            </div>
           </div>
-        </CardContent>
-      )}
-    </Card>
+          <Button
+            onClick={handleSend}
+            disabled={!draft.trim() || isPosting || draft.length > MESSAGE_MAX}
+            size="sm"
+            className="bg-amber-700 hover:bg-amber-600 text-amber-50 font-semibold"
+          >
+            <Send className="h-4 w-4 mr-1" />
+            {isPosting ? 'Sending…' : 'Send'}
+          </Button>
+        </div>
+      </div>
+    </div>
   )
 }
 
@@ -154,15 +143,17 @@ export default function SuggestionsChatPanel({ userId }: SuggestionsChatPanelPro
 function MessageList({
   messages,
   currentUserId,
+  onOpenGame,
+  scrollHeightClass,
 }: {
   messages: ChatMessage[]
   currentUserId: string
+  onOpenGame?: (gameId: string) => void
+  scrollHeightClass: string
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
   const wasNearBottomRef = useRef(true)
 
-  // Track whether the user is near the bottom before each render so we don't
-  // steal scroll while they're reading history.
   useEffect(() => {
     const el = scrollRef.current
     if (!el) return
@@ -182,7 +173,6 @@ function MessageList({
     }
   }, [messages.length])
 
-  // Build a quick lookup for "reply to" rendering.
   const messagesById = useMemo(() => {
     const map = new Map<string, ChatMessage>()
     for (const m of messages) map.set(m.id, m)
@@ -193,10 +183,10 @@ function MessageList({
     return (
       <div
         ref={scrollRef}
-        className="h-64 rounded-lg bg-amber-950/40 border border-amber-900/20 flex items-center justify-center"
+        className={`${scrollHeightClass} rounded-lg bg-amber-950/40 border border-amber-900/20 flex items-center justify-center`}
       >
         <p className="text-amber-500/60 text-sm">
-          No messages yet. Be the first to share feedback.
+          No messages yet. Be the first to share something.
         </p>
       </div>
     )
@@ -206,7 +196,7 @@ function MessageList({
     <TooltipProvider delayDuration={400}>
       <div
         ref={scrollRef}
-        className="h-80 overflow-y-auto rounded-lg bg-amber-950/40 border border-amber-900/20 p-3 space-y-3"
+        className={`${scrollHeightClass} overflow-y-auto rounded-lg bg-amber-950/40 border border-amber-900/20 p-3 space-y-3`}
       >
         {messages.map((m) => (
           <MessageRow
@@ -216,6 +206,7 @@ function MessageList({
             replyTo={
               m.references_message_id ? messagesById.get(m.references_message_id) : undefined
             }
+            onOpenGame={onOpenGame}
           />
         ))}
       </div>
@@ -229,10 +220,12 @@ function MessageRow({
   message,
   isSelf,
   replyTo,
+  onOpenGame,
 }: {
   message: ChatMessage
   isSelf: boolean
   replyTo?: ChatMessage
+  onOpenGame?: (gameId: string) => void
 }) {
   const created = new Date(message.created_at)
   const absolute = created.toLocaleString()
@@ -270,8 +263,8 @@ function MessageRow({
         {renderBodyWithReferences(message.body)}
       </div>
 
-      {(message.references_issue || message.references_commit) && (
-        <div className="mt-1 flex items-center gap-2 text-xs">
+      {(message.references_issue || message.references_commit || message.during_game_id) && (
+        <div className="mt-1 flex items-center gap-2 text-xs flex-wrap">
           {message.references_issue && (
             <a
               href={`${GITHUB_REPO_URL}/issues/${message.references_issue}`}
@@ -291,6 +284,22 @@ function MessageRow({
             >
               {message.references_commit.slice(0, 8)}
             </a>
+          )}
+          {message.during_game_id && (
+            <span className="text-amber-500/70 italic">
+              during{' '}
+              {onOpenGame ? (
+                <button
+                  type="button"
+                  onClick={() => onOpenGame(message.during_game_id!)}
+                  className="text-amber-300 hover:text-amber-200 underline"
+                >
+                  Game {message.during_game_id.slice(0, 8)}
+                </button>
+              ) : (
+                <span className="text-amber-300">Game {message.during_game_id.slice(0, 8)}</span>
+              )}
+            </span>
           )}
         </div>
       )}
@@ -317,11 +326,8 @@ function formatRelative(date: Date): string {
   return date.toLocaleDateString()
 }
 
-// Render `#N` and short SHA tokens inside the message body as inline links.
-// Returns a React node array suitable for whitespace-pre-wrap rendering.
 function renderBodyWithReferences(body: string): React.ReactNode[] {
   const out: React.ReactNode[] = []
-  // Match either `#NNN` (issue) or a 7-12 hex char standalone token (commit).
   const re = /(#\d+|\b[0-9a-f]{7,12}\b)/g
   let lastIndex = 0
   let match: RegExpExecArray | null
@@ -363,10 +369,6 @@ function renderBodyWithReferences(body: string): React.ReactNode[] {
   return out
 }
 
-// Pull the first `#N` and the first 7-12 char short SHA out of the body so
-// they get persisted to the structured `references_*` columns. Per-message
-// the schema only stores one of each; additional refs in the body still get
-// rendered as inline links via renderBodyWithReferences.
 function parseReferences(body: string): {
   references_issue?: number
   references_commit?: string

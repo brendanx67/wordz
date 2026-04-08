@@ -26,6 +26,7 @@ export interface GameState {
   tiles_remaining: number;
   players: {
     id: string;
+    user_id?: string;
     name: string;
     score: number;
     type?: string;

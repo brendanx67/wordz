@@ -18,6 +18,7 @@ interface ReadMessagesResponse {
     references_issue: number | null;
     references_commit: string | null;
     references_message_id: string | null;
+    during_game_id: string | null;
     created_at: string;
   }[];
   last_read_at: string | null;
@@ -63,6 +64,7 @@ export function registerReadChatMessagesTool(server: McpServer) {
           if (m.references_issue) refs.push(`#${m.references_issue}`);
           if (m.references_commit) refs.push(m.references_commit.slice(0, 8));
           if (m.references_message_id) refs.push(`reply→${m.references_message_id.slice(0, 8)}`);
+          if (m.during_game_id) refs.push(`during_game=${m.during_game_id.slice(0, 8)}`);
           const refStr = refs.length > 0 ? ` (${refs.join(", ")})` : "";
           return `[${when}] ${sender}${refStr}\n  id=${m.id}\n  ${m.body}`;
         });

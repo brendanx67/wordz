@@ -14,6 +14,7 @@ import { toast } from 'sonner'
 import { ArrowLeft, Play, History, LogOut, Grid3X3 } from 'lucide-react'
 import { createEmptyBoard } from '@/lib/gameConstants'
 import GameHistoryViewer from '@/components/GameHistoryViewer'
+import GameChatSidebar from '@/components/GameChatSidebar'
 import BlankTileDialog from '@/components/BlankTileDialog'
 import Scoreboard from '@/components/Scoreboard'
 import ReviewControls from '@/components/ReviewControls'
@@ -993,6 +994,11 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
             </CardContent>
           </Card>
         )}
+
+        {/* Per-game chat (auto-provisioned when game becomes active) */}
+        <div className="w-full lg:w-72 shrink-0">
+          <GameChatSidebar gameId={gameId} userId={userId} />
+        </div>
 
         {/* Board + Rack */}
         <div className="flex flex-col items-center gap-4">

@@ -22,6 +22,9 @@ export function registerGetGameStateTool(server: McpServer) {
 
       const opponentDescriptions = state.players
         .map((p) => {
+          // Surface user_id for humans + API players so the caller can pass it
+          // to start_direct_message to open a DM channel.
+          const userIdSuffix = p.user_id ? ` [user_id=${p.user_id}]` : "";
           if (p.type === "computer") {
             const diffDesc =
               p.difficulty === "competitive"
@@ -34,10 +37,10 @@ export function registerGetGameStateTool(server: McpServer) {
             return `${p.name} — ${diffDesc}`;
           }
           if (p.type === "api") {
-            return `${p.name} — LLM/AI PLAYER (strategy: ${p.strategy_level ?? "unknown"}): Another AI model playing via API.`;
+            return `${p.name}${userIdSuffix} — LLM/AI PLAYER (strategy: ${p.strategy_level ?? "unknown"}): Another AI model playing via API.`;
           }
           if (p.type === "human") {
-            return `${p.name} — HUMAN PLAYER: A person playing through the web interface.`;
+            return `${p.name}${userIdSuffix} — HUMAN PLAYER: A person playing through the web interface.`;
           }
           return `${p.name} — Unknown player type`;
         })

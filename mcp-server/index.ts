@@ -19,6 +19,7 @@ import { registerPlaySuggestionTool } from "./tools/play-suggestion.js";
 import { registerListChatChannelsTool } from "./tools/list-chat-channels.js";
 import { registerReadChatMessagesTool } from "./tools/read-chat-messages.js";
 import { registerPostChatMessageTool } from "./tools/post-chat-message.js";
+import { registerStartDirectMessageTool } from "./tools/start-direct-message.js";
 
 const server = new McpServer({
   name: "wordz",
@@ -40,6 +41,7 @@ registerPlaySuggestionTool(server);
 registerListChatChannelsTool(server);
 registerReadChatMessagesTool(server);
 registerPostChatMessageTool(server);
+registerStartDirectMessageTool(server);
 
 const transport = new StdioServerTransport();
 await server.connect(transport);

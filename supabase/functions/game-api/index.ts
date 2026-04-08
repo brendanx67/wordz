@@ -11,6 +11,7 @@ import {
   handleReadMessages,
   handlePostMessage,
   handleMarkRead,
+  handleStartDirectMessage,
 } from "./handlers/chat.ts";
 
 Deno.serve(async (req) => {
@@ -40,6 +41,9 @@ Deno.serve(async (req) => {
     }
     if (req.method === "POST" && /^chat\/channels\/[^/]+\/read$/.test(path)) {
       return await handleMarkRead(req);
+    }
+    if (req.method === "POST" && path === "chat/dm") {
+      return await handleStartDirectMessage(req);
     }
 
     return jsonError(`Unknown endpoint: ${path}`, 404);

@@ -105,6 +105,7 @@ export type Database = {
           body: string
           channel_id: string
           created_at: string
+          during_game_id: string | null
           id: string
           posted_by_agent: string | null
           posted_by_user_id: string
@@ -116,6 +117,7 @@ export type Database = {
           body: string
           channel_id: string
           created_at?: string
+          during_game_id?: string | null
           id?: string
           posted_by_agent?: string | null
           posted_by_user_id: string
@@ -127,6 +129,7 @@ export type Database = {
           body?: string
           channel_id?: string
           created_at?: string
+          during_game_id?: string | null
           id?: string
           posted_by_agent?: string | null
           posted_by_user_id?: string
@@ -140,6 +143,13 @@ export type Database = {
             columns: ["channel_id"]
             isOneToOne: false
             referencedRelation: "chat_channels"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "chat_messages_during_game_id_fkey"
+            columns: ["during_game_id"]
+            isOneToOne: false
+            referencedRelation: "games"
             referencedColumns: ["id"]
           },
           {
@@ -388,7 +398,10 @@ export type Database = {
       }
     }
     Functions: {
-      [_ in never]: never
+      find_shared_active_game: {
+        Args: { user_a: string; user_b: string }
+        Returns: string
+      }
     }
     Enums: {
       [_ in never]: never

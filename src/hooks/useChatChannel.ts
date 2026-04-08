@@ -35,6 +35,7 @@ export interface ChatMessage {
   references_issue: number | null
   references_commit: string | null
   references_message_id: string | null
+  during_game_id: string | null
   created_at: string
 }
 
@@ -176,6 +177,7 @@ export function useChatChannel(channelName: string): UseChatChannelResult {
           references_issue: input.references_issue ?? null,
           references_commit: input.references_commit ?? null,
           references_message_id: input.references_message_id ?? null,
+          during_game_id: null,
           created_at: new Date().toISOString(),
         }
         queryClient.setQueryData<MessagesResponse>(messagesKey, {
@@ -205,6 +207,7 @@ export function useChatChannel(channelName: string): UseChatChannelResult {
       references_issue: input.references_issue ?? null,
       references_commit: input.references_commit ?? null,
       references_message_id: input.references_message_id ?? null,
+      during_game_id: null,
       created_at: result.created_at,
     } as ChatMessage
   }
@@ -246,4 +249,30 @@ export function useChatChannel(channelName: string): UseChatChannelResult {
     markRead,
     unreadCount,
   }
+}
+
+// ─── Start a direct message channel ──────────────────────────────────────────
+
+interface StartDmResponse {
+  id: string
+  name: string
+  display_name: string
+  visibility: 'direct'
+}
+
+export function useStartDirectMessage() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async (recipientUserId: string): Promise<StartDmResponse> => {
+      return await chatFetch<StartDmResponse>('chat/dm', {
+        method: 'POST',
+        body: { recipient_user_id: recipientUserId },
+      })
+    },
+    onSuccess: () => {
+      // Force the channels list to refetch so the new DM channel appears
+      // in the lobby chat panel switcher.
+      queryClient.invalidateQueries({ queryKey: ['chat', 'channels'] })
+    },
+  })
 }

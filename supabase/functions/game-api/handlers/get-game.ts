@@ -45,17 +45,22 @@ export async function handleGetGame(req: Request): Promise<Response> {
 
   const humanPlayers = (game.game_players ?? []).map((p: { player_id: string; score: number; profiles: { display_name: string } }) => ({
     id: p.player_id,
+    user_id: p.player_id,
     name: p.profiles.display_name,
     score: p.score,
     type: "human" as const,
     description: "Human player",
   }));
 
-  const aiPlayers = allPlayers.map((p: ApiPlayer & { difficulty?: string; strategyLevel?: string }) => {
+  const aiPlayers = allPlayers.map((p: ApiPlayer & { difficulty?: string; strategyLevel?: string; owner_id?: string }) => {
     const isComputer = p.id.startsWith("computer-");
     const isApi = p.id.startsWith("api-");
     return {
       id: p.id,
+      // For API players, expose the owning human's user_id so callers can DM
+      // them via start_direct_message. Built-in computer players don't have
+      // an owner.
+      ...(isApi && p.owner_id ? { user_id: p.owner_id } : {}),
       name: p.name,
       score: p.score,
       type: isComputer ? "computer" as const : isApi ? "api" as const : "unknown" as const,
