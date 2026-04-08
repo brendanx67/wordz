@@ -430,7 +430,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
     setSelectedSquare(null)
   }
 
-  const handlePickupTile = useCallback((row: number, col: number) => {
+  const handlePickupTile = useCallback((row: number, col: number, insertIndex?: number) => {
     const key = `${row},${col}`
     if (isSpectatingApi && suggestionTiles.has(key)) {
       setSuggestionTiles(prev => {
@@ -440,14 +440,23 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
       })
       return
     }
-    if (placedTiles.has(key)) {
-      setPlacedTiles(prev => {
-        const next = new Map(prev)
-        next.delete(key)
-        return next
-      })
+    const returningTile = placedTiles.get(key)
+    if (!returningTile) return
+    setPlacedTiles(prev => {
+      const next = new Map(prev)
+      next.delete(key)
+      return next
+    })
+    // When the caller requested a specific rack insertion position (e.g. a
+    // board → rack drop with a visible drop indicator), update rackOrder
+    // so the returning tile lands exactly where the user pointed.
+    if (insertIndex !== undefined) {
+      const baseIds = rackTiles.map(t => t.id)
+      const at = Math.max(0, Math.min(insertIndex, baseIds.length))
+      baseIds.splice(at, 0, returningTile.id)
+      setRackOrder(baseIds)
     }
-  }, [placedTiles, isSpectatingApi, suggestionTiles])
+  }, [placedTiles, isSpectatingApi, suggestionTiles, rackTiles])
 
   const handleSubmitMove = async () => {
     if (!game || !isMyTurn || placedTiles.size === 0) return

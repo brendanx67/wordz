@@ -10,7 +10,7 @@ interface TileRackProps {
   isExchangeMode: boolean
   onShuffle?: () => void
   onReorder?: (tiles: Tile[]) => void
-  onReturnFromBoard?: (row: number, col: number) => void
+  onReturnFromBoard?: (row: number, col: number, insertIndex?: number) => void
 }
 
 export default function TileRack({ tiles, onTileClick, selectedTiles, isExchangeMode, onShuffle, onReorder, onReturnFromBoard }: TileRackProps) {
@@ -86,29 +86,37 @@ export default function TileRack({ tiles, onTileClick, selectedTiles, isExchange
   }, [tiles.length])
 
   const handleContainerDragOver = useCallback((e: React.DragEvent) => {
-    // Accept both rack-internal drags and board-to-rack drags
+    // Only respond to our own tile-drag format (rack-internal or board → rack).
+    // Guards against unrelated drags (text, images) over the rack.
+    if (!e.dataTransfer.types.includes('application/json')) return
+    // Accept both rack-internal drags and board-to-rack drags. Compute
+    // the insertion index in both cases so the drop indicator bar renders
+    // for external drags too.
     e.preventDefault()
     e.dataTransfer.dropEffect = 'move'
-    if (draggedTileId) {
-      setDropIndex(computeDropIndex(e.clientX))
-    }
-  }, [draggedTileId, computeDropIndex])
+    setDropIndex(computeDropIndex(e.clientX))
+  }, [computeDropIndex])
 
   const handleContainerDrop = useCallback((e: React.DragEvent) => {
     e.preventDefault()
+    const dropAt = dropIndex
     if (draggedTileId) return // rack-internal: handleDragEnd handles it
 
     // Board-to-rack drop
     const tileData = e.dataTransfer.getData('application/json')
-    if (!tileData || !onReturnFromBoard) return
+    if (!tileData || !onReturnFromBoard) {
+      setDropIndex(null)
+      return
+    }
     try {
       const parsed = JSON.parse(tileData) as { fromBoard?: string }
       if (parsed.fromBoard) {
         const [row, col] = parsed.fromBoard.split(',').map(Number)
-        onReturnFromBoard(row, col)
+        onReturnFromBoard(row, col, dropAt ?? undefined)
       }
     } catch { /* ignore */ }
-  }, [draggedTileId, onReturnFromBoard])
+    setDropIndex(null)
+  }, [draggedTileId, dropIndex, onReturnFromBoard])
 
   const handleContainerDragLeave = useCallback((e: React.DragEvent) => {
     // Only clear if truly leaving the container
@@ -119,9 +127,15 @@ export default function TileRack({ tiles, onTileClick, selectedTiles, isExchange
 
   const dragIdx = draggedTileId ? tiles.findIndex(t => t.id === draggedTileId) : -1
 
-  // Is the indicator at a valid new position (not adjacent to current)?
-  const isIndicatorValid = (idx: number) =>
-    draggedTileId !== null && dropIndex === idx && idx !== dragIdx && idx !== dragIdx + 1
+  // Is the indicator at a valid new position?
+  // - Rack-internal drag: suppress at positions adjacent to the source
+  //   (those would be no-op reorders).
+  // - External drag (board → rack): show at any position.
+  const isIndicatorValid = (idx: number) => {
+    if (dropIndex !== idx) return false
+    if (draggedTileId === null) return true
+    return idx !== dragIdx && idx !== dragIdx + 1
+  }
 
   return (
     <div

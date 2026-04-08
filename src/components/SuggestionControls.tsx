@@ -12,7 +12,7 @@ interface SuggestionControlsProps {
   suggestionSquare: { row: number; col: number } | null
   previewedTiles: { row: number; col: number; letter: string; is_blank?: boolean }[] | undefined
   onTileClick: (tile: Tile) => void
-  onReturnFromBoard: (row: number, col: number) => void
+  onReturnFromBoard: (row: number, col: number, insertIndex?: number) => void
   clearSuggestion: () => void
 }
 
