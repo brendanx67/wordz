@@ -995,11 +995,6 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
           </Card>
         )}
 
-        {/* Per-game chat (auto-provisioned when game becomes active) */}
-        <div className="w-full lg:w-72 shrink-0">
-          <GameChatSidebar gameId={gameId} userId={userId} />
-        </div>
-
         {/* Board + Rack */}
         <div className="flex flex-col items-center gap-4">
           {/* Game status */}
@@ -1191,6 +1186,11 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
               clearSuggestion={clearSuggestion}
             />
           )}
+        </div>
+
+        {/* Per-game chat (auto-provisioned when game becomes active) */}
+        <div className="w-full lg:w-72 shrink-0">
+          <GameChatSidebar gameId={gameId} userId={userId} />
         </div>
       </main>
     </div>
