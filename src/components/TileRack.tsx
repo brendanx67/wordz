@@ -1,4 +1,4 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef, useCallback, useEffect } from 'react'
 import type { Tile } from '@/lib/gameConstants'
 import { cn } from '@/lib/utils'
 import { Shuffle } from 'lucide-react'
@@ -39,6 +39,21 @@ export default function TileRack({ tiles, onTileClick, selectedTiles, isExchange
     setDraggedTileId(null)
     setDropIndex(null)
   }, [draggedTileId, dropIndex, tiles, onReorder])
+
+  // If a drag starts on a rack tile and the tile is then moved onto the
+  // board, React unmounts the source element before dragend can fire on it,
+  // leaving draggedTileId stuck. The stale id then (a) keeps the tile
+  // rendering as "dragging" (grayed + scale-90) if it later comes back to
+  // the rack, (b) makes board→rack drags show the rack reorder indicator,
+  // and (c) makes handleContainerDrop silently reject board→rack drops via
+  // its `if (draggedTileId) return` guard. Clear the stale state whenever
+  // the tracked tile is no longer present in the rack.
+  useEffect(() => {
+    if (draggedTileId && !tiles.some(t => t.id === draggedTileId)) {
+      setDraggedTileId(null)
+      setDropIndex(null)
+    }
+  }, [tiles, draggedTileId])
 
   const computeDropIndex = useCallback((clientX: number) => {
     let closestIdx = 0
