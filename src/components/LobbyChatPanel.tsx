@@ -6,7 +6,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from '@/components/ui/tooltip'
-import { MessageSquare, ChevronDown, ChevronUp } from 'lucide-react'
+import { MessageSquare, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
 import { useChatChannels, type ChatChannel } from '@/hooks/useChatChannel'
 import { useMyGames, type ComputerPlayer } from '@/hooks/useGames'
 import ChatChannelView from './ChatChannelView'
@@ -225,14 +225,32 @@ function ActiveChannelPane({
   expanded: boolean
   onOpenGame?: (gameId: string) => void
 }) {
+  // Game channels start with `game-<uuid>` — pull the id out so the header
+  // can offer a "jump to board" link without re-parsing it elsewhere.
+  const gameId =
+    channel?.name.startsWith('game-') ? channel.name.slice('game-'.length) : null
+
   return (
     <div className="space-y-2">
       {gameInfo ? (
-        <div className="border-b border-amber-900/30 pb-2">
-          <h3 className="text-amber-200 font-semibold text-sm">{gameInfo.title}</h3>
-          <p className="text-amber-500/70 text-xs">
-            Started {gameInfo.startedAt} · {gameInfo.status}
-          </p>
+        <div className="border-b border-amber-900/30 pb-2 flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <h3 className="text-amber-200 font-semibold text-sm truncate">{gameInfo.title}</h3>
+            <p className="text-amber-500/70 text-xs">
+              Started {gameInfo.startedAt} · {gameInfo.status}
+            </p>
+          </div>
+          {gameId && onOpenGame && (
+            <button
+              type="button"
+              onClick={() => onOpenGame(gameId)}
+              className="shrink-0 inline-flex items-center gap-1 px-2 py-1 rounded text-xs bg-amber-800/40 hover:bg-amber-700/60 text-amber-100 border border-amber-700/40 transition-colors"
+              title="Open this game"
+            >
+              <ExternalLink className="h-3 w-3" />
+              Open game
+            </button>
+          )}
         </div>
       ) : channel && channel.name !== 'suggestions' ? (
         <div className="border-b border-amber-900/30 pb-2">

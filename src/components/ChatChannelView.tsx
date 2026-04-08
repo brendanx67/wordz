@@ -29,6 +29,13 @@ interface ChatChannelViewProps {
   scrollHeightClass?: string
 }
 
+// Game channels are named `game-<uuid>`. When we're inside one, every message
+// shares the same `during_game_id` and the per-row "Game …" link is just noise
+// — the channel header already offers a single "Open game" affordance.
+function gameIdFromChannelName(name: string): string | null {
+  return name.startsWith('game-') ? name.slice('game-'.length) : null
+}
+
 export default function ChatChannelView({
   channelName,
   currentUserId,
@@ -36,6 +43,7 @@ export default function ChatChannelView({
   onOpenGame,
   scrollHeightClass = 'h-80',
 }: ChatChannelViewProps) {
+  const channelGameId = gameIdFromChannelName(channelName)
   const [draft, setDraft] = useState('')
 
   const { messages, isLoading, isError, postMessage, isPosting, markRead, unreadCount } =
@@ -92,6 +100,7 @@ export default function ChatChannelView({
           messages={messages}
           currentUserId={currentUserId}
           onOpenGame={onOpenGame}
+          channelGameId={channelGameId}
           scrollHeightClass={scrollHeightClass}
         />
       )}
@@ -144,11 +153,13 @@ function MessageList({
   messages,
   currentUserId,
   onOpenGame,
+  channelGameId,
   scrollHeightClass,
 }: {
   messages: ChatMessage[]
   currentUserId: string
   onOpenGame?: (gameId: string) => void
+  channelGameId: string | null
   scrollHeightClass: string
 }) {
   const scrollRef = useRef<HTMLDivElement>(null)
@@ -207,6 +218,7 @@ function MessageList({
               m.references_message_id ? messagesById.get(m.references_message_id) : undefined
             }
             onOpenGame={onOpenGame}
+            channelGameId={channelGameId}
           />
         ))}
       </div>
@@ -221,15 +233,22 @@ function MessageRow({
   isSelf,
   replyTo,
   onOpenGame,
+  channelGameId,
 }: {
   message: ChatMessage
   isSelf: boolean
   replyTo?: ChatMessage
   onOpenGame?: (gameId: string) => void
+  channelGameId: string | null
 }) {
   const created = new Date(message.created_at)
   const absolute = created.toLocaleString()
   const relative = formatRelative(created)
+  // Suppress the per-row "during Game …" affordance when the message belongs
+  // to the same game as the channel itself — the channel header already has
+  // a single Open Game link, so repeating it on every row is just noise.
+  const showDuringGame =
+    !!message.during_game_id && message.during_game_id !== channelGameId
 
   return (
     <div
@@ -263,7 +282,7 @@ function MessageRow({
         {renderBodyWithReferences(message.body)}
       </div>
 
-      {(message.references_issue || message.references_commit || message.during_game_id) && (
+      {(message.references_issue || message.references_commit || showDuringGame) && (
         <div className="mt-1 flex items-center gap-2 text-xs flex-wrap">
           {message.references_issue && (
             <a
@@ -285,7 +304,7 @@ function MessageRow({
               {message.references_commit.slice(0, 8)}
             </a>
           )}
-          {message.during_game_id && (
+          {showDuringGame && (
             <span className="text-amber-500/70 italic">
               during{' '}
               {onOpenGame ? (
@@ -294,10 +313,12 @@ function MessageRow({
                   onClick={() => onOpenGame(message.during_game_id!)}
                   className="text-amber-300 hover:text-amber-200 underline"
                 >
-                  Game {message.during_game_id.slice(0, 8)}
+                  Game {message.during_game_id!.slice(0, 8)}
                 </button>
               ) : (
-                <span className="text-amber-300">Game {message.during_game_id.slice(0, 8)}</span>
+                <span className="text-amber-300">
+                  Game {message.during_game_id!.slice(0, 8)}
+                </span>
               )}
             </span>
           )}
