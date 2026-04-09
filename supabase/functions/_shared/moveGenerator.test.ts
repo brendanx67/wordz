@@ -117,6 +117,52 @@ describe("generateAllMoves", () => {
     }
   });
 
+  test("multi-letter prefix: CATER found when ER exists on the board and CAT placed from rack", () => {
+    // Regression: buildPrefix used to reverse prefix letter positions,
+    // placing "AC" on the board instead of "CA". recordMove then saw
+    // "ACTER" instead of "CATER" and silently dropped the move.
+    const trie = buildSmallTrie("CATER", "CARET", "ER");
+    const board = makeBoard();
+    // Place E and R vertically so the anchor is the square above E.
+    // Word goes DOWN: C(r4,c10) A(r5,c10) T(r6,c10) E(r7,c10) R(r8,c10)
+    placeStatic(board, 7, 10, "E"); // K8
+    placeStatic(board, 8, 10, "R"); // K9
+
+    const rack: Tile[] = [makeTile("C"), makeTile("A"), makeTile("T")];
+    const moves = generateAllMoves(board, rack, trie);
+
+    const caterMove = moves.find((m) => m.words.some((w) => w.word === "CATER"));
+    expect(caterMove).toBeDefined();
+    // All three rack tiles should be placed.
+    expect(caterMove!.tiles).toHaveLength(3);
+    // Verify correct board positions: C farthest from anchor, T closest.
+    const sorted = [...caterMove!.tiles].sort((a, b) => a.row - b.row);
+    expect(sorted[0]).toMatchObject({ row: 4, col: 10, tile: expect.objectContaining({ letter: "C" }) });
+    expect(sorted[1]).toMatchObject({ row: 5, col: 10, tile: expect.objectContaining({ letter: "A" }) });
+    expect(sorted[2]).toMatchObject({ row: 6, col: 10, tile: expect.objectContaining({ letter: "T" }) });
+  });
+
+  test("multi-letter prefix horizontal: PREFIX found when IX on the board and PREF placed from rack", () => {
+    // Same reversal bug but for horizontal plays with a 4-letter prefix.
+    const trie = buildSmallTrie("PREFIX", "IF", "PI");
+    const board = makeBoard();
+    // Place I and X horizontally: word = P(r7,c5) R(r7,c6) E(r7,c7) F(r7,c8) I(r7,c9) X(r7,c10)
+    placeStatic(board, 7, 9, "I");
+    placeStatic(board, 7, 10, "X");
+
+    const rack: Tile[] = [makeTile("P"), makeTile("R"), makeTile("E"), makeTile("F")];
+    const moves = generateAllMoves(board, rack, trie);
+
+    const prefixMove = moves.find((m) => m.words.some((w) => w.word === "PREFIX"));
+    expect(prefixMove).toBeDefined();
+    expect(prefixMove!.tiles).toHaveLength(4);
+    const sorted = [...prefixMove!.tiles].sort((a, b) => a.col - b.col);
+    expect(sorted[0]).toMatchObject({ row: 7, col: 5, tile: expect.objectContaining({ letter: "P" }) });
+    expect(sorted[1]).toMatchObject({ row: 7, col: 6, tile: expect.objectContaining({ letter: "R" }) });
+    expect(sorted[2]).toMatchObject({ row: 7, col: 7, tile: expect.objectContaining({ letter: "E" }) });
+    expect(sorted[3]).toMatchObject({ row: 7, col: 8, tile: expect.objectContaining({ letter: "F" }) });
+  });
+
   test("generated moves can be sorted descending by totalScore, and every score is a positive integer", () => {
     const trie = buildSmallTrie("QI", "HI", "IS", "SI", "SH", "HIS", "HI");
     const rack: Tile[] = [makeTile("Q"), makeTile("I"), makeTile("S"), makeTile("H")];
