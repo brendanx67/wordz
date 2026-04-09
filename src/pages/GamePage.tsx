@@ -227,7 +227,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   // Mobile layout — width-based cell sizing, no viewport height tricks
   const isMobile = useMobileLayout()
   const [mobileChat, setMobileChat] = useState(false)
-  const [showReviewAnalysis, setShowReviewAnalysis] = useState(false)
+  const [showReviewAnalysis, setShowReviewAnalysis] = useState(true)
   const mobileCellSize = useMobileCellSize(isMobile)
   const mobileTileSize = isMobile ? Math.max(44, Math.round(mobileCellSize * 1.6)) : undefined
 
@@ -1295,6 +1295,8 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
           canShowInstructional={findWordsEnabled}
           showInstructional={showInstructional}
           setShowInstructional={setShowInstructional}
+          showReviewAnalysis={showReviewAnalysis}
+          setShowReviewAnalysis={setShowReviewAnalysis}
         />}
 
         {/* #10 Instructional mode panel — desktop only (mobile uses drawer) */}
@@ -1311,7 +1313,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
         )}
 
         {/* #11 Review-mode analysis panel — desktop only */}
-        {!isMobile && reviewMode && game?.status === 'finished' && reviewMoveIndex >= 0 && (
+        {!isMobile && reviewMode && showReviewAnalysis && game?.status === 'finished' && reviewMoveIndex >= 0 && (
           <InstructionalModePanel
             data={reviewPanelData}
             isLoading={reviewWordsQuery.isLoading}

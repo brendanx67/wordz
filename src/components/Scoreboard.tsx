@@ -35,6 +35,9 @@ interface ScoreboardProps {
   canShowInstructional?: boolean
   showInstructional?: boolean
   setShowInstructional?: (v: boolean | ((prev: boolean) => boolean)) => void
+  // #11: Review-mode analysis panel toggle
+  showReviewAnalysis?: boolean
+  setShowReviewAnalysis?: (v: boolean | ((prev: boolean) => boolean)) => void
 }
 
 export default function Scoreboard({
@@ -54,6 +57,8 @@ export default function Scoreboard({
   canShowInstructional = false,
   showInstructional = false,
   setShowInstructional,
+  showReviewAnalysis = false,
+  setShowReviewAnalysis,
 }: ScoreboardProps) {
   return (
     <Card className="border-amber-900/30 bg-amber-950/30 w-full lg:w-56 shrink-0">
@@ -191,7 +196,7 @@ export default function Scoreboard({
           <History className="h-3 w-3 mr-1" />
           {showHistory ? 'Hide History' : 'Game History'}
         </Button>
-        {canShowInstructional && setShowInstructional && (
+        {canShowInstructional && setShowInstructional && !reviewMode && (
           <Button
             variant="ghost"
             size="sm"
@@ -206,6 +211,22 @@ export default function Scoreboard({
           >
             <BookOpen className="h-3 w-3 mr-1" />
             {showInstructional ? 'Hide Word List' : 'Show Word List'}
+          </Button>
+        )}
+        {reviewMode && setShowReviewAnalysis && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowReviewAnalysis(v => !v)}
+            className={cn(
+              'w-full text-xs',
+              showReviewAnalysis
+                ? 'text-sky-100 bg-sky-900/30 hover:text-white hover:bg-sky-800/40'
+                : 'text-sky-300 hover:text-sky-200 hover:bg-sky-900/20'
+            )}
+          >
+            <BookOpen className="h-3 w-3 mr-1" />
+            {showReviewAnalysis ? 'Hide Move Analysis' : 'Move Analysis'}
           </Button>
         )}
       </CardContent>
