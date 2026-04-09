@@ -34,19 +34,6 @@ import MobileDrawer from '@/components/MobileDrawer'
 import { BookOpen } from 'lucide-react'
 import { BOARD_SIZE } from '@/lib/gameConstants'
 
-// Heights in px for the mobile vertical stack. Keep in sync with JSX.
-const MOBILE_HEADER_H = 40
-const MOBILE_BANNER_H = 32    // per-banner; 0 when hidden
-const MOBILE_RACK_PANE_H = 100 // rack tiles + controls + pane padding
-const MOBILE_PADDING = 12     // scroll area padding + gaps
-
-/** The actual visible viewport height, accounting for browser chrome
- *  (URL bar, bottom toolbar) on iOS Chrome/Safari. Falls back to
- *  innerHeight when visualViewport isn't available. */
-function getVisualHeight(): number {
-  return window.visualViewport?.height ?? window.innerHeight
-}
-
 function useMobileLayout() {
   const [mobile, setMobile] = useState(false)
   useEffect(() => {
@@ -59,46 +46,36 @@ function useMobileLayout() {
   return mobile
 }
 
-/** Returns the actual visible height in px, tracking resize and
- *  visualViewport changes (iOS Chrome toolbar show/hide). */
-function useVisualHeight(isMobile: boolean) {
-  const [height, setHeight] = useState(() => isMobile ? getVisualHeight() : 0)
+/** Measures the actual rendered height of an element via
+ *  ResizeObserver. Accepts the element directly (from a callback ref /
+ *  state) so the effect naturally re-runs when the element mounts —
+ *  including after loading spinners or other early returns. */
+function useElementHeight(el: HTMLElement | null) {
+  const [height, setHeight] = useState(0)
 
   useLayoutEffect(() => {
-    if (!isMobile) { setHeight(0); return }
-    const update = () => setHeight(getVisualHeight())
+    if (!el) { setHeight(0); return }
+    const update = () => setHeight(el.clientHeight)
     update()
-    // visualViewport fires 'resize' when the browser toolbar hides/shows
-    const vv = window.visualViewport
-    if (vv) {
-      vv.addEventListener('resize', update)
-    }
-    window.addEventListener('resize', update)
-    return () => {
-      if (vv) vv.removeEventListener('resize', update)
-      window.removeEventListener('resize', update)
-    }
-  }, [isMobile])
+    const ro = new ResizeObserver(update)
+    ro.observe(el)
+    return () => ro.disconnect()
+  }, [el])
 
   return height
 }
 
-function useMobileCellSize(isMobile: boolean, bannerCount: number, visualHeight: number) {
-  const [cellSize, setCellSize] = useState(0)
-
-  useLayoutEffect(() => {
-    if (!isMobile || !visualHeight) { setCellSize(0); return }
+function useMobileCellSize(isMobile: boolean, containerHeight: number) {
+  return useMemo(() => {
+    if (!isMobile || !containerHeight) return 0
     const vw = window.innerWidth
-    const chrome = MOBILE_HEADER_H + (bannerCount * MOBILE_BANNER_H) + MOBILE_RACK_PANE_H + MOBILE_PADDING
-    const availH = visualHeight - chrome
+    const availH = containerHeight - 8 // small gap for padding
     const availW = vw - 16 // 8px padding each side
     // Board outer frame adds ~8px total (padding + border) on mobile
     const boardInner = Math.min(availH, availW) - 8
     const cs = Math.floor(boardInner / BOARD_SIZE)
-    setCellSize(Math.max(16, Math.min(cs, 30))) // clamp 16-30
-  }, [isMobile, bannerCount, visualHeight])
-
-  return cellSize
+    return Math.max(16, Math.min(cs, 30)) // clamp 16-30
+  }, [isMobile, containerHeight])
 }
 
 interface GamePageProps {
@@ -257,12 +234,13 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   const isMobile = useMobileLayout()
   const [mobileChat, setMobileChat] = useState(false)
 
-  // Count visible banners for mobile cell-size calculation
-  const showPlayHintBanner = isActive && isMyTurn && placedTiles.size === 0 && !hidePlayHint
-  const showInstructionalBanner = findWordsEnabled && !hideInstructionalBanner
-  const mobileBannerCount = isMobile ? ((showPlayHintBanner ? 1 : 0) + (showInstructionalBanner ? 1 : 0)) : 0
-  const visualHeight = useVisualHeight(isMobile)
-  const mobileCellSize = useMobileCellSize(isMobile, mobileBannerCount, visualHeight)
+  // Mobile layout: measure the board area (the flex-1 div that wraps the
+  // board and nothing else) so cell size is based on actual remaining space
+  // after header, banners, and rack. Uses a callback ref so the effect
+  // re-runs when the element mounts (even after loading spinners).
+  const [boardAreaEl, setBoardAreaEl] = useState<HTMLDivElement | null>(null)
+  const boardAreaHeight = useElementHeight(isMobile ? boardAreaEl : null)
+  const mobileCellSize = useMobileCellSize(isMobile, boardAreaHeight)
   const mobileTileSize = isMobile ? Math.max(44, Math.round(mobileCellSize * 1.6)) : undefined
 
   // Review mode: board and highlighted tiles for game history on the main board
@@ -1101,7 +1079,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   const tileBag = (game.tile_bag ?? []) as Tile[]
 
   return (
-    <div className={cn('min-h-screen', isMobile && 'overflow-hidden flex flex-col')} style={{ background: 'linear-gradient(145deg, #1a1208 0%, #2d1f0e 50%, #1a1208 100%)', ...(isMobile && visualHeight ? { height: `${visualHeight}px` } : {}) }}>
+    <div className={cn('min-h-screen', isMobile && 'fixed inset-0 flex flex-col overflow-hidden')} style={{ background: 'linear-gradient(145deg, #1a1208 0%, #2d1f0e 50%, #1a1208 100%)' }}>
       {/* Mobile header — compact score bar with overflow menu */}
       {isMobile && (
         <MobileGameHeader
@@ -1214,10 +1192,12 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
         </>
       )}
 
-      <main className={cn(
-        'container mx-auto px-2 py-4 flex flex-col lg:flex-row gap-4 items-start justify-center',
-        isMobile && 'px-2 py-1 gap-1 items-center flex-1 min-h-0 overflow-y-auto overflow-x-hidden'
-      )}>
+      <main
+        className={cn(
+          'container mx-auto px-2 py-4 flex flex-col lg:flex-row gap-4 items-start justify-center',
+          isMobile && 'px-0 py-0 gap-0 items-center flex-1 min-h-0 overflow-hidden'
+        )}
+      >
         {/* Desktop-only: Scoreboard sidebar */}
         {!isMobile && <Scoreboard
           players={players}
@@ -1270,7 +1250,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
         )}
 
         {/* Board + Rack (on desktop rack is inside this column; on mobile it's a fixed bottom pane) */}
-        <div className={cn('flex flex-col items-center', isMobile ? 'gap-1 w-full' : 'gap-4')}>
+        <div className={cn('flex flex-col items-center', isMobile ? 'gap-1 w-full flex-1 min-h-0 px-2' : 'gap-4')}>
           {/* Game status */}
           {game.status === 'waiting' && (
             <div className="flex flex-col items-center gap-3 bg-amber-900/20 px-6 py-4 rounded-lg">
@@ -1403,45 +1383,54 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
           {blankTileTarget && <BlankTileDialog onChoose={handleBlankLetterChoice} />}
           {suggestionBlankTarget && <BlankTileDialog onChoose={handleSuggestionBlankChoice} />}
 
-          <div className="relative">
-            {/* Coordinate-label toggle. Stealth by default: the hover zone
-                sits in the board's top-right corner and the button only
-                fades in when the cursor is there (or the button has focus,
-                for keyboard users). Stays visible when labels are on so
-                you can find it again to turn them back off. Not a primary
-                action — mostly useful when discussing a position with an
-                LLM. */}
-            <div className="group absolute top-0 right-0 z-10 h-10 w-16">
-              <button
-                onClick={() => setShowLabels(l => !l)}
-                className={cn(
-                  'absolute top-1 right-1 flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium backdrop-blur-sm',
-                  'transition-opacity duration-200',
-                  'focus:outline-none focus-visible:ring-1 focus-visible:ring-amber-400',
-                  showLabels
-                    ? 'bg-amber-700/70 text-amber-100 opacity-100 hover:bg-amber-700/90'
-                    : 'bg-amber-950/70 text-amber-200 opacity-0 group-hover:opacity-90 focus-visible:opacity-100 hover:bg-amber-900/80'
-                )}
-                title="Toggle coordinate labels (A-O, 1-15)"
-                aria-label="Toggle coordinate labels"
-              >
-                <Grid3X3 className="h-3 w-3" />
-                A1
-              </button>
+          {/* On mobile, this flex-1 wrapper measures the exact remaining
+              space after header, banners, and rack pane. Cell size is
+              computed from its clientHeight via ResizeObserver — no JS
+              viewport guessing. On desktop it's a plain div. */}
+          <div
+            ref={isMobile ? setBoardAreaEl : undefined}
+            className={cn(isMobile && 'flex-1 min-h-0 flex items-center justify-center py-1')}
+          >
+            <div className="relative">
+              {/* Coordinate-label toggle. Stealth by default: the hover zone
+                  sits in the board's top-right corner and the button only
+                  fades in when the cursor is there (or the button has focus,
+                  for keyboard users). Stays visible when labels are on so
+                  you can find it again to turn them back off. Not a primary
+                  action — mostly useful when discussing a position with an
+                  LLM. */}
+              <div className="group absolute top-0 right-0 z-10 h-10 w-16">
+                <button
+                  onClick={() => setShowLabels(l => !l)}
+                  className={cn(
+                    'absolute top-1 right-1 flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium backdrop-blur-sm',
+                    'transition-opacity duration-200',
+                    'focus:outline-none focus-visible:ring-1 focus-visible:ring-amber-400',
+                    showLabels
+                      ? 'bg-amber-700/70 text-amber-100 opacity-100 hover:bg-amber-700/90'
+                      : 'bg-amber-950/70 text-amber-200 opacity-0 group-hover:opacity-90 focus-visible:opacity-100 hover:bg-amber-900/80'
+                  )}
+                  title="Toggle coordinate labels (A-O, 1-15)"
+                  aria-label="Toggle coordinate labels"
+                >
+                  <Grid3X3 className="h-3 w-3" />
+                  A1
+                </button>
+              </div>
+              <GameBoard
+                board={reviewMode ? reviewBoard : board}
+                selectedSquare={reviewMode ? null : isSpectatingApi ? suggestionSquare : selectedSquare}
+                onSquareClick={reviewMode ? () => {} : isSpectatingApi ? handleSuggestionSquareClick : handleSquareClick}
+                onDrop={reviewMode ? () => {} : handleDrop}
+                onPickupTile={reviewMode ? () => {} : handlePickupTile}
+                placedTiles={reviewMode ? new Map() : isSpectatingApi ? suggestionTiles : placedTiles}
+                previewTiles={reviewMode ? undefined : previewedTiles}
+                highlightTiles={reviewMode ? reviewHighlightTiles : undefined}
+                direction={isSpectatingApi ? suggestionDirection : direction}
+                showLabels={showLabels}
+                cellSize={isMobile ? mobileCellSize : undefined}
+              />
             </div>
-            <GameBoard
-              board={reviewMode ? reviewBoard : board}
-              selectedSquare={reviewMode ? null : isSpectatingApi ? suggestionSquare : selectedSquare}
-              onSquareClick={reviewMode ? () => {} : isSpectatingApi ? handleSuggestionSquareClick : handleSquareClick}
-              onDrop={reviewMode ? () => {} : handleDrop}
-              onPickupTile={reviewMode ? () => {} : handlePickupTile}
-              placedTiles={reviewMode ? new Map() : isSpectatingApi ? suggestionTiles : placedTiles}
-              previewTiles={reviewMode ? undefined : previewedTiles}
-              highlightTiles={reviewMode ? reviewHighlightTiles : undefined}
-              direction={isSpectatingApi ? suggestionDirection : direction}
-              showLabels={showLabels}
-              cellSize={isMobile ? mobileCellSize : undefined}
-            />
           </div>
 
           {reviewMode && (
