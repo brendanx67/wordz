@@ -36,10 +36,9 @@ import { BOARD_SIZE } from '@/lib/gameConstants'
 
 // Heights in px for the mobile vertical stack. Keep in sync with JSX.
 const MOBILE_HEADER_H = 40
-const MOBILE_BANNER_H = 32  // per-banner; 0 when hidden
-const MOBILE_RACK_H = 52
-const MOBILE_CONTROLS_H = 44
-const MOBILE_PADDING = 16   // total vertical padding/gaps
+const MOBILE_BANNER_H = 32    // per-banner; 0 when hidden
+const MOBILE_RACK_PANE_H = 100 // rack tiles + controls + pane padding
+const MOBILE_PADDING = 12     // scroll area padding + gaps
 
 /** The actual visible viewport height, accounting for browser chrome
  *  (URL bar, bottom toolbar) on iOS Chrome/Safari. Falls back to
@@ -90,7 +89,7 @@ function useMobileCellSize(isMobile: boolean, bannerCount: number, visualHeight:
   useLayoutEffect(() => {
     if (!isMobile || !visualHeight) { setCellSize(0); return }
     const vw = window.innerWidth
-    const chrome = MOBILE_HEADER_H + (bannerCount * MOBILE_BANNER_H) + MOBILE_RACK_H + MOBILE_CONTROLS_H + MOBILE_PADDING
+    const chrome = MOBILE_HEADER_H + (bannerCount * MOBILE_BANNER_H) + MOBILE_RACK_PANE_H + MOBILE_PADDING
     const availH = visualHeight - chrome
     const availW = vw - 16 // 8px padding each side
     // Board outer frame adds ~8px total (padding + border) on mobile
@@ -1217,7 +1216,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
 
       <main className={cn(
         'container mx-auto px-2 py-4 flex flex-col lg:flex-row gap-4 items-start justify-center',
-        isMobile && 'px-2 py-1 gap-1 items-center flex-1 overflow-hidden'
+        isMobile && 'px-2 py-1 gap-1 items-center flex-1 min-h-0 overflow-y-auto overflow-x-hidden'
       )}>
         {/* Desktop-only: Scoreboard sidebar */}
         {!isMobile && <Scoreboard
@@ -1270,8 +1269,8 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
           </Card>
         )}
 
-        {/* Board + Rack */}
-        <div className={cn('flex flex-col items-center', isMobile ? 'gap-0 flex-1 min-h-0 w-full' : 'gap-4')}>
+        {/* Board + Rack (on desktop rack is inside this column; on mobile it's a fixed bottom pane) */}
+        <div className={cn('flex flex-col items-center', isMobile ? 'gap-1 w-full' : 'gap-4')}>
           {/* Game status */}
           {game.status === 'waiting' && (
             <div className="flex flex-col items-center gap-3 bg-amber-900/20 px-6 py-4 rounded-lg">
@@ -1455,9 +1454,9 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
             />
           )}
 
-          {/* Rack */}
-          {isActive && myPlayer && (
-            <div className={cn(isMobile ? 'space-y-1 mt-auto pb-2 w-full' : 'space-y-3')}>
+          {/* Rack — desktop only; mobile rack is in the fixed bottom pane */}
+          {!isMobile && isActive && myPlayer && (
+            <div className="space-y-3">
               <TileRack
                 tiles={rackTiles}
                 onTileClick={handleRackTileClick}
@@ -1466,7 +1465,6 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                 onShuffle={handleShuffleRack}
                 onReorder={handleReorderRack}
                 onReturnFromBoard={handlePickupTile}
-                tileSize={mobileTileSize}
               />
 
               {isMyTurn && (
@@ -1522,6 +1520,35 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
           </div>
         )}
       </main>
+
+      {/* Mobile: fixed bottom pane with rack + controls */}
+      {isMobile && isActive && myPlayer && (
+        <div className="shrink-0 bg-amber-950/80 backdrop-blur-sm border-t border-amber-900/30 px-2 py-1.5 space-y-1">
+          <TileRack
+            tiles={rackTiles}
+            onTileClick={handleRackTileClick}
+            selectedTiles={exchangeSelection}
+            isExchangeMode={isExchangeMode}
+            onShuffle={handleShuffleRack}
+            onReorder={handleReorderRack}
+            onReturnFromBoard={handlePickupTile}
+            tileSize={mobileTileSize}
+          />
+          {isMyTurn && (
+            <GameControls
+              hasPlacedTiles={placedTiles.size > 0}
+              submitting={submitting}
+              isExchangeMode={isExchangeMode}
+              exchangeSelectionSize={exchangeSelection.size}
+              onSubmit={handleSubmitMove}
+              onRecall={handleRecall}
+              onToggleExchange={toggleExchangeMode}
+              onPass={handlePass}
+              onChallenge={handleChallenge}
+            />
+          )}
+        </div>
+      )}
     </div>
   )
 }
