@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo, useLayoutEffect } from 'react'
+import { useState, useCallback, useEffect, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useGame, useStartGame, isComputerPlayerId, isApiPlayerId, useCancelGame } from '@/hooks/useGames'
@@ -46,55 +46,25 @@ function useMobileLayout() {
   return mobile
 }
 
-/** On iOS, CSS `100dvh` can sometimes still over-report. This hook
- *  applies a JS-measured max-height from visualViewport.height as a
- *  belt-and-suspenders fallback so the outer container never exceeds
- *  the actual visible area. */
-function useVisualViewportHeight(el: HTMLElement | null) {
-  useLayoutEffect(() => {
-    if (!el) return
-    const vv = window.visualViewport
-    if (!vv) return // Desktop or unsupported — dvh handles it
-    const update = () => { el.style.maxHeight = `${vv.height}px` }
-    update()
-    vv.addEventListener('resize', update)
-    return () => {
-      vv.removeEventListener('resize', update)
-      el.style.maxHeight = ''
+/** Width-only cell size. On mobile phones the screen width is always
+ *  the binding constraint, and `window.innerWidth` is reliable across
+ *  every mobile browser. No viewport-height tricks needed. */
+function useMobileCellSize(isMobile: boolean) {
+  const [cellSize, setCellSize] = useState(0)
+  useEffect(() => {
+    if (!isMobile) { setCellSize(0); return }
+    const update = () => {
+      const vw = window.innerWidth
+      const availW = vw - 16 // 8px padding each side
+      // Board outer frame adds ~8px total (padding + border) on mobile
+      const cs = Math.floor((availW - 8) / BOARD_SIZE)
+      setCellSize(Math.max(16, Math.min(cs, 30)))
     }
-  }, [el])
-}
-
-/** Measures the actual rendered height of an element via
- *  ResizeObserver. Accepts the element directly (from a callback ref /
- *  state) so the effect naturally re-runs when the element mounts —
- *  including after loading spinners or other early returns. */
-function useElementHeight(el: HTMLElement | null) {
-  const [height, setHeight] = useState(0)
-
-  useLayoutEffect(() => {
-    if (!el) { setHeight(0); return }
-    const update = () => setHeight(el.clientHeight)
     update()
-    const ro = new ResizeObserver(update)
-    ro.observe(el)
-    return () => ro.disconnect()
-  }, [el])
-
-  return height
-}
-
-function useMobileCellSize(isMobile: boolean, containerHeight: number) {
-  return useMemo(() => {
-    if (!isMobile || !containerHeight) return 0
-    const vw = window.innerWidth
-    const availH = containerHeight - 8 // small gap for padding
-    const availW = vw - 16 // 8px padding each side
-    // Board outer frame adds ~8px total (padding + border) on mobile
-    const boardInner = Math.min(availH, availW) - 8
-    const cs = Math.floor(boardInner / BOARD_SIZE)
-    return Math.max(16, Math.min(cs, 30)) // clamp 16-30
-  }, [isMobile, containerHeight])
+    window.addEventListener('resize', update)
+    return () => window.removeEventListener('resize', update)
+  }, [isMobile])
+  return cellSize
 }
 
 interface GamePageProps {
@@ -249,22 +219,10 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   const [hidePlayHint, setHidePlayHint] = useState(false)
   const [hideInstructionalBanner, setHideInstructionalBanner] = useState(false)
 
-  // Mobile layout
+  // Mobile layout — width-based cell sizing, no viewport height tricks
   const isMobile = useMobileLayout()
   const [mobileChat, setMobileChat] = useState(false)
-
-  // JS fallback: cap the outer container to visualViewport.height so
-  // the rack isn't hidden behind iOS browser chrome.
-  const [outerEl, setOuterEl] = useState<HTMLDivElement | null>(null)
-  useVisualViewportHeight(isMobile ? outerEl : null)
-
-  // Mobile layout: measure the board area (the flex-1 div that wraps the
-  // board and nothing else) so cell size is based on actual remaining space
-  // after header, banners, and rack. Uses a callback ref so the effect
-  // re-runs when the element mounts (even after loading spinners).
-  const [boardAreaEl, setBoardAreaEl] = useState<HTMLDivElement | null>(null)
-  const boardAreaHeight = useElementHeight(isMobile ? boardAreaEl : null)
-  const mobileCellSize = useMobileCellSize(isMobile, boardAreaHeight)
+  const mobileCellSize = useMobileCellSize(isMobile)
   const mobileTileSize = isMobile ? Math.max(44, Math.round(mobileCellSize * 1.6)) : undefined
 
   // Review mode: board and highlighted tiles for game history on the main board
@@ -1103,7 +1061,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   const tileBag = (game.tile_bag ?? []) as Tile[]
 
   return (
-    <div ref={isMobile ? setOuterEl : undefined} className={cn('min-h-screen', isMobile && 'fixed top-0 left-0 w-full h-[100dvh] flex flex-col overflow-hidden')} style={{ background: 'linear-gradient(145deg, #1a1208 0%, #2d1f0e 50%, #1a1208 100%)' }}>
+    <div className="min-h-screen" style={{ background: 'linear-gradient(145deg, #1a1208 0%, #2d1f0e 50%, #1a1208 100%)' }}>
       {/* Mobile header — compact score bar with overflow menu */}
       {isMobile && (
         <MobileGameHeader
@@ -1219,7 +1177,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
       <main
         className={cn(
           'container mx-auto px-2 py-4 flex flex-col lg:flex-row gap-4 items-start justify-center',
-          isMobile && 'px-0 py-0 gap-0 items-center flex-1 min-h-0 overflow-hidden'
+          isMobile && 'px-2 py-2 gap-2 items-center'
         )}
       >
         {/* Desktop-only: Scoreboard sidebar */}
@@ -1274,7 +1232,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
         )}
 
         {/* Board + Rack (on desktop rack is inside this column; on mobile it's a fixed bottom pane) */}
-        <div className={cn('flex flex-col items-center', isMobile ? 'gap-1 w-full flex-1 min-h-0 px-2' : 'gap-4')}>
+        <div className={cn('flex flex-col items-center', isMobile ? 'gap-2 w-full' : 'gap-4')}>
           {/* Game status */}
           {game.status === 'waiting' && (
             <div className="flex flex-col items-center gap-3 bg-amber-900/20 px-6 py-4 rounded-lg">
@@ -1411,10 +1369,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
               space after header, banners, and rack pane. Cell size is
               computed from its clientHeight via ResizeObserver — no JS
               viewport guessing. On desktop it's a plain div. */}
-          <div
-            ref={isMobile ? setBoardAreaEl : undefined}
-            className={cn(isMobile && 'flex-1 min-h-0 flex items-center justify-center py-1')}
-          >
+          <div>
             <div className="relative">
               {/* Coordinate-label toggle. Stealth by default: the hover zone
                   sits in the board's top-right corner and the button only
@@ -1467,9 +1422,9 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
             />
           )}
 
-          {/* Rack — desktop only; mobile rack is in the fixed bottom pane */}
-          {!isMobile && isActive && myPlayer && (
-            <div className="space-y-3">
+          {/* Rack + controls */}
+          {isActive && myPlayer && (
+            <div className={cn(isMobile ? 'space-y-1' : 'space-y-3')}>
               <TileRack
                 tiles={rackTiles}
                 onTileClick={handleRackTileClick}
@@ -1478,6 +1433,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                 onShuffle={handleShuffleRack}
                 onReorder={handleReorderRack}
                 onReturnFromBoard={handlePickupTile}
+                tileSize={mobileTileSize}
               />
 
               {isMyTurn && (
@@ -1534,34 +1490,6 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
         )}
       </main>
 
-      {/* Mobile: fixed bottom pane with rack + controls */}
-      {isMobile && isActive && myPlayer && (
-        <div className="shrink-0 bg-amber-950/80 backdrop-blur-sm border-t border-amber-900/30 px-2 py-1.5 space-y-1">
-          <TileRack
-            tiles={rackTiles}
-            onTileClick={handleRackTileClick}
-            selectedTiles={exchangeSelection}
-            isExchangeMode={isExchangeMode}
-            onShuffle={handleShuffleRack}
-            onReorder={handleReorderRack}
-            onReturnFromBoard={handlePickupTile}
-            tileSize={mobileTileSize}
-          />
-          {isMyTurn && (
-            <GameControls
-              hasPlacedTiles={placedTiles.size > 0}
-              submitting={submitting}
-              isExchangeMode={isExchangeMode}
-              exchangeSelectionSize={exchangeSelection.size}
-              onSubmit={handleSubmitMove}
-              onRecall={handleRecall}
-              onToggleExchange={toggleExchangeMode}
-              onPass={handlePass}
-              onChallenge={handleChallenge}
-            />
-          )}
-        </div>
-      )}
     </div>
   )
 }
