@@ -217,7 +217,11 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   // gets the hint again, which is probably what you want for a learning
   // aid. The instructional toggle lives on in the Scoreboard button so
   // closing the banner doesn't strand the feature.
-  const [hidePlayHint, setHidePlayHint] = useState(false)
+  const [hidePlayHint, setHidePlayHint] = useState(() => localStorage.getItem('wordz-hide-play-hint') === '1')
+  const dismissPlayHint = useCallback(() => {
+    setHidePlayHint(true)
+    localStorage.setItem('wordz-hide-play-hint', '1')
+  }, [])
   const [hideInstructionalBanner, setHideInstructionalBanner] = useState(false)
 
   // Mobile layout — width-based cell sizing, no viewport height tricks
@@ -371,7 +375,8 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
       return next
     })
     setStagedFindWordsKey(null)
-  }, [board, placedTiles])
+    if (!hidePlayHint) dismissPlayHint()
+  }, [board, placedTiles, hidePlayHint, dismissPlayHint])
 
   // #10 click-to-stage from the instructional panel. Builds a fresh placedTiles
   // Map atomically by walking the move's tiles and pulling matching tiles out
@@ -1451,26 +1456,6 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
               </button>
             </div>
           )}
-          {isActive && isMyTurn && placedTiles.size === 0 && !hidePlayHint && (
-            <div className="flex items-center gap-1 rounded-lg bg-green-900/15 overflow-hidden">
-              <div className={cn('text-green-400 font-medium', isMobile ? 'text-xs px-3 py-1' : 'text-sm px-4 py-2')}>
-                {selectedSquare
-                  ? <>Tap tiles to place them {direction === 'across' ? '\u2192' : '\u2193'}</>
-                  : <>Tap a square to start placing tiles</>
-                }
-              </div>
-              <button
-                type="button"
-                onClick={() => setHidePlayHint(true)}
-                className="text-green-400/70 hover:text-green-200 hover:bg-green-900/30 px-1.5 py-1.5 transition-colors"
-                aria-label="Dismiss play hint"
-                title="Hide this hint"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          )}
-
           {/* Blank tile chooser */}
           {blankTileTarget && <BlankTileDialog onChoose={handleBlankLetterChoice} />}
           {suggestionBlankTarget && <BlankTileDialog onChoose={handleSuggestionBlankChoice} />}
@@ -1558,17 +1543,38 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
               />
 
               {isMyTurn && (
-                <GameControls
-                  hasPlacedTiles={placedTiles.size > 0}
-                  submitting={submitting}
-                  isExchangeMode={isExchangeMode}
-                  exchangeSelectionSize={exchangeSelection.size}
-                  onSubmit={handleSubmitMove}
-                  onRecall={handleRecall}
-                  onToggleExchange={toggleExchangeMode}
-                  onPass={handlePass}
-                  onChallenge={handleChallenge}
-                />
+                <>
+                  <GameControls
+                    hasPlacedTiles={placedTiles.size > 0}
+                    submitting={submitting}
+                    isExchangeMode={isExchangeMode}
+                    exchangeSelectionSize={exchangeSelection.size}
+                    onSubmit={handleSubmitMove}
+                    onRecall={handleRecall}
+                    onToggleExchange={toggleExchangeMode}
+                    onPass={handlePass}
+                    onChallenge={handleChallenge}
+                  />
+                  {placedTiles.size === 0 && !hidePlayHint && (
+                    <div className="flex items-center justify-center gap-1 rounded-lg bg-green-900/15 overflow-hidden">
+                      <div className={cn('text-green-400 font-medium', isMobile ? 'text-xs px-3 py-1' : 'text-sm px-4 py-2')}>
+                        {selectedSquare
+                          ? <>Tap tiles to place them {direction === 'across' ? '\u2192' : '\u2193'}</>
+                          : <>Tap a square to start placing tiles</>
+                        }
+                      </div>
+                      <button
+                        type="button"
+                        onClick={dismissPlayHint}
+                        className="text-green-400/70 hover:text-green-200 hover:bg-green-900/30 px-1.5 py-1.5 transition-colors"
+                        aria-label="Dismiss play hint"
+                        title="Hide this hint"
+                      >
+                        <X className="h-3.5 w-3.5" />
+                      </button>
+                    </div>
+                  )}
+                </>
               )}
             </div>
           )}
