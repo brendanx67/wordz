@@ -41,6 +41,13 @@ const MOBILE_RACK_H = 52
 const MOBILE_CONTROLS_H = 44
 const MOBILE_PADDING = 16   // total vertical padding/gaps
 
+/** The actual visible viewport height, accounting for browser chrome
+ *  (URL bar, bottom toolbar) on iOS Chrome/Safari. Falls back to
+ *  innerHeight when visualViewport isn't available. */
+function getVisualHeight(): number {
+  return window.visualViewport?.height ?? window.innerHeight
+}
+
 function useMobileLayout() {
   const [mobile, setMobile] = useState(false)
   useEffect(() => {
@@ -53,26 +60,44 @@ function useMobileLayout() {
   return mobile
 }
 
-function useMobileCellSize(isMobile: boolean, bannerCount: number) {
+/** Returns the actual visible height in px, tracking resize and
+ *  visualViewport changes (iOS Chrome toolbar show/hide). */
+function useVisualHeight(isMobile: boolean) {
+  const [height, setHeight] = useState(() => isMobile ? getVisualHeight() : 0)
+
+  useLayoutEffect(() => {
+    if (!isMobile) { setHeight(0); return }
+    const update = () => setHeight(getVisualHeight())
+    update()
+    // visualViewport fires 'resize' when the browser toolbar hides/shows
+    const vv = window.visualViewport
+    if (vv) {
+      vv.addEventListener('resize', update)
+    }
+    window.addEventListener('resize', update)
+    return () => {
+      if (vv) vv.removeEventListener('resize', update)
+      window.removeEventListener('resize', update)
+    }
+  }, [isMobile])
+
+  return height
+}
+
+function useMobileCellSize(isMobile: boolean, bannerCount: number, visualHeight: number) {
   const [cellSize, setCellSize] = useState(0)
 
   useLayoutEffect(() => {
-    if (!isMobile) { setCellSize(0); return }
-    const compute = () => {
-      const vw = window.innerWidth
-      const vh = window.innerHeight // dvh is handled via CSS; JS gets visual viewport
-      const chrome = MOBILE_HEADER_H + (bannerCount * MOBILE_BANNER_H) + MOBILE_RACK_H + MOBILE_CONTROLS_H + MOBILE_PADDING
-      const availH = vh - chrome
-      const availW = vw - 16 // 8px padding each side
-      // Board outer frame adds ~12px total (padding + border)
-      const boardInner = Math.min(availH, availW) - 12
-      const cs = Math.floor(boardInner / BOARD_SIZE)
-      setCellSize(Math.max(16, Math.min(cs, 30))) // clamp 16-30
-    }
-    compute()
-    window.addEventListener('resize', compute)
-    return () => window.removeEventListener('resize', compute)
-  }, [isMobile, bannerCount])
+    if (!isMobile || !visualHeight) { setCellSize(0); return }
+    const vw = window.innerWidth
+    const chrome = MOBILE_HEADER_H + (bannerCount * MOBILE_BANNER_H) + MOBILE_RACK_H + MOBILE_CONTROLS_H + MOBILE_PADDING
+    const availH = visualHeight - chrome
+    const availW = vw - 16 // 8px padding each side
+    // Board outer frame adds ~8px total (padding + border) on mobile
+    const boardInner = Math.min(availH, availW) - 8
+    const cs = Math.floor(boardInner / BOARD_SIZE)
+    setCellSize(Math.max(16, Math.min(cs, 30))) // clamp 16-30
+  }, [isMobile, bannerCount, visualHeight])
 
   return cellSize
 }
@@ -237,7 +262,8 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   const showPlayHintBanner = isActive && isMyTurn && placedTiles.size === 0 && !hidePlayHint
   const showInstructionalBanner = findWordsEnabled && !hideInstructionalBanner
   const mobileBannerCount = isMobile ? ((showPlayHintBanner ? 1 : 0) + (showInstructionalBanner ? 1 : 0)) : 0
-  const mobileCellSize = useMobileCellSize(isMobile, mobileBannerCount)
+  const visualHeight = useVisualHeight(isMobile)
+  const mobileCellSize = useMobileCellSize(isMobile, mobileBannerCount, visualHeight)
   const mobileTileSize = isMobile ? Math.max(44, Math.round(mobileCellSize * 1.6)) : undefined
 
   // Review mode: board and highlighted tiles for game history on the main board
@@ -1076,7 +1102,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   const tileBag = (game.tile_bag ?? []) as Tile[]
 
   return (
-    <div className={cn('min-h-screen', isMobile && 'h-[100dvh] overflow-hidden flex flex-col')} style={{ background: 'linear-gradient(145deg, #1a1208 0%, #2d1f0e 50%, #1a1208 100%)' }}>
+    <div className={cn('min-h-screen', isMobile && 'overflow-hidden flex flex-col')} style={{ background: 'linear-gradient(145deg, #1a1208 0%, #2d1f0e 50%, #1a1208 100%)', ...(isMobile && visualHeight ? { height: `${visualHeight}px` } : {}) }}>
       {/* Mobile header — compact score bar with overflow menu */}
       {isMobile && (
         <MobileGameHeader
