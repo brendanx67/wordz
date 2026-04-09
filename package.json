@@ -10,7 +10,7 @@
     "preview": "vite preview",
     "test": "bun test",
     "build:mcp": "rm -f public/wordz-mcp.zip && cd mcp-server && zip -rq ../public/wordz-mcp.zip . -x 'node_modules/*' '.env' '.git/*'",
-    "build:source": "rm -f public/wordz-source.zip && git archive --format=zip --output=public/wordz-source.zip HEAD"
+    "build:source": "rm -f public/wordz-source.zip && rm -rf /tmp/wordz-source-build && git clone . /tmp/wordz-source-build && cd /tmp/wordz-source-build && zip -rq \"$OLDPWD/public/wordz-source.zip\" . && rm -rf /tmp/wordz-source-build"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
