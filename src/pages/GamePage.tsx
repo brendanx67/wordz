@@ -1262,10 +1262,10 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
             <button
               onClick={() => setShowLabels(l => !l)}
               className={cn(
-                'absolute -top-7 right-0 flex items-center gap-1 px-2 py-0.5 rounded text-[11px] font-medium transition-colors',
+                'absolute top-1 right-1 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors backdrop-blur-sm',
                 showLabels
-                  ? 'bg-amber-700/60 text-amber-100'
-                  : 'bg-amber-900/30 text-amber-400/60 hover:text-amber-300 hover:bg-amber-900/50'
+                  ? 'bg-amber-700/70 text-amber-100 hover:bg-amber-700/90'
+                  : 'bg-amber-950/60 text-amber-400/70 hover:text-amber-200 hover:bg-amber-900/70'
               )}
               title="Toggle coordinate labels (A-O, 1-15)"
             >
