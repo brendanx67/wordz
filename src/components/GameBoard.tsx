@@ -26,6 +26,10 @@ interface GameBoardProps {
   highlightTiles?: HighlightTile[]
   direction: 'across' | 'down'
   showLabels?: boolean
+  /** Override cell size in px. When set, the board uses this instead of
+   *  the responsive w-[30px]/sm/md classes. Used by mobile layout to fit
+   *  the board into available viewport space. */
+  cellSize?: number
 }
 
 function bonusLabel(bonus: string | null): string {
@@ -64,7 +68,7 @@ function bonusTextColor(bonus: string | null): string {
 
 const COL_LETTERS = Array.from({ length: BOARD_SIZE }, (_, i) => String.fromCharCode(65 + i))
 
-export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop, onPickupTile, placedTiles, previewTiles, highlightTiles, direction, showLabels = false }: GameBoardProps) {
+export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop, onPickupTile, placedTiles, previewTiles, highlightTiles, direction, showLabels = false, cellSize }: GameBoardProps) {
   // Build preview tile lookup
   const previewMap = new Map<string, PreviewTile>()
   if (previewTiles) {
@@ -128,10 +132,12 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
 
   return (
     <div
-      className="inline-block p-2 sm:p-2.5 rounded-xl shadow-2xl"
+      className={cn('inline-block rounded-xl shadow-2xl', cellSize ? 'p-1' : 'p-2 sm:p-2.5')}
       style={{
         background: 'linear-gradient(145deg, #5c3a1e 0%, #4a2e15 50%, #3d2510 100%)',
-        boxShadow: '0 0 0 3px #2a1a0a, 0 0 0 5px #6b4226, 0 8px 32px rgba(0,0,0,0.5)',
+        boxShadow: cellSize
+          ? '0 0 0 2px #6b4226, 0 4px 16px rgba(0,0,0,0.4)'
+          : '0 0 0 3px #2a1a0a, 0 0 0 5px #6b4226, 0 8px 32px rgba(0,0,0,0.5)',
       }}
       onDragEnd={handleDragEnd}
     >
@@ -168,8 +174,11 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
             {Array.from({ length: BOARD_SIZE }, (_, i) => (
               <div
                 key={i}
-                className="w-[18px] h-[30px] sm:h-[35px] md:h-[40px] flex items-center justify-center text-[9px] sm:text-[10px] md:text-[11px] font-bold"
-                style={{ color: '#c4a46c' }}
+                className={cn(
+                  'w-[18px] flex items-center justify-center font-bold',
+                  cellSize ? 'text-[9px]' : 'h-[30px] sm:h-[35px] md:h-[40px] text-[9px] sm:text-[10px] md:text-[11px]'
+                )}
+                style={{ color: '#c4a46c', ...(cellSize ? { height: `${cellSize}px` } : {}) }}
               >
                 {i + 1}
               </div>
@@ -222,33 +231,36 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
                   onDragLeave={handleDragLeave}
                   onDrop={(e) => handleDrop(e, row, col)}
                   className={cn(
-                    'w-[30px] h-[30px] sm:w-[35px] sm:h-[35px] md:w-[40px] md:h-[40px] flex items-center justify-center cursor-pointer transition-all relative select-none',
+                    'flex items-center justify-center cursor-pointer transition-all relative select-none',
+                    !cellSize && 'w-[30px] h-[30px] sm:w-[35px] sm:h-[35px] md:w-[40px] md:h-[40px]',
                     isSelected && !displayTile && !isPreview && 'ring-2 ring-white/80 z-10',
                     !displayTile && !isCommitted && !isPreview && 'hover:brightness-110',
                     isDragTarget && 'ring-2 ring-white z-10 brightness-125',
                     isPreview && 'animate-pulse z-10'
                   )}
-                  style={displayTile ? {
-                    background: isHighlighted
-                      ? 'linear-gradient(135deg, #fde68a 0%, #f59e0b 40%, #d97706 100%)'
-                      : isNewlyPlaced
-                        ? 'linear-gradient(135deg, #f5deb3 0%, #e8c97a 40%, #d4a853 100%)'
-                        : 'linear-gradient(135deg, #f0dcc0 0%, #dcc8a0 40%, #c8b080 100%)',
-                    boxShadow: isHighlighted
-                      ? 'inset 0 1px 2px rgba(255,255,255,0.4), 0 0 10px rgba(245,158,11,0.6), 0 0 0 2px #f59e0b'
-                      : isNewlyPlaced
-                        ? 'inset 0 1px 2px rgba(255,255,255,0.4), inset 0 -1px 2px rgba(0,0,0,0.15), 0 2px 4px rgba(0,0,0,0.3), 0 0 0 1.5px #b8942e'
-                        : 'inset 0 1px 1px rgba(255,255,255,0.3), inset 0 -1px 1px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.2)',
-                    borderRadius: '3px',
-                    cursor: isNewlyPlaced ? 'grab' : 'pointer',
-                  } : isPreview ? {
-                    background: 'linear-gradient(135deg, #c4b5fd 0%, #a78bfa 40%, #8b5cf6 100%)',
-                    boxShadow: 'inset 0 1px 2px rgba(255,255,255,0.3), 0 0 8px rgba(139,92,246,0.5), 0 0 0 1.5px #7c3aed',
-                    borderRadius: '3px',
-                    // pulse via Tailwind class below
-                  } : {
-                    background: bonusBg(bonus),
-                    borderRadius: '2px',
+                  style={{
+                    ...(cellSize ? { width: `${cellSize}px`, height: `${cellSize}px` } : {}),
+                    ...(displayTile ? {
+                      background: isHighlighted
+                        ? 'linear-gradient(135deg, #fde68a 0%, #f59e0b 40%, #d97706 100%)'
+                        : isNewlyPlaced
+                          ? 'linear-gradient(135deg, #f5deb3 0%, #e8c97a 40%, #d4a853 100%)'
+                          : 'linear-gradient(135deg, #f0dcc0 0%, #dcc8a0 40%, #c8b080 100%)',
+                      boxShadow: isHighlighted
+                        ? 'inset 0 1px 2px rgba(255,255,255,0.4), 0 0 10px rgba(245,158,11,0.6), 0 0 0 2px #f59e0b'
+                        : isNewlyPlaced
+                          ? 'inset 0 1px 2px rgba(255,255,255,0.4), inset 0 -1px 2px rgba(0,0,0,0.15), 0 2px 4px rgba(0,0,0,0.3), 0 0 0 1.5px #b8942e'
+                          : 'inset 0 1px 1px rgba(255,255,255,0.3), inset 0 -1px 1px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.2)',
+                      borderRadius: '3px',
+                      cursor: isNewlyPlaced ? 'grab' : 'pointer',
+                    } : isPreview ? {
+                      background: 'linear-gradient(135deg, #c4b5fd 0%, #a78bfa 40%, #8b5cf6 100%)',
+                      boxShadow: 'inset 0 1px 2px rgba(255,255,255,0.3), 0 0 8px rgba(139,92,246,0.5), 0 0 0 1.5px #7c3aed',
+                      borderRadius: '3px',
+                    } : {
+                      background: bonusBg(bonus),
+                      borderRadius: '2px',
+                    }),
                   }}
                   title={
                     isNewlyPlaced
@@ -261,22 +273,22 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
                   {displayTile ? (
                     <>
                       <span
-                        className="text-[14px] sm:text-[17px] md:text-[19px] font-black tracking-tight pointer-events-none"
-                        style={{ color: '#3d2b1a', fontFamily: "'Playfair Display', serif", textShadow: '0 1px 0 rgba(255,255,255,0.3)' }}
+                        className={cn('font-black tracking-tight pointer-events-none', !cellSize && 'text-[14px] sm:text-[17px] md:text-[19px]')}
+                        style={{ color: '#3d2b1a', fontFamily: "'Playfair Display', serif", textShadow: '0 1px 0 rgba(255,255,255,0.3)', ...(cellSize ? { fontSize: `${Math.round(cellSize * 0.47)}px` } : {}) }}
                       >
                         {displayTile.letter || ''}
                       </span>
                       <span
-                        className="absolute text-[6px] sm:text-[7px] md:text-[8px] font-bold pointer-events-none"
-                        style={{ bottom: '1px', right: '2px', color: '#6b4f30' }}
+                        className={cn('absolute font-bold pointer-events-none', !cellSize && 'text-[6px] sm:text-[7px] md:text-[8px]')}
+                        style={{ bottom: '1px', right: '2px', color: '#6b4f30', ...(cellSize ? { fontSize: `${Math.max(5, Math.round(cellSize * 0.2))}px` } : {}) }}
                       >
                         {displayTile.value || ''}
                       </span>
                     </>
                   ) : isPreview ? (
                     <span
-                      className="text-[14px] sm:text-[17px] md:text-[19px] font-black tracking-tight pointer-events-none"
-                      style={{ color: '#ffffff', fontFamily: "'Playfair Display', serif", textShadow: '0 1px 2px rgba(0,0,0,0.3)' }}
+                      className={cn('font-black tracking-tight pointer-events-none', !cellSize && 'text-[14px] sm:text-[17px] md:text-[19px]')}
+                      style={{ color: '#ffffff', fontFamily: "'Playfair Display', serif", textShadow: '0 1px 2px rgba(0,0,0,0.3)', ...(cellSize ? { fontSize: `${Math.round(cellSize * 0.47)}px` } : {}) }}
                     >
                       {preview!.letter}
                     </span>
@@ -285,16 +297,19 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
                       className={cn(
                         'font-extrabold text-center leading-[1.15] whitespace-pre-line pointer-events-none',
                         isSelected && 'opacity-0',
-                        bonus === 'CENTER' ? 'text-[14px] sm:text-[16px] md:text-[18px]' : 'text-[6px] sm:text-[7px] md:text-[8px]'
+                        !cellSize && (bonus === 'CENTER' ? 'text-[14px] sm:text-[16px] md:text-[18px]' : 'text-[6px] sm:text-[7px] md:text-[8px]')
                       )}
-                      style={{ color: bonusTextColor(bonus) }}
+                      style={{ color: bonusTextColor(bonus), ...(cellSize ? { fontSize: bonus === 'CENTER' ? `${Math.round(cellSize * 0.47)}px` : `${Math.max(5, Math.round(cellSize * 0.2))}px` } : {}) }}
                     >
                       {bonusLabel(bonus)}
                     </span>
                   ) : null}
                   {isSelected && !displayTile && (
                     <div className="absolute inset-0 flex items-center justify-center bg-white/25 rounded-sm pointer-events-none">
-                      <span className="text-white font-black text-[18px] sm:text-[20px] md:text-[22px] drop-shadow-lg">
+                      <span
+                        className={cn('text-white font-black drop-shadow-lg', !cellSize && 'text-[18px] sm:text-[20px] md:text-[22px]')}
+                        style={cellSize ? { fontSize: `${Math.round(cellSize * 0.55)}px` } : undefined}
+                      >
                         {direction === 'across' ? '\u2192' : '\u2193'}
                       </span>
                     </div>

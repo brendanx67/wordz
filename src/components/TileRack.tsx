@@ -11,9 +11,11 @@ interface TileRackProps {
   onShuffle?: () => void
   onReorder?: (tiles: Tile[]) => void
   onReturnFromBoard?: (row: number, col: number, insertIndex?: number) => void
+  /** Override tile size in px. Used by mobile layout. */
+  tileSize?: number
 }
 
-export default function TileRack({ tiles, onTileClick, selectedTiles, isExchangeMode, onShuffle, onReorder, onReturnFromBoard }: TileRackProps) {
+export default function TileRack({ tiles, onTileClick, selectedTiles, isExchangeMode, onShuffle, onReorder, onReturnFromBoard, tileSize }: TileRackProps) {
   const [draggedTileId, setDraggedTileId] = useState<string | null>(null)
   const [dropIndex, setDropIndex] = useState<number | null>(null)
   const containerRef = useRef<HTMLDivElement>(null)
@@ -172,7 +174,8 @@ export default function TileRack({ tiles, onTileClick, selectedTiles, isExchange
               onDragEnd={handleDragEnd}
               onClick={() => !isDragging && onTileClick(tile)}
               className={cn(
-                'w-12 h-12 sm:w-[54px] sm:h-[54px] md:w-[60px] md:h-[60px] rounded-[4px] flex items-center justify-center relative select-none transition-all duration-150',
+                'rounded-[4px] flex items-center justify-center relative select-none transition-all duration-150',
+                !tileSize && 'w-12 h-12 sm:w-[54px] sm:h-[54px] md:w-[60px] md:h-[60px]',
                 'cursor-grab active:cursor-grabbing',
                 isSelected && isExchangeMode && 'ring-2 ring-red-400 -translate-y-1',
                 isSelected && !isExchangeMode && 'ring-2 ring-amber-400 -translate-y-2',
@@ -181,6 +184,7 @@ export default function TileRack({ tiles, onTileClick, selectedTiles, isExchange
                 !isDragging && 'mx-[3px] sm:mx-[4px]'
               )}
               style={{
+                ...(tileSize ? { width: `${tileSize}px`, height: `${tileSize}px` } : {}),
                 background: isSelected && isExchangeMode
                   ? 'linear-gradient(135deg, #e8c0c0 0%, #d4a0a0 100%)'
                   : 'linear-gradient(135deg, #f5e6c8 0%, #e8d4a8 40%, #dcc490 100%)',
@@ -192,14 +196,14 @@ export default function TileRack({ tiles, onTileClick, selectedTiles, isExchange
               }}
             >
               <span
-                className="text-[22px] sm:text-[26px] md:text-[30px] font-black"
-                style={{ color: '#3d2b1a', fontFamily: "'Playfair Display', serif", textShadow: '0 1px 0 rgba(255,255,255,0.3)' }}
+                className={cn('font-black', !tileSize && 'text-[22px] sm:text-[26px] md:text-[30px]')}
+                style={{ color: '#3d2b1a', fontFamily: "'Playfair Display', serif", textShadow: '0 1px 0 rgba(255,255,255,0.3)', ...(tileSize ? { fontSize: `${Math.round(tileSize * 0.45)}px` } : {}) }}
               >
                 {tile.letter || '?'}
               </span>
               <span
-                className="absolute text-[8px] sm:text-[9px] md:text-[10px] font-bold"
-                style={{ bottom: '2px', right: '4px', color: '#7a5d3a' }}
+                className={cn('absolute font-bold', !tileSize && 'text-[8px] sm:text-[9px] md:text-[10px]')}
+                style={{ bottom: '2px', right: '4px', color: '#7a5d3a', ...(tileSize ? { fontSize: `${Math.max(7, Math.round(tileSize * 0.17))}px` } : {}) }}
               >
                 {tile.value}
               </span>
@@ -222,8 +226,9 @@ export default function TileRack({ tiles, onTileClick, selectedTiles, isExchange
       {onShuffle && (
         <button
           onClick={onShuffle}
-          className="w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12 rounded-[4px] flex items-center justify-center ml-2 transition-all hover:scale-110 active:scale-95 self-center"
+          className={cn('rounded-[4px] flex items-center justify-center ml-2 transition-all hover:scale-110 active:scale-95 self-center', !tileSize && 'w-10 h-10 sm:w-11 sm:h-11 md:w-12 md:h-12')}
           style={{
+            ...(tileSize ? { width: `${Math.round(tileSize * 0.8)}px`, height: `${Math.round(tileSize * 0.8)}px` } : {}),
             background: 'linear-gradient(135deg, #5c4a30 0%, #4a3a24 100%)',
             boxShadow: 'inset 0 1px 1px rgba(255,255,255,0.15), 0 2px 4px rgba(0,0,0,0.3)',
           }}

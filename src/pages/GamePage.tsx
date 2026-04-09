@@ -1,4 +1,4 @@
-import { useState, useCallback, useEffect, useMemo } from 'react'
+import { useState, useCallback, useEffect, useMemo, useLayoutEffect } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useGame, useStartGame, isComputerPlayerId, isApiPlayerId, useCancelGame } from '@/hooks/useGames'
@@ -29,7 +29,53 @@ import type { MoveHistoryEntry } from '@/hooks/useReviewMode'
 import { useSuggestionMode } from '@/hooks/useSuggestionMode'
 import { useFindWords, type FindWordsMove } from '@/hooks/useFindWords'
 import InstructionalModePanel, { moveKey as instructionalMoveKey } from '@/components/InstructionalModePanel'
+import MobileGameHeader from '@/components/MobileGameHeader'
+import MobileDrawer from '@/components/MobileDrawer'
 import { BookOpen } from 'lucide-react'
+import { BOARD_SIZE } from '@/lib/gameConstants'
+
+// Heights in px for the mobile vertical stack. Keep in sync with JSX.
+const MOBILE_HEADER_H = 40
+const MOBILE_BANNER_H = 32  // per-banner; 0 when hidden
+const MOBILE_RACK_H = 52
+const MOBILE_CONTROLS_H = 44
+const MOBILE_PADDING = 16   // total vertical padding/gaps
+
+function useMobileLayout() {
+  const [mobile, setMobile] = useState(false)
+  useEffect(() => {
+    const mq = window.matchMedia('(max-width: 1023px)')
+    setMobile(mq.matches)
+    const handler = (e: MediaQueryListEvent) => setMobile(e.matches)
+    mq.addEventListener('change', handler)
+    return () => mq.removeEventListener('change', handler)
+  }, [])
+  return mobile
+}
+
+function useMobileCellSize(isMobile: boolean, bannerCount: number) {
+  const [cellSize, setCellSize] = useState(0)
+
+  useLayoutEffect(() => {
+    if (!isMobile) { setCellSize(0); return }
+    const compute = () => {
+      const vw = window.innerWidth
+      const vh = window.innerHeight // dvh is handled via CSS; JS gets visual viewport
+      const chrome = MOBILE_HEADER_H + (bannerCount * MOBILE_BANNER_H) + MOBILE_RACK_H + MOBILE_CONTROLS_H + MOBILE_PADDING
+      const availH = vh - chrome
+      const availW = vw - 16 // 8px padding each side
+      // Board outer frame adds ~12px total (padding + border)
+      const boardInner = Math.min(availH, availW) - 12
+      const cs = Math.floor(boardInner / BOARD_SIZE)
+      setCellSize(Math.max(16, Math.min(cs, 30))) // clamp 16-30
+    }
+    compute()
+    window.addEventListener('resize', compute)
+    return () => window.removeEventListener('resize', compute)
+  }, [isMobile, bannerCount])
+
+  return cellSize
+}
 
 interface GamePageProps {
   gameId: string
@@ -182,6 +228,17 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   // closing the banner doesn't strand the feature.
   const [hidePlayHint, setHidePlayHint] = useState(false)
   const [hideInstructionalBanner, setHideInstructionalBanner] = useState(false)
+
+  // Mobile layout
+  const isMobile = useMobileLayout()
+  const [mobileChat, setMobileChat] = useState(false)
+
+  // Count visible banners for mobile cell-size calculation
+  const showPlayHintBanner = isActive && isMyTurn && placedTiles.size === 0 && !hidePlayHint
+  const showInstructionalBanner = findWordsEnabled && !hideInstructionalBanner
+  const mobileBannerCount = isMobile ? ((showPlayHintBanner ? 1 : 0) + (showInstructionalBanner ? 1 : 0)) : 0
+  const mobileCellSize = useMobileCellSize(isMobile, mobileBannerCount)
+  const mobileTileSize = isMobile ? Math.max(44, Math.round(mobileCellSize * 1.6)) : undefined
 
   // Review mode: board and highlighted tiles for game history on the main board
   const moveHistory = (game?.move_history ?? []) as MoveHistoryEntry[]
@@ -1019,9 +1076,38 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   const tileBag = (game.tile_bag ?? []) as Tile[]
 
   return (
-    <div className="min-h-screen" style={{ background: 'linear-gradient(145deg, #1a1208 0%, #2d1f0e 50%, #1a1208 100%)' }}>
-      {/* Header */}
-      <header className="border-b border-amber-900/30 bg-amber-950/40 backdrop-blur sticky top-0 z-50">
+    <div className={cn('min-h-screen', isMobile && 'h-[100dvh] overflow-hidden flex flex-col')} style={{ background: 'linear-gradient(145deg, #1a1208 0%, #2d1f0e 50%, #1a1208 100%)' }}>
+      {/* Mobile header — compact score bar with overflow menu */}
+      {isMobile && (
+        <MobileGameHeader
+          players={players}
+          computerPlayers={computerPlayers}
+          currentTurn={game.current_turn}
+          userId={userId}
+          isActive={isActive}
+          tilesLeft={tileBag.length}
+          onBack={onBack}
+          onToggleHistory={() => setShowHistory(v => !v)}
+          onToggleInstructional={findWordsEnabled ? () => setShowInstructional(v => !v) : undefined}
+          onToggleChat={() => setMobileChat(v => !v)}
+          onResign={isActive && myPlayer ? async () => {
+            if (!confirm('Resign this game?')) return
+            try {
+              await cancelGame.mutateAsync({ gameId, userId })
+              toast.success('Game resigned')
+              onBack()
+            } catch { toast.error('Failed to resign') }
+          } : undefined}
+          showHistory={showHistory}
+          showInstructional={showInstructional}
+          canShowInstructional={findWordsEnabled}
+          gameId={gameId}
+          hasApiPlayers={computerPlayers.some(cp => cp.id.startsWith('api-'))}
+        />
+      )}
+
+      {/* Desktop header */}
+      <header className="border-b border-amber-900/30 bg-amber-950/40 backdrop-blur sticky top-0 z-50 hidden lg:block">
         <div className="container mx-auto px-3 py-2.5 flex items-center justify-between">
           <Button variant="ghost" size="sm" onClick={onBack} className="text-amber-200 hover:text-white hover:bg-amber-700/50">
             <ArrowLeft className="h-4 w-4 mr-1" />
@@ -1071,8 +1157,44 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
         </div>
       </header>
 
-      <main className="container mx-auto px-2 py-4 flex flex-col lg:flex-row gap-4 items-start justify-center">
-        <Scoreboard
+      {/* Mobile drawers for panels that stack on desktop */}
+      {isMobile && (
+        <>
+          <MobileDrawer open={showHistory} onClose={() => setShowHistory(false)} title="Game History">
+            <div className="px-4 pb-4">
+              <GameHistoryViewer
+                moveHistory={(game.move_history ?? []) as MoveHistoryEntry[]}
+                emptyBoard={createEmptyBoard()}
+              />
+            </div>
+          </MobileDrawer>
+          <MobileDrawer open={showInstructional && findWordsEnabled} onClose={() => setShowInstructional(false)} title="Word List" className="bg-sky-950/95 border-t border-sky-800/50">
+            <div className="px-3 pb-3">
+              <InstructionalModePanel
+                data={findWordsQuery.data}
+                isLoading={findWordsQuery.isLoading}
+                isError={findWordsQuery.isError}
+                error={findWordsQuery.error as Error | null}
+                stagedMoveKey={stagedFindWordsKey}
+                onStageMove={stageMoveFromFindWords}
+                isMyTurn={isMyTurn}
+              />
+            </div>
+          </MobileDrawer>
+          <MobileDrawer open={mobileChat} onClose={() => setMobileChat(false)} title="Game Chat">
+            <div className="h-[60dvh]">
+              <GameChatSidebar gameId={gameId} userId={userId} gameStatus={game.status} />
+            </div>
+          </MobileDrawer>
+        </>
+      )}
+
+      <main className={cn(
+        'container mx-auto px-2 py-4 flex flex-col lg:flex-row gap-4 items-start justify-center',
+        isMobile && 'px-2 py-1 gap-1 items-center flex-1 overflow-hidden'
+      )}>
+        {/* Desktop-only: Scoreboard sidebar */}
+        {!isMobile && <Scoreboard
           players={players}
           computerPlayers={computerPlayers}
           currentTurn={game.current_turn}
@@ -1089,14 +1211,10 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
           canShowInstructional={findWordsEnabled}
           showInstructional={showInstructional}
           setShowInstructional={setShowInstructional}
-        />
+        />}
 
-        {/* #10 Instructional mode panel — only for human seats with the
-            per-seat flag enabled, and only when the player has it toggled
-            open via the Scoreboard button. Hidden by default so the player
-            can try to find the best play first, then open the panel to
-            check their work before committing. */}
-        {findWordsEnabled && showInstructional && (
+        {/* #10 Instructional mode panel — desktop only (mobile uses drawer) */}
+        {!isMobile && findWordsEnabled && showInstructional && (
           <InstructionalModePanel
             data={findWordsQuery.data}
             isLoading={findWordsQuery.isLoading}
@@ -1108,8 +1226,8 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
           />
         )}
 
-        {/* Game History Viewer */}
-        {showHistory && (
+        {/* Game History Viewer — desktop only (mobile uses drawer) */}
+        {!isMobile && showHistory && (
           <Card className="border-amber-900/30 bg-amber-950/30 w-full lg:w-56 shrink-0">
             <CardHeader className="py-3 px-4">
               <CardTitle className="text-amber-300 text-sm flex items-center gap-2">
@@ -1127,7 +1245,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
         )}
 
         {/* Board + Rack */}
-        <div className="flex flex-col items-center gap-4">
+        <div className={cn('flex flex-col items-center', isMobile ? 'gap-0 flex-1 min-h-0 w-full' : 'gap-4')}>
           {/* Game status */}
           {game.status === 'waiting' && (
             <div className="flex flex-col items-center gap-3 bg-amber-900/20 px-6 py-4 rounded-lg">
@@ -1194,19 +1312,19 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
             )
           })()}
           {isActive && !isMyTurn && !isComputerTurn && !isApiTurn && (
-            <div className="text-amber-300 text-sm font-medium px-4 py-2 rounded-lg bg-amber-900/20">
+            <div className={cn('text-amber-300 font-medium rounded-lg bg-amber-900/20', isMobile ? 'text-xs px-3 py-1' : 'text-sm px-4 py-2')}>
               Waiting for {currentTurnPlayer?.profiles.display_name} to play...
             </div>
           )}
           {isActive && isComputerTurn && currentComputerPlayer && (
-            <div className="text-amber-300 text-sm font-medium animate-pulse px-4 py-2 rounded-lg bg-amber-900/20">
+            <div className={cn('text-amber-300 font-medium animate-pulse rounded-lg bg-amber-900/20', isMobile ? 'text-xs px-3 py-1' : 'text-sm px-4 py-2')}>
               {currentComputerPlayer.name} is thinking...
             </div>
           )}
           {isActive && isApiTurn && currentApiPlayer && (
-            <div className="text-purple-300 text-sm font-medium animate-pulse px-4 py-2 rounded-lg bg-purple-900/15">
+            <div className={cn('text-purple-300 font-medium animate-pulse rounded-lg bg-purple-900/15', isMobile ? 'text-xs px-3 py-1' : 'text-sm px-4 py-2')}>
               Waiting for {currentApiPlayer.name} to play...
-              {isSpectatingApi && <span className="text-amber-400/70 text-xs block mt-1 animate-none">You can suggest a move while you wait</span>}
+              {!isMobile && isSpectatingApi && <span className="text-amber-400/70 text-xs block mt-1 animate-none">You can suggest a move while you wait</span>}
             </div>
           )}
           {findWordsEnabled && !hideInstructionalBanner && (
@@ -1214,13 +1332,15 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
               <button
                 type="button"
                 onClick={() => setShowInstructional(v => !v)}
-                className="flex items-center gap-2 text-sky-200 text-xs font-medium px-3 py-1.5 hover:bg-sky-900/40 transition-colors"
+                className={cn('flex items-center gap-2 text-sky-200 font-medium hover:bg-sky-900/40 transition-colors', isMobile ? 'text-[11px] px-2 py-1' : 'text-xs px-3 py-1.5')}
                 title="Toggle the word list. Hide it to find your own best play, then show it to check your work."
               >
                 <BookOpen className="h-3.5 w-3.5 shrink-0" />
                 <span>
-                  Instructional mode —{' '}
-                  {showInstructional ? 'word list open (click to hide)' : 'click to show the word list'}
+                  {isMobile
+                    ? (showInstructional ? 'Word list open' : 'Show word list')
+                    : <>Instructional mode — {showInstructional ? 'word list open (click to hide)' : 'click to show the word list'}</>
+                  }
                 </span>
               </button>
               <button
@@ -1236,16 +1356,16 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
           )}
           {isActive && isMyTurn && placedTiles.size === 0 && !hidePlayHint && (
             <div className="flex items-center gap-1 rounded-lg bg-green-900/15 overflow-hidden">
-              <div className="text-green-400 text-sm font-medium px-4 py-2">
+              <div className={cn('text-green-400 font-medium', isMobile ? 'text-xs px-3 py-1' : 'text-sm px-4 py-2')}>
                 {selectedSquare
-                  ? <>Tap tiles in your rack to place them {direction === 'across' ? '\u2192' : '\u2193'}</>
-                  : <>Tap a square on the board to start placing tiles</>
+                  ? <>Tap tiles to place them {direction === 'across' ? '\u2192' : '\u2193'}</>
+                  : <>Tap a square to start placing tiles</>
                 }
               </div>
               <button
                 type="button"
                 onClick={() => setHidePlayHint(true)}
-                className="text-green-400/70 hover:text-green-200 hover:bg-green-900/30 px-1.5 py-2 transition-colors"
+                className="text-green-400/70 hover:text-green-200 hover:bg-green-900/30 px-1.5 py-1.5 transition-colors"
                 aria-label="Dismiss play hint"
                 title="Hide this hint"
               >
@@ -1295,6 +1415,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
               highlightTiles={reviewMode ? reviewHighlightTiles : undefined}
               direction={isSpectatingApi ? suggestionDirection : direction}
               showLabels={showLabels}
+              cellSize={isMobile ? mobileCellSize : undefined}
             />
           </div>
 
@@ -1310,7 +1431,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
 
           {/* Rack */}
           {isActive && myPlayer && (
-            <div className="space-y-3">
+            <div className={cn(isMobile ? 'space-y-1 mt-auto pb-2 w-full' : 'space-y-3')}>
               <TileRack
                 tiles={rackTiles}
                 onTileClick={handleRackTileClick}
@@ -1319,6 +1440,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                 onShuffle={handleShuffleRack}
                 onReorder={handleReorderRack}
                 onReturnFromBoard={handlePickupTile}
+                tileSize={mobileTileSize}
               />
 
               {isMyTurn && (
@@ -1367,10 +1489,12 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
           )}
         </div>
 
-        {/* Per-game chat (auto-provisioned when game becomes active) */}
-        <div className="w-full lg:w-72 shrink-0">
-          <GameChatSidebar gameId={gameId} userId={userId} gameStatus={game.status} />
-        </div>
+        {/* Per-game chat — desktop only (mobile uses drawer) */}
+        {!isMobile && (
+          <div className="w-full lg:w-72 shrink-0">
+            <GameChatSidebar gameId={gameId} userId={userId} gameStatus={game.status} />
+          </div>
+        )}
       </main>
     </div>
   )
