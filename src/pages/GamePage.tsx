@@ -1379,7 +1379,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
               )}
             </div>
           )}
-          {game.status === 'finished' && (() => {
+          {game.status === 'finished' && !reviewMode && (() => {
             // Determine actual winner by highest score
             const allPlayerScores = [
               ...players.map(p => ({ name: p.profiles.display_name, score: p.score })),
@@ -1397,19 +1397,14 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
               </div>
               <Button
                 onClick={() => {
-                  setReviewMode(r => !r)
-                  if (!reviewMode) setReviewMoveIndex(moveHistory.length - 1)
+                  setReviewMode(true)
+                  setReviewMoveIndex(moveHistory.length - 1)
                 }}
-                className={cn(
-                  'gap-1.5',
-                  reviewMode
-                    ? 'bg-amber-700 hover:bg-amber-600 text-white'
-                    : 'bg-amber-900/60 hover:bg-amber-800/70 text-amber-200 border border-amber-700/40'
-                )}
+                className="gap-1.5 bg-amber-900/60 hover:bg-amber-800/70 text-amber-200 border border-amber-700/40"
                 size="sm"
               >
                 <History className="h-4 w-4" />
-                {reviewMode ? 'Exit Review' : 'Review Game'}
+                Review Game
               </Button>
             </div>
             )
@@ -1509,30 +1504,22 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
           </div>
 
           {reviewMode && (
-            <>
-              <ReviewControls
-                moveHistory={moveHistory}
-                reviewMoveIndex={reviewMoveIndex}
-                setReviewMoveIndex={setReviewMoveIndex}
-                reviewCurrentMove={reviewCurrentMove}
-                reviewTiming={reviewTiming}
-              />
-              {isMobile && game?.status === 'finished' && reviewMoveIndex >= 0 && (
-                <button
-                  onClick={() => setShowReviewAnalysis(true)}
-                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-sky-200 bg-sky-900/40 border border-sky-700/40 rounded-md hover:bg-sky-800/50"
-                >
-                  <BookOpen className="h-3.5 w-3.5" />
-                  View All Plays
-                </button>
-              )}
-            </>
+            <ReviewControls
+              moveHistory={moveHistory}
+              reviewMoveIndex={reviewMoveIndex}
+              setReviewMoveIndex={setReviewMoveIndex}
+              reviewCurrentMove={reviewCurrentMove}
+              reviewTiming={reviewTiming}
+              isMobile={isMobile}
+              onExitReview={() => setReviewMode(false)}
+              onViewPlays={isMobile && game?.status === 'finished' ? () => setShowReviewAnalysis(true) : undefined}
+            />
           )}
 
           {/* Review-mode rack display */}
           {reviewMode && reviewRack && (
-            <div className="space-y-1">
-              <div className="text-center text-xs text-amber-400">
+            <div className="space-y-0.5">
+              <div className={cn('text-center text-amber-400', isMobile ? 'text-[10px]' : 'text-xs')}>
                 {reviewCurrentMove?.player_name}&apos;s rack:
               </div>
               <TileRack
@@ -1540,7 +1527,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                 onTileClick={() => {}}
                 selectedTiles={new Set()}
                 isExchangeMode={false}
-                tileSize={mobileTileSize}
+                tileSize={isMobile ? Math.max(36, Math.round(mobileCellSize * 1.2)) : undefined}
               />
             </div>
           )}
