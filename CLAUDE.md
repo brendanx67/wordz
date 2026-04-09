@@ -14,6 +14,10 @@ A Postgres database (Supabase-managed) holds games, players, moves, and the trie
 
 For the high-level "what is this and why" pitch, see [README.md](./README.md).
 
+## Multi-agent workflow
+
+This project is developed by two collaborating Claude agents (BS in the Anthropic sandbox, CC on the developer's local machine) with the developer as bridge. The workflow — including the source ZIP pipeline, the push protocol, the patch channel for CC-authored changes, and the load-bearing conventions — is documented in **[ai/WORKFLOW.md](./ai/WORKFLOW.md)**. Read it before doing anything with git.
+
 ## Architecture map
 
 ```
