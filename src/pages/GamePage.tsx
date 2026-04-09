@@ -1259,19 +1259,31 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
           {suggestionBlankTarget && <BlankTileDialog onChoose={handleSuggestionBlankChoice} />}
 
           <div className="relative">
-            <button
-              onClick={() => setShowLabels(l => !l)}
-              className={cn(
-                'absolute top-1 right-1 z-10 flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium transition-colors backdrop-blur-sm',
-                showLabels
-                  ? 'bg-amber-700/70 text-amber-100 hover:bg-amber-700/90'
-                  : 'bg-amber-950/60 text-amber-400/70 hover:text-amber-200 hover:bg-amber-900/70'
-              )}
-              title="Toggle coordinate labels (A-O, 1-15)"
-            >
-              <Grid3X3 className="h-3 w-3" />
-              A1
-            </button>
+            {/* Coordinate-label toggle. Stealth by default: the hover zone
+                sits in the board's top-right corner and the button only
+                fades in when the cursor is there (or the button has focus,
+                for keyboard users). Stays visible when labels are on so
+                you can find it again to turn them back off. Not a primary
+                action — mostly useful when discussing a position with an
+                LLM. */}
+            <div className="group absolute top-0 right-0 z-10 h-10 w-16">
+              <button
+                onClick={() => setShowLabels(l => !l)}
+                className={cn(
+                  'absolute top-1 right-1 flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium backdrop-blur-sm',
+                  'transition-opacity duration-200',
+                  'focus:outline-none focus-visible:ring-1 focus-visible:ring-amber-400',
+                  showLabels
+                    ? 'bg-amber-700/70 text-amber-100 opacity-100 hover:bg-amber-700/90'
+                    : 'bg-amber-950/70 text-amber-200 opacity-0 group-hover:opacity-90 focus-visible:opacity-100 hover:bg-amber-900/80'
+                )}
+                title="Toggle coordinate labels (A-O, 1-15)"
+                aria-label="Toggle coordinate labels"
+              >
+                <Grid3X3 className="h-3 w-3" />
+                A1
+              </button>
+            </div>
             <GameBoard
               board={reviewMode ? reviewBoard : board}
               selectedSquare={reviewMode ? null : isSpectatingApi ? suggestionSquare : selectedSquare}
