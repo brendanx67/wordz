@@ -97,7 +97,7 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
         </div>
       </header>
 
-      <main className="container mx-auto px-4 py-8 max-w-4xl space-y-8">
+      <main className="container mx-auto px-3 sm:px-4 py-4 sm:py-8 max-w-4xl space-y-6 sm:space-y-8">
         {/* Create Game */}
         {showCreateForm ? (
           <CreateGameForm
@@ -164,51 +164,49 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
                   return (
                     <div
                       key={game.id}
-                      className="flex items-center justify-between p-4 rounded-lg bg-amber-950/40 border border-amber-900/20 hover:border-amber-700/40 transition-colors"
+                      className="p-4 rounded-lg bg-amber-950/40 border border-amber-900/20 hover:border-amber-700/40 transition-colors space-y-2"
                     >
-                      <div className="flex-1">
-                        <div className="flex items-center gap-3 flex-wrap">
-                          <span className="text-amber-200 font-medium inline-flex items-center gap-1 flex-wrap">
-                            {nameNodes.map((n, idx) => (
-                              <span key={n.key} className="inline-flex items-center gap-1">
-                                {idx > 0 && <span className="text-amber-500/70 mx-0.5">vs</span>}
-                                <span>{n.name}</span>
-                                {n.instructional && (
-                                  <span title="Instructional mode — A&amp;J word list" className="inline-flex">
-                                    <BookOpen className="h-3 w-3 text-sky-300 shrink-0" aria-label="Instructional mode" />
-                                  </span>
-                                )}
-                              </span>
-                            ))}
+                      <div className="flex items-center gap-3 flex-wrap">
+                        <span className="text-amber-200 font-medium inline-flex items-center gap-1 flex-wrap">
+                          {nameNodes.map((n, idx) => (
+                            <span key={n.key} className="inline-flex items-center gap-1">
+                              {idx > 0 && <span className="text-amber-500/70 mx-0.5">vs</span>}
+                              <span>{n.name}</span>
+                              {n.instructional && (
+                                <span title="Instructional mode — A&amp;J word list" className="inline-flex">
+                                  <BookOpen className="h-3 w-3 text-sky-300 shrink-0" aria-label="Instructional mode" />
+                                </span>
+                              )}
+                            </span>
+                          ))}
+                        </span>
+                        {isWaiting && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-amber-800/40 text-amber-400">
+                            <Clock className="h-3 w-3 inline mr-1" />
+                            Waiting
                           </span>
-                          {isWaiting && (
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-amber-800/40 text-amber-400">
-                              <Clock className="h-3 w-3 inline mr-1" />
-                              Waiting
-                            </span>
-                          )}
-                          {isMyTurn && (
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-green-800/40 text-green-400 animate-pulse">
-                              Your Turn!
-                            </span>
-                          )}
-                          {isSpectator && (
-                            <span className="text-xs px-2 py-0.5 rounded-full bg-blue-800/40 text-blue-400">
-                              <Eye className="h-3 w-3 inline mr-1" />
-                              Spectating
-                            </span>
-                          )}
-                        </div>
-                        {!isWaiting && (
-                          <div className="text-xs text-amber-400 mt-1">
-                            {players.map((p: { profiles: unknown; score: number }) =>
-                              `${getDisplayName(p.profiles as { display_name: string })}: ${p.score}`
-                            ).join(' | ')}
-                            {computerPlayers.map(cp => ` | ${cp.name}: ${cp.score}`).join('')}
-                          </div>
+                        )}
+                        {isMyTurn && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-green-800/40 text-green-400 animate-pulse">
+                            Your Turn!
+                          </span>
+                        )}
+                        {isSpectator && (
+                          <span className="text-xs px-2 py-0.5 rounded-full bg-blue-800/40 text-blue-400">
+                            <Eye className="h-3 w-3 inline mr-1" />
+                            Spectating
+                          </span>
                         )}
                       </div>
-                      <div className="flex gap-2">
+                      {!isWaiting && (
+                        <div className="text-xs text-amber-400">
+                          {players.map((p: { profiles: unknown; score: number }) =>
+                            `${getDisplayName(p.profiles as { display_name: string })}: ${p.score}`
+                          ).join(' | ')}
+                          {computerPlayers.map(cp => ` | ${cp.name}: ${cp.score}`).join('')}
+                        </div>
+                      )}
+                      <div className="flex gap-2 flex-wrap">
                         {isWaiting && isCreator && players.length >= 2 && (
                           <Button
                             size="sm"
@@ -285,7 +283,7 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
                     return (
                       <div
                         key={game.id}
-                        className="flex items-center justify-between p-4 rounded-lg bg-amber-950/40 border border-amber-900/20"
+                        className="p-4 rounded-lg bg-amber-950/40 border border-amber-900/20 space-y-2"
                       >
                         <div>
                           <span className="text-amber-200">
@@ -293,7 +291,7 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
                           </span>
                           <span className="text-amber-400 text-sm ml-2">({players.length}/4 players)</span>
                         </div>
-                        <div className="flex gap-2">
+                        <div className="flex gap-2 flex-wrap">
                           <Button
                             size="sm"
                             onClick={() => handleJoin(game.id)}
@@ -374,9 +372,9 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
                   return (
                     <div
                       key={game.id}
-                      className="flex items-center justify-between p-4 rounded-lg bg-amber-950/40 border border-amber-900/20"
+                      className="p-4 rounded-lg bg-amber-950/40 border border-amber-900/20 space-y-2"
                     >
-                      <div className="flex-1">
+                      <div>
                         <div className="flex items-center gap-3 flex-wrap">
                           {isSpectatorGame ? (
                             <span className="text-blue-400 font-medium">Spectated</span>
