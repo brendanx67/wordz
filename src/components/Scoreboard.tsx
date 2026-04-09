@@ -29,6 +29,12 @@ interface ScoreboardProps {
   reviewTilesRemaining: number | null
   showHistory: boolean
   setShowHistory: (v: boolean | ((prev: boolean) => boolean)) => void
+  // #10: Instructional-mode panel toggle. Only shown to players whose own
+  // seat has find_words_enabled = true — passed in from GamePage so we
+  // don't leak the flag for anyone else.
+  canShowInstructional?: boolean
+  showInstructional?: boolean
+  setShowInstructional?: (v: boolean | ((prev: boolean) => boolean)) => void
 }
 
 export default function Scoreboard({
@@ -45,6 +51,9 @@ export default function Scoreboard({
   reviewTilesRemaining,
   showHistory,
   setShowHistory,
+  canShowInstructional = false,
+  showInstructional = false,
+  setShowInstructional,
 }: ScoreboardProps) {
   return (
     <Card className="border-amber-900/30 bg-amber-950/30 w-full lg:w-56 shrink-0">
@@ -172,7 +181,7 @@ export default function Scoreboard({
         </CardContent>
       )}
 
-      <CardContent className="px-4 pb-4 border-t border-amber-900/20 pt-3">
+      <CardContent className="px-4 pb-4 border-t border-amber-900/20 pt-3 space-y-1.5">
         <Button
           variant="ghost"
           size="sm"
@@ -182,6 +191,23 @@ export default function Scoreboard({
           <History className="h-3 w-3 mr-1" />
           {showHistory ? 'Hide History' : 'Game History'}
         </Button>
+        {canShowInstructional && setShowInstructional && (
+          <Button
+            variant="ghost"
+            size="sm"
+            onClick={() => setShowInstructional(v => !v)}
+            className={cn(
+              'w-full text-xs',
+              showInstructional
+                ? 'text-sky-100 bg-sky-900/30 hover:text-white hover:bg-sky-800/40'
+                : 'text-sky-300 hover:text-sky-200 hover:bg-sky-900/20'
+            )}
+            title="Show all legal plays from your rack. Hide it to practise, then show to check your work."
+          >
+            <BookOpen className="h-3 w-3 mr-1" />
+            {showInstructional ? 'Hide Word List' : 'Show Word List'}
+          </Button>
+        )}
       </CardContent>
     </Card>
   )

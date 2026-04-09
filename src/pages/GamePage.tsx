@@ -168,6 +168,12 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   // the panel can highlight it and a second click on the same row clears it.
   const [stagedFindWordsKey, setStagedFindWordsKey] = useState<string | null>(null)
 
+  // Panel visibility. Defaults to hidden so the player can try to find the
+  // best move first and then check their work — the test-and-review cycle is
+  // how people actually learn. Data still fetches in the background (see
+  // useFindWords above) so toggling back on is instant.
+  const [showInstructional, setShowInstructional] = useState(false)
+
   // Review mode: board and highlighted tiles for game history on the main board
   const moveHistory = (game?.move_history ?? []) as MoveHistoryEntry[]
 
@@ -1071,11 +1077,17 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
           reviewTilesRemaining={reviewTilesRemaining}
           showHistory={showHistory}
           setShowHistory={setShowHistory}
+          canShowInstructional={findWordsEnabled}
+          showInstructional={showInstructional}
+          setShowInstructional={setShowInstructional}
         />
 
         {/* #10 Instructional mode panel — only for human seats with the
-            per-seat flag enabled. Same engine the computer opponent uses. */}
-        {findWordsEnabled && (
+            per-seat flag enabled, and only when the player has it toggled
+            open via the Scoreboard button. Hidden by default so the player
+            can try to find the best play first, then open the panel to
+            check their work before committing. */}
+        {findWordsEnabled && showInstructional && (
           <InstructionalModePanel
             data={findWordsQuery.data}
             isLoading={findWordsQuery.isLoading}
@@ -1189,10 +1201,18 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
             </div>
           )}
           {findWordsEnabled && (
-            <div className="flex items-center gap-2 text-sky-200 text-xs font-medium px-3 py-1.5 rounded-lg bg-sky-900/30 border border-sky-700/40">
+            <button
+              type="button"
+              onClick={() => setShowInstructional(v => !v)}
+              className="flex items-center gap-2 text-sky-200 text-xs font-medium px-3 py-1.5 rounded-lg bg-sky-900/30 border border-sky-700/40 hover:bg-sky-900/50 hover:border-sky-600/60 transition-colors"
+              title="Toggle the word list. Hide it to find your own best play, then show it to check your work."
+            >
               <BookOpen className="h-3.5 w-3.5 shrink-0" />
-              <span>You're playing in instructional mode — A&amp;J word list is on.</span>
-            </div>
+              <span>
+                Instructional mode —{' '}
+                {showInstructional ? 'word list open (click to hide)' : 'click to show the word list'}
+              </span>
+            </button>
           )}
           {isActive && isMyTurn && (
             <div className="text-green-400 text-sm font-medium px-4 py-2 rounded-lg bg-green-900/15">
