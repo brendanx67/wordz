@@ -1,28 +1,31 @@
 import { useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { BookOpen, Loader2 } from 'lucide-react'
+import { BookOpen, Loader2, CheckCircle2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import type { FindWordsMove, FindWordsTile, FindWordsResponse } from '@/hooks/useFindWords'
 
-// #10 instructional mode side panel. Renders the move list returned by
-// useFindWords (the React-side wrapper around the find-words Edge Function
-// that #9 built for API players). Click a row to stage that move on the
-// board — staging is delegated to the parent so it can reuse the existing
-// placedTiles Map state path, which means the existing recall / blank /
-// submit code paths all keep working uniformly.
+// #10 instructional mode side panel, extended for #11 review mode.
+// Renders the move list returned by useFindWords (live) or
+// useFindWordsAtMove (review). Click a row to stage that move on
+// the board — staging is delegated to the parent.
+
+interface ReviewInfo {
+  playerName: string
+  moveType: 'play' | 'pass' | 'exchange'
+  playedMoveKey: string | null
+  totalAlternatives: number
+}
 
 interface InstructionalModePanelProps {
   data: FindWordsResponse | undefined
   isLoading: boolean
   isError: boolean
   error: Error | null
-  // The move currently staged on the board, if any. Used to highlight the
-  // active row and to support click-same-row-twice clears.
   stagedMoveKey: string | null
   onStageMove: (move: FindWordsMove) => void
-  // Whether it's the user's turn — when not, click-to-stage is disabled
-  // (we don't want clicks to look interactive while the move can't be played).
   isMyTurn: boolean
+  // #11: when set, renders review-mode UI with played-move marker
+  reviewInfo?: ReviewInfo
 }
 
 // Stable string key for a move so we can identify the staged row across
@@ -55,31 +58,56 @@ export default function InstructionalModePanel({
   stagedMoveKey,
   onStageMove,
   isMyTurn,
+  reviewInfo,
 }: InstructionalModePanelProps) {
   const moves = data?.moves ?? []
+  const isReview = !!reviewInfo
 
-  const rows = useMemo(
-    () => moves.map(m => ({ move: m, key: moveKey(m) })),
-    [moves]
-  )
+  // In review mode, sort the played move to the top
+  const rows = useMemo(() => {
+    const keyed = moves.map(m => ({ move: m, key: moveKey(m) }))
+    if (reviewInfo?.playedMoveKey) {
+      keyed.sort((a, b) => {
+        if (a.key === reviewInfo.playedMoveKey) return -1
+        if (b.key === reviewInfo.playedMoveKey) return 1
+        return 0
+      })
+    }
+    return keyed
+  }, [moves, reviewInfo?.playedMoveKey])
 
   return (
     <Card className="border-sky-900/40 bg-sky-950/30 w-full lg:w-72 shrink-0">
       <CardHeader className="py-3 px-4">
         <CardTitle className="text-sky-200 text-sm flex items-center gap-2">
           <BookOpen className="h-4 w-4" />
-          Instructional Mode
+          {isReview ? 'Move Analysis' : 'Instructional Mode'}
         </CardTitle>
         <p className="text-[11px] text-sky-300/70 mt-1 leading-snug">
-          All legal plays from your rack, computed by the same engine the
-          computer opponent uses. Tap a row to stage it on the board.
+          {isReview
+            ? `All legal plays at this position. Tap to preview on the board.`
+            : 'All legal plays from your rack, computed by the same engine the computer opponent uses. Tap a row to stage it on the board.'
+          }
         </p>
       </CardHeader>
       <CardContent className="px-3 pb-3">
+        {/* Pass/exchange banner for review mode */}
+        {isReview && reviewInfo.moveType !== 'play' && !isLoading && (
+          <div className={cn(
+            'text-xs px-2.5 py-2 rounded-md border mb-2',
+            'bg-amber-950/40 border-amber-700/40 text-amber-200/90'
+          )}>
+            <span className="font-semibold">{reviewInfo.playerName}</span>
+            {reviewInfo.moveType === 'pass'
+              ? ' chose to pass.'
+              : ' exchanged tiles.'}
+          </div>
+        )}
+
         {isLoading && (
           <div className="flex items-center justify-center py-8 text-sky-300/70 text-xs gap-2">
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
-            Finding plays...
+            {isReview ? 'Analyzing position...' : 'Finding plays...'}
           </div>
         )}
 
@@ -91,40 +119,50 @@ export default function InstructionalModePanel({
 
         {!isLoading && !isError && rows.length === 0 && (
           <div className="text-sky-300/60 text-xs px-2 py-6 text-center leading-snug">
-            No legal plays from your current rack. Try passing or exchanging.
+            {isReview
+              ? 'No legal plays were available from this rack.'
+              : 'No legal plays from your current rack. Try passing or exchanging.'}
           </div>
         )}
 
         {!isLoading && !isError && rows.length > 0 && (
           <>
             <div className="text-[10px] text-sky-300/60 px-1 pb-1.5 uppercase tracking-wider font-semibold">
-              {data?.total_moves_found ?? rows.length} plays — top {rows.length} by score
+              {(isReview ? reviewInfo.totalAlternatives : data?.total_moves_found) ?? rows.length} plays — top {rows.length} by score
             </div>
             <div className="space-y-1 max-h-[60vh] overflow-y-auto pr-1">
               {rows.map(({ move, key }) => {
                 const isStaged = stagedMoveKey === key
+                const isPlayed = isReview && reviewInfo.playedMoveKey === key
                 const mainWord = move.words[0]?.word ?? ''
                 const otherWords = move.words.slice(1)
+                // In review mode, all rows are clickable (for preview).
+                // In live mode, only clickable on your turn.
+                const clickable = isReview || isMyTurn
                 return (
                   <button
                     key={key}
                     type="button"
-                    disabled={!isMyTurn}
+                    disabled={!clickable}
                     onClick={() => onStageMove(move)}
                     className={cn(
                       'w-full text-left px-2.5 py-2 rounded-md border transition-colors',
+                      isPlayed && !isStaged && 'bg-emerald-950/50 border-emerald-700/50 hover:border-emerald-500/60',
                       isStaged
                         ? 'bg-sky-700/60 border-sky-400 shadow-sm shadow-sky-900/40'
-                        : 'bg-sky-950/40 border-sky-900/40 hover:border-sky-600/60 hover:bg-sky-900/40',
-                      !isMyTurn && 'opacity-50 cursor-not-allowed hover:border-sky-900/40 hover:bg-sky-950/40'
+                        : !isPlayed && 'bg-sky-950/40 border-sky-900/40 hover:border-sky-600/60 hover:bg-sky-900/40',
+                      !clickable && 'opacity-50 cursor-not-allowed hover:border-sky-900/40 hover:bg-sky-950/40'
                     )}
                   >
                     <div className="flex items-baseline justify-between gap-2">
                       <span className="flex items-baseline gap-2 min-w-0">
+                        {isPlayed && (
+                          <CheckCircle2 className="h-3.5 w-3.5 text-emerald-400 shrink-0 relative top-[1px]" />
+                        )}
                         <span
                           className={cn(
                             'font-bold text-sm tracking-wide',
-                            isStaged ? 'text-white' : 'text-sky-100'
+                            isPlayed && !isStaged ? 'text-emerald-200' : isStaged ? 'text-white' : 'text-sky-100'
                           )}
                         >
                           {mainWord}
@@ -141,7 +179,7 @@ export default function InstructionalModePanel({
                       <span
                         className={cn(
                           'text-sm font-bold tabular-nums shrink-0',
-                          isStaged ? 'text-amber-200' : 'text-amber-300/90'
+                          isPlayed && !isStaged ? 'text-emerald-300' : isStaged ? 'text-amber-200' : 'text-amber-300/90'
                         )}
                       >
                         {move.total_score}
@@ -153,6 +191,9 @@ export default function InstructionalModePanel({
                         isStaged ? 'text-sky-100/90' : 'text-sky-300/70'
                       )}
                     >
+                      {isPlayed && (
+                        <span className="text-emerald-400 font-semibold">PLAYED</span>
+                      )}
                       <span>{move.tiles_used} tile{move.tiles_used === 1 ? '' : 's'}</span>
                       {move.is_bingo && (
                         <span className="text-amber-300 font-semibold">BINGO +50</span>

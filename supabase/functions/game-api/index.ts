@@ -4,6 +4,7 @@ import { handlePlayMove } from "./handlers/play-move.ts";
 import { handleListGames } from "./handlers/list-games.ts";
 import { handleValidateMove } from "./handlers/validate-move.ts";
 import { handleFindWords } from "./handlers/find-words.ts";
+import { handleFindWordsAtMove } from "./handlers/find-words-at-move.ts";
 import { handlePreviewMove } from "./handlers/preview-move.ts";
 import { handleSuggestMove } from "./handlers/suggest-move.ts";
 import {
@@ -26,6 +27,7 @@ Deno.serve(async (req) => {
     if (req.method === "POST" && path === "move") return await handlePlayMove(req);
     if (req.method === "POST" && path === "validate") return await handleValidateMove(req);
     if (req.method === "POST" && path === "find-words") return await handleFindWords(req);
+    if (req.method === "POST" && path === "find-words-at-move") return await handleFindWordsAtMove(req);
     if (req.method === "POST" && path === "preview") return await handlePreviewMove(req);
     if (req.method === "POST" && path === "suggest") return await handleSuggestMove(req);
 

@@ -27,7 +27,8 @@ import { useTurnTimer } from '@/hooks/useTurnTimer'
 import { useReviewMode } from '@/hooks/useReviewMode'
 import type { MoveHistoryEntry } from '@/hooks/useReviewMode'
 import { useSuggestionMode } from '@/hooks/useSuggestionMode'
-import { useFindWords, type FindWordsMove } from '@/hooks/useFindWords'
+import { useFindWords, type FindWordsMove, type FindWordsResponse } from '@/hooks/useFindWords'
+import { useFindWordsAtMove } from '@/hooks/useFindWordsAtMove'
 import InstructionalModePanel, { moveKey as instructionalMoveKey } from '@/components/InstructionalModePanel'
 import MobileGameHeader from '@/components/MobileGameHeader'
 import MobileDrawer from '@/components/MobileDrawer'
@@ -222,6 +223,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   // Mobile layout — width-based cell sizing, no viewport height tricks
   const isMobile = useMobileLayout()
   const [mobileChat, setMobileChat] = useState(false)
+  const [showReviewAnalysis, setShowReviewAnalysis] = useState(false)
   const mobileCellSize = useMobileCellSize(isMobile)
   const mobileTileSize = isMobile ? Math.max(44, Math.round(mobileCellSize * 1.6)) : undefined
 
@@ -240,6 +242,64 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
     reviewScores,
     reviewTilesRemaining,
   } = useReviewMode(moveHistory, board)
+
+  // #11 review-mode instructional panel — fetch alternatives at the
+  // currently viewed move. Always enabled for finished games.
+  const reviewWordsQuery = useFindWordsAtMove({
+    gameId,
+    moveIndex: reviewMoveIndex,
+    enabled: reviewMode && game?.status === 'finished',
+  })
+  // Transform the review response into the shape InstructionalModePanel expects.
+  const reviewPanelData = useMemo((): FindWordsResponse | undefined => {
+    if (!reviewWordsQuery.data) return undefined
+    return {
+      total_moves_found: reviewWordsQuery.data.total_alternatives,
+      filtered_count: reviewWordsQuery.data.showing,
+      showing: reviewWordsQuery.data.showing,
+      sort_by: 'score',
+      moves: reviewWordsQuery.data.alternatives,
+    }
+  }, [reviewWordsQuery.data])
+  // Key of the actually-played move so the panel can mark it.
+  const reviewPlayedKey = useMemo(() => {
+    const played = reviewWordsQuery.data?.played
+    if (!played?.tiles?.length) return null
+    return played.tiles.map(t => `${t.cell}:${t.letter}${t.is_blank ? '*' : ''}`).join('|')
+  }, [reviewWordsQuery.data?.played])
+  // Board state BEFORE the current review move (for alternative preview).
+  const reviewBoardBefore = useMemo(() => {
+    if (reviewMoveIndex <= 0) return createEmptyBoard()
+    return moveHistory[reviewMoveIndex - 1]?.board_snapshot ?? createEmptyBoard()
+  }, [reviewMoveIndex, moveHistory])
+  // When user clicks an alternative in review panel, stage it for preview.
+  const [reviewStagedKey, setReviewStagedKey] = useState<string | null>(null)
+  const reviewStagedMove = useMemo(() => {
+    if (!reviewStagedKey || !reviewPanelData) return null
+    return reviewPanelData.moves.find(m => instructionalMoveKey(m) === reviewStagedKey) ?? null
+  }, [reviewStagedKey, reviewPanelData])
+  // Compute placed tiles for the review preview
+  const reviewPreviewTiles = useMemo((): Map<string, Tile> => {
+    if (!reviewStagedMove) return new Map()
+    const map = new Map<string, Tile>()
+    for (const t of reviewStagedMove.tiles) {
+      const m = t.cell.toUpperCase().match(/^([A-O])(\d{1,2})$/)
+      if (!m) continue
+      const col = m[1].charCodeAt(0) - 65
+      const row = parseInt(m[2]) - 1
+      map.set(`${row},${col}`, {
+        letter: t.letter, value: t.value, isBlank: t.is_blank,
+        id: `review-${t.cell}`,
+      })
+    }
+    return map
+  }, [reviewStagedMove])
+  // Clear staged alternative when stepping to a different move.
+  useEffect(() => { setReviewStagedKey(null) }, [reviewMoveIndex])
+  const stageReviewMove = useCallback((move: FindWordsMove) => {
+    const key = instructionalMoveKey(move)
+    setReviewStagedKey(prev => prev === key ? null : key)
+  }, [])
 
   // Live turn timer
   const turnElapsed = useTurnTimer(game?.updated_at, isActive, game?.current_turn)
@@ -677,6 +737,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
         tiles: placed,
         words: result.words,
         score: result.totalScore,
+        rack_before: fullRack,
         rack_snapshot: fullRack.map(t => ({ letter: t.letter, value: t.value, isBlank: t.isBlank })),
         board_snapshot: newBoard,
         timestamp: new Date().toISOString(),
@@ -820,11 +881,21 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
         const turnOrder = game.turn_order as string[]
         const nextIndex = (game.turn_index + 1) % turnOrder.length
 
+        const exchangeHistoryEntry = {
+          player_id: userId,
+          player_name: myPlayer?.profiles?.display_name ?? 'Player',
+          type: 'exchange',
+          rack_before: fullRack,
+          board_snapshot: board,
+          timestamp: new Date().toISOString(),
+        }
+
         await supabase.from('games').update({
           tile_bag: newBag,
           current_turn: turnOrder[nextIndex],
           turn_index: nextIndex,
           consecutive_passes: game.consecutive_passes + 1,
+          move_history: [...(game.move_history ?? []), exchangeHistoryEntry],
           updated_at: new Date().toISOString(),
         }).eq('id', gameId)
 
@@ -865,6 +936,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
         player_id: userId,
         player_name: myPlayer?.profiles?.display_name ?? 'Player',
         type: 'pass',
+        rack_before: fullRack,
         rack_snapshot: fullRack.map(t => ({ letter: t.letter, value: t.value, isBlank: t.isBlank })),
         board_snapshot: board,
         timestamp: new Date().toISOString(),
@@ -1166,6 +1238,25 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
               />
             </div>
           </MobileDrawer>
+          <MobileDrawer open={showReviewAnalysis && reviewMode && game?.status === 'finished'} onClose={() => setShowReviewAnalysis(false)} title="Move Analysis" className="bg-sky-950/95 border-t border-sky-800/50">
+            <div className="px-3 pb-3">
+              <InstructionalModePanel
+                data={reviewPanelData}
+                isLoading={reviewWordsQuery.isLoading}
+                isError={reviewWordsQuery.isError}
+                error={reviewWordsQuery.error as Error | null}
+                stagedMoveKey={reviewStagedKey}
+                onStageMove={stageReviewMove}
+                isMyTurn={false}
+                reviewInfo={{
+                  playerName: reviewWordsQuery.data?.player_name ?? '',
+                  moveType: reviewWordsQuery.data?.move_type ?? 'play',
+                  playedMoveKey: reviewPlayedKey,
+                  totalAlternatives: reviewWordsQuery.data?.total_alternatives ?? 0,
+                }}
+              />
+            </div>
+          </MobileDrawer>
           <MobileDrawer open={mobileChat} onClose={() => setMobileChat(false)} title="Game Chat">
             <div className="h-[60dvh]">
               <GameChatSidebar gameId={gameId} userId={userId} gameStatus={game.status} />
@@ -1201,7 +1292,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
         />}
 
         {/* #10 Instructional mode panel — desktop only (mobile uses drawer) */}
-        {!isMobile && findWordsEnabled && showInstructional && (
+        {!isMobile && findWordsEnabled && showInstructional && !reviewMode && (
           <InstructionalModePanel
             data={findWordsQuery.data}
             isLoading={findWordsQuery.isLoading}
@@ -1210,6 +1301,25 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
             stagedMoveKey={stagedFindWordsKey}
             onStageMove={stageMoveFromFindWords}
             isMyTurn={isMyTurn}
+          />
+        )}
+
+        {/* #11 Review-mode analysis panel — desktop only */}
+        {!isMobile && reviewMode && game?.status === 'finished' && reviewMoveIndex >= 0 && (
+          <InstructionalModePanel
+            data={reviewPanelData}
+            isLoading={reviewWordsQuery.isLoading}
+            isError={reviewWordsQuery.isError}
+            error={reviewWordsQuery.error as Error | null}
+            stagedMoveKey={reviewStagedKey}
+            onStageMove={stageReviewMove}
+            isMyTurn={false}
+            reviewInfo={{
+              playerName: reviewWordsQuery.data?.player_name ?? '',
+              moveType: reviewWordsQuery.data?.move_type ?? 'play',
+              playedMoveKey: reviewPlayedKey,
+              totalAlternatives: reviewWordsQuery.data?.total_alternatives ?? 0,
+            }}
           />
         )}
 
@@ -1397,14 +1507,14 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                 </button>
               </div>
               <GameBoard
-                board={reviewMode ? reviewBoard : board}
+                board={reviewMode ? (reviewStagedMove ? reviewBoardBefore : reviewBoard) : board}
                 selectedSquare={reviewMode ? null : isSpectatingApi ? suggestionSquare : selectedSquare}
                 onSquareClick={reviewMode ? () => {} : isSpectatingApi ? handleSuggestionSquareClick : handleSquareClick}
                 onDrop={reviewMode ? () => {} : handleDrop}
                 onPickupTile={reviewMode ? () => {} : handlePickupTile}
-                placedTiles={reviewMode ? new Map() : isSpectatingApi ? suggestionTiles : placedTiles}
+                placedTiles={reviewMode ? reviewPreviewTiles : isSpectatingApi ? suggestionTiles : placedTiles}
                 previewTiles={reviewMode ? undefined : previewedTiles}
-                highlightTiles={reviewMode ? reviewHighlightTiles : undefined}
+                highlightTiles={reviewMode && !reviewStagedMove ? reviewHighlightTiles : undefined}
                 direction={isSpectatingApi ? suggestionDirection : direction}
                 showLabels={showLabels}
                 cellSize={isMobile ? mobileCellSize : undefined}
@@ -1413,13 +1523,24 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
           </div>
 
           {reviewMode && (
-            <ReviewControls
-              moveHistory={moveHistory}
-              reviewMoveIndex={reviewMoveIndex}
-              setReviewMoveIndex={setReviewMoveIndex}
-              reviewCurrentMove={reviewCurrentMove}
-              reviewTiming={reviewTiming}
-            />
+            <>
+              <ReviewControls
+                moveHistory={moveHistory}
+                reviewMoveIndex={reviewMoveIndex}
+                setReviewMoveIndex={setReviewMoveIndex}
+                reviewCurrentMove={reviewCurrentMove}
+                reviewTiming={reviewTiming}
+              />
+              {isMobile && game?.status === 'finished' && reviewMoveIndex >= 0 && (
+                <button
+                  onClick={() => setShowReviewAnalysis(true)}
+                  className="flex items-center gap-1.5 px-3 py-1.5 text-xs text-sky-200 bg-sky-900/40 border border-sky-700/40 rounded-md hover:bg-sky-800/50"
+                >
+                  <BookOpen className="h-3.5 w-3.5" />
+                  View All Plays
+                </button>
+              )}
+            </>
           )}
 
           {/* Rack + controls */}

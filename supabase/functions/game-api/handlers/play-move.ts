@@ -55,6 +55,7 @@ export async function handlePlayMove(req: Request): Promise<Response> {
       player_id: auth.playerId,
       player_name: myPlayer.name,
       type: "pass",
+      rack_before: myPlayer.rack,
       board_snapshot: boardState,
       timestamp: new Date().toISOString(),
     };
@@ -121,6 +122,7 @@ export async function handlePlayMove(req: Request): Promise<Response> {
       player_id: auth.playerId,
       player_name: myPlayer.name,
       type: "exchange",
+      rack_before: myPlayer.rack,
       board_snapshot: boardState,
       timestamp: new Date().toISOString(),
     };
@@ -224,6 +226,7 @@ export async function handlePlayMove(req: Request): Promise<Response> {
     tiles: placedTiles,
     words: result.words,
     score: result.totalScore,
+    rack_before: myPlayer.rack,
     rack_snapshot: myPlayer.rack.map((t: Tile) => ({ letter: t.letter, value: t.value, isBlank: t.isBlank })),
     board_snapshot: newBoard,
     timestamp: new Date().toISOString(),
