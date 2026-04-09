@@ -46,6 +46,25 @@ function useMobileLayout() {
   return mobile
 }
 
+/** On iOS, CSS `100dvh` can sometimes still over-report. This hook
+ *  applies a JS-measured max-height from visualViewport.height as a
+ *  belt-and-suspenders fallback so the outer container never exceeds
+ *  the actual visible area. */
+function useVisualViewportHeight(el: HTMLElement | null) {
+  useLayoutEffect(() => {
+    if (!el) return
+    const vv = window.visualViewport
+    if (!vv) return // Desktop or unsupported — dvh handles it
+    const update = () => { el.style.maxHeight = `${vv.height}px` }
+    update()
+    vv.addEventListener('resize', update)
+    return () => {
+      vv.removeEventListener('resize', update)
+      el.style.maxHeight = ''
+    }
+  }, [el])
+}
+
 /** Measures the actual rendered height of an element via
  *  ResizeObserver. Accepts the element directly (from a callback ref /
  *  state) so the effect naturally re-runs when the element mounts —
@@ -233,6 +252,11 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   // Mobile layout
   const isMobile = useMobileLayout()
   const [mobileChat, setMobileChat] = useState(false)
+
+  // JS fallback: cap the outer container to visualViewport.height so
+  // the rack isn't hidden behind iOS browser chrome.
+  const [outerEl, setOuterEl] = useState<HTMLDivElement | null>(null)
+  useVisualViewportHeight(isMobile ? outerEl : null)
 
   // Mobile layout: measure the board area (the flex-1 div that wraps the
   // board and nothing else) so cell size is based on actual remaining space
@@ -1079,7 +1103,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   const tileBag = (game.tile_bag ?? []) as Tile[]
 
   return (
-    <div className={cn('min-h-screen', isMobile && 'fixed inset-0 flex flex-col overflow-hidden')} style={{ background: 'linear-gradient(145deg, #1a1208 0%, #2d1f0e 50%, #1a1208 100%)' }}>
+    <div ref={isMobile ? setOuterEl : undefined} className={cn('min-h-screen', isMobile && 'fixed top-0 left-0 w-full h-[100dvh] flex flex-col overflow-hidden')} style={{ background: 'linear-gradient(145deg, #1a1208 0%, #2d1f0e 50%, #1a1208 100%)' }}>
       {/* Mobile header — compact score bar with overflow menu */}
       {isMobile && (
         <MobileGameHeader
