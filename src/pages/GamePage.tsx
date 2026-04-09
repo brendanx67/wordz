@@ -11,7 +11,7 @@ import type { Tile, BoardCell, PlacedTile } from '@/lib/gameConstants'
 import GameBoard from '@/components/GameBoard'
 import TileRack from '@/components/TileRack'
 import { toast } from 'sonner'
-import { ArrowLeft, Play, History, LogOut, Grid3X3 } from 'lucide-react'
+import { ArrowLeft, Play, History, LogOut, Grid3X3, X } from 'lucide-react'
 import { createEmptyBoard } from '@/lib/gameConstants'
 import GameHistoryViewer from '@/components/GameHistoryViewer'
 import GameChatSidebar from '@/components/GameChatSidebar'
@@ -173,6 +173,15 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   // how people actually learn. Data still fetches in the background (see
   // useFindWords above) so toggling back on is instant.
   const [showInstructional, setShowInstructional] = useState(false)
+
+  // Per-session banner dismissals above the board. Users are tight on
+  // vertical space, so once they've learned what the banners say they can
+  // X them out and get the space back. Not persisted — a fresh session
+  // gets the hint again, which is probably what you want for a learning
+  // aid. The instructional toggle lives on in the Scoreboard button so
+  // closing the banner doesn't strand the feature.
+  const [hidePlayHint, setHidePlayHint] = useState(false)
+  const [hideInstructionalBanner, setHideInstructionalBanner] = useState(false)
 
   // Review mode: board and highlighted tiles for game history on the main board
   const moveHistory = (game?.move_history ?? []) as MoveHistoryEntry[]
@@ -1200,26 +1209,48 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
               {isSpectatingApi && <span className="text-amber-400/70 text-xs block mt-1 animate-none">You can suggest a move while you wait</span>}
             </div>
           )}
-          {findWordsEnabled && (
-            <button
-              type="button"
-              onClick={() => setShowInstructional(v => !v)}
-              className="flex items-center gap-2 text-sky-200 text-xs font-medium px-3 py-1.5 rounded-lg bg-sky-900/30 border border-sky-700/40 hover:bg-sky-900/50 hover:border-sky-600/60 transition-colors"
-              title="Toggle the word list. Hide it to find your own best play, then show it to check your work."
-            >
-              <BookOpen className="h-3.5 w-3.5 shrink-0" />
-              <span>
-                Instructional mode —{' '}
-                {showInstructional ? 'word list open (click to hide)' : 'click to show the word list'}
-              </span>
-            </button>
+          {findWordsEnabled && !hideInstructionalBanner && (
+            <div className="flex items-center gap-1 rounded-lg bg-sky-900/30 border border-sky-700/40 overflow-hidden">
+              <button
+                type="button"
+                onClick={() => setShowInstructional(v => !v)}
+                className="flex items-center gap-2 text-sky-200 text-xs font-medium px-3 py-1.5 hover:bg-sky-900/40 transition-colors"
+                title="Toggle the word list. Hide it to find your own best play, then show it to check your work."
+              >
+                <BookOpen className="h-3.5 w-3.5 shrink-0" />
+                <span>
+                  Instructional mode —{' '}
+                  {showInstructional ? 'word list open (click to hide)' : 'click to show the word list'}
+                </span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setHideInstructionalBanner(true)}
+                className="text-sky-300/70 hover:text-sky-100 hover:bg-sky-900/50 px-1.5 py-1.5 transition-colors"
+                aria-label="Dismiss instructional mode banner"
+                title="Hide this banner (the toggle stays in the Scoreboard)"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
+            </div>
           )}
-          {isActive && isMyTurn && (
-            <div className="text-green-400 text-sm font-medium px-4 py-2 rounded-lg bg-green-900/15">
-              {selectedSquare
-                ? <>Tap tiles in your rack to place them {direction === 'across' ? '\u2192' : '\u2193'}</>
-                : <>Tap a square on the board to start placing tiles</>
-              }
+          {isActive && isMyTurn && placedTiles.size === 0 && !hidePlayHint && (
+            <div className="flex items-center gap-1 rounded-lg bg-green-900/15 overflow-hidden">
+              <div className="text-green-400 text-sm font-medium px-4 py-2">
+                {selectedSquare
+                  ? <>Tap tiles in your rack to place them {direction === 'across' ? '\u2192' : '\u2193'}</>
+                  : <>Tap a square on the board to start placing tiles</>
+                }
+              </div>
+              <button
+                type="button"
+                onClick={() => setHidePlayHint(true)}
+                className="text-green-400/70 hover:text-green-200 hover:bg-green-900/30 px-1.5 py-2 transition-colors"
+                aria-label="Dismiss play hint"
+                title="Hide this hint"
+              >
+                <X className="h-3.5 w-3.5" />
+              </button>
             </div>
           )}
 
