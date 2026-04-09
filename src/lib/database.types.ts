@@ -211,6 +211,7 @@ export type Database = {
       }
       game_players: {
         Row: {
+          find_words_enabled: boolean
           game_id: string
           id: string
           joined_at: string | null
@@ -219,6 +220,7 @@ export type Database = {
           score: number
         }
         Insert: {
+          find_words_enabled?: boolean
           game_id: string
           id?: string
           joined_at?: string | null
@@ -227,6 +229,7 @@ export type Database = {
           score?: number
         }
         Update: {
+          find_words_enabled?: boolean
           game_id?: string
           id?: string
           joined_at?: string | null
@@ -275,7 +278,6 @@ export type Database = {
           turn_order: string[]
           updated_at: string | null
           winner: string | null
-          word_finder_enabled: boolean | null
         }
         Insert: {
           board?: Json
@@ -300,7 +302,6 @@ export type Database = {
           turn_order?: string[]
           updated_at?: string | null
           winner?: string | null
-          word_finder_enabled?: boolean | null
         }
         Update: {
           board?: Json
@@ -325,7 +326,6 @@ export type Database = {
           turn_order?: string[]
           updated_at?: string | null
           winner?: string | null
-          word_finder_enabled?: boolean | null
         }
         Relationships: [
           {
