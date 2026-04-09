@@ -2,7 +2,7 @@ import { useMemo } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { BookOpen, Loader2 } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import type { FindWordsMove, FindWordsResponse } from '@/hooks/useFindWords'
+import type { FindWordsMove, FindWordsTile, FindWordsResponse } from '@/hooks/useFindWords'
 
 // #10 instructional mode side panel. Renders the move list returned by
 // useFindWords (the React-side wrapper around the find-words Edge Function
@@ -30,6 +30,21 @@ interface InstructionalModePanelProps {
 // state since each tile lands on exactly one square.
 export function moveKey(move: FindWordsMove): string {
   return move.tiles.map(t => `${t.cell}:${t.letter}${t.is_blank ? '*' : ''}`).join('|')
+}
+
+// Derive board position + direction from placed tiles. Cell format is "K5"
+// (column letter + row number). Returns e.g. "K5 ↓" or "A1 →".
+function getMovePosition(tiles: FindWordsTile[]): string {
+  if (tiles.length === 0) return ''
+  if (tiles.length === 1) return tiles[0].cell
+  const parsed = tiles.map(t => ({
+    col: t.cell.charCodeAt(0) - 65,
+    row: parseInt(t.cell.slice(1)) - 1,
+    cell: t.cell,
+  }))
+  const sameRow = parsed.every(p => p.row === parsed[0].row)
+  parsed.sort((a, b) => sameRow ? a.col - b.col : a.row - b.row)
+  return `${parsed[0].cell} ${sameRow ? '→' : '↓'}`
 }
 
 export default function InstructionalModePanel({
@@ -105,17 +120,27 @@ export default function InstructionalModePanel({
                     )}
                   >
                     <div className="flex items-baseline justify-between gap-2">
-                      <span
-                        className={cn(
-                          'font-bold text-sm tracking-wide',
-                          isStaged ? 'text-white' : 'text-sky-100'
-                        )}
-                      >
-                        {mainWord}
+                      <span className="flex items-baseline gap-2 min-w-0">
+                        <span
+                          className={cn(
+                            'font-bold text-sm tracking-wide',
+                            isStaged ? 'text-white' : 'text-sky-100'
+                          )}
+                        >
+                          {mainWord}
+                        </span>
+                        <span
+                          className={cn(
+                            'text-[10px] font-mono shrink-0',
+                            isStaged ? 'text-sky-200/80' : 'text-sky-400/70'
+                          )}
+                        >
+                          {getMovePosition(move.tiles)}
+                        </span>
                       </span>
                       <span
                         className={cn(
-                          'text-sm font-bold tabular-nums',
+                          'text-sm font-bold tabular-nums shrink-0',
                           isStaged ? 'text-amber-200' : 'text-amber-300/90'
                         )}
                       >
