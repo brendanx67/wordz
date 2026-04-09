@@ -73,7 +73,7 @@ export default function MobileGameHeader({
   const isMyTurn = currentTurn === userId
 
   return (
-    <header className="flex items-center gap-1 px-2 py-1.5 bg-amber-950/60 border-b border-amber-900/30 backdrop-blur">
+    <header className="flex items-center gap-1 px-2 py-1.5 bg-amber-950/60 border-b border-amber-900/30 backdrop-blur relative z-50">
       <button
         onClick={onBack}
         className="p-1.5 text-amber-300 hover:text-white shrink-0"
@@ -100,16 +100,19 @@ export default function MobileGameHeader({
         ))}
       </div>
 
-      {/* Turn indicator */}
-      <div className="text-[11px] text-amber-300/80 whitespace-nowrap shrink-0 mx-1">
+      {/* Turn indicator + tiles remaining */}
+      <div className="text-[11px] whitespace-nowrap shrink-0 mx-1 text-right">
         {isActive ? (
-          isMyTurn ? (
-            <span className="text-green-400 font-semibold">Your turn</span>
-          ) : currentPlayer ? (
-            <span>{currentPlayer.name}...</span>
-          ) : null
+          <>
+            {isMyTurn ? (
+              <div className="text-green-400 font-semibold">Your turn</div>
+            ) : currentPlayer ? (
+              <div className="text-amber-300/80">{currentPlayer.name}...</div>
+            ) : null}
+            <div className="text-amber-400/60 text-[10px]">{tilesLeft} left</div>
+          </>
         ) : (
-          <span>{tilesLeft} left</span>
+          <span className="text-amber-300/80">{tilesLeft} left</span>
         )}
       </div>
 
