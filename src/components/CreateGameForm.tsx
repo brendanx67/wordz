@@ -4,7 +4,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
-import { Bot, User, Play, X, Sparkles, Search } from 'lucide-react'
+import { Bot, User, Play, X, Sparkles, Search, BookOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
 export type PlayerSlotType =
@@ -24,6 +24,11 @@ export interface PlayerSlot {
   label: string
   apiPlayerName?: string
   strategyLevel?: StrategyLevel
+  // Instructional mode for human seats (#10). For "me" the value applies to the
+  // creator's own game_players row at insert time; for "human" slots it gets
+  // queued in games.pending_human_find_words and consumed when a joiner takes
+  // the seat. Immutable for the life of the game per the issue spec.
+  findWordsEnabled?: boolean
 }
 
 export interface GameConfig {
@@ -83,6 +88,9 @@ export default function CreateGameForm({ onCreateGame, onCancel, isPending }: Cr
         label: getSlotLabel(type),
         apiPlayerName: type === 'api-player' ? (prev[index].apiPlayerName || 'Claude') : undefined,
         strategyLevel: type === 'api-player' ? (prev[index].strategyLevel || 'master') : undefined,
+        // Carry over the instructional flag if it was set on a human seat;
+        // dropped automatically when the slot is no longer me/human.
+        findWordsEnabled: (type === 'me' || type === 'human') ? prev[index].findWordsEnabled : undefined,
       }
       return next
     })
@@ -100,6 +108,14 @@ export default function CreateGameForm({ onCreateGame, onCancel, isPending }: Cr
     setSlots(prev => {
       const next = [...prev]
       next[index] = { ...next[index], strategyLevel: level }
+      return next
+    })
+  }
+
+  const toggleSlotFindWords = (index: number) => {
+    setSlots(prev => {
+      const next = [...prev]
+      next[index] = { ...next[index], findWordsEnabled: !next[index].findWordsEnabled }
       return next
     })
   }
@@ -169,6 +185,27 @@ export default function CreateGameForm({ onCreateGame, onCancel, isPending }: Cr
                     ))}
                   </SelectContent>
                 </Select>
+                {(slot.type === 'me' || slot.type === 'human') && (
+                  <button
+                    type="button"
+                    onClick={() => toggleSlotFindWords(i)}
+                    className={cn(
+                      'flex items-center gap-2 px-2.5 py-1.5 rounded-md text-[11px] font-semibold border transition-colors w-full',
+                      slot.findWordsEnabled
+                        ? 'bg-sky-700/80 border-sky-400 text-white shadow-sm shadow-sky-900/40'
+                        : 'bg-amber-950/60 border-amber-800/40 text-amber-300/80 hover:text-amber-100 hover:border-amber-600/50'
+                    )}
+                    aria-pressed={!!slot.findWordsEnabled}
+                    title="Show this player a side panel of all legal plays from their rack, computed by the same Appel & Jacobson engine the computer opponent uses. Visible to everyone in the lobby and game replay."
+                  >
+                    <BookOpen className="h-3.5 w-3.5 shrink-0" />
+                    <span className="text-left leading-tight">
+                      {slot.findWordsEnabled
+                        ? 'Instructional mode ON — A&J word list'
+                        : 'Instructional mode (A&J word list)'}
+                    </span>
+                  </button>
+                )}
                 {slot.type === 'api-player' && (
                   <>
                     <Input

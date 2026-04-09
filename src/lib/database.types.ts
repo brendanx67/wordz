@@ -270,6 +270,7 @@ export type Database = {
           id: string
           last_move: Json | null
           move_history: Json
+          pending_human_find_words: boolean[]
           previewed_move: Json | null
           status: string
           suggested_move: Json | null
@@ -294,6 +295,7 @@ export type Database = {
           id?: string
           last_move?: Json | null
           move_history?: Json
+          pending_human_find_words?: boolean[]
           previewed_move?: Json | null
           status?: string
           suggested_move?: Json | null
@@ -318,6 +320,7 @@ export type Database = {
           id?: string
           last_move?: Json | null
           move_history?: Json
+          pending_human_find_words?: boolean[]
           previewed_move?: Json | null
           status?: string
           suggested_move?: Json | null
@@ -359,6 +362,7 @@ export type Database = {
     Views: {
       game_players_safe: {
         Row: {
+          find_words_enabled: boolean | null
           game_id: string | null
           joined_at: string | null
           player_id: string | null
@@ -366,6 +370,7 @@ export type Database = {
           score: number | null
         }
         Insert: {
+          find_words_enabled?: boolean | null
           game_id?: string | null
           joined_at?: string | null
           player_id?: string | null
@@ -373,6 +378,7 @@ export type Database = {
           score?: number | null
         }
         Update: {
+          find_words_enabled?: boolean | null
           game_id?: string | null
           joined_at?: string | null
           player_id?: string | null

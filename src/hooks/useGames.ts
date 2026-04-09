@@ -12,6 +12,10 @@ export interface ComputerPlayer {
   score: number
   owner_id?: string
   strategyLevel?: string
+  // #9/#10: per-seat instructional / find-words flag. For API players this
+  // grants access to the find_words MCP tool; for human seats it lives on
+  // game_players.find_words_enabled instead.
+  find_words_enabled?: boolean
 }
 
 export interface GameRow {
@@ -39,6 +43,7 @@ export interface GameRow {
     player_id: string
     score: number
     rack: Tile[]
+    find_words_enabled: boolean
     profiles: { display_name: string }
   }[]
 }
@@ -92,7 +97,7 @@ export function useMyGames(userId: string | undefined) {
         .from('games')
         .select(`
           id, created_by, status, current_turn, created_at, has_computer, computer_players,
-          game_players(player_id, score, profiles(display_name))
+          game_players(player_id, score, find_words_enabled, profiles(display_name))
         `)
         .in('id', gameIds)
         .in('status', ['active', 'waiting'])
@@ -196,6 +201,16 @@ export function useCreateConfiguredGame() {
       // Randomize first player
       const firstIdx = Math.floor(Math.random() * turnOrder.length)
 
+      // Instructional mode (#10): the creator's "me" slot writes its flag
+      // directly onto the game_players row below. Each pending "human" slot
+      // contributes one entry (in slot order) to pending_human_find_words on
+      // the games row, which the join handler consumes when the seat fills.
+      const meSlot = activePlayers.find(s => s.type === 'me')
+      const meFindWordsEnabled = meSlot?.findWordsEnabled === true
+      const pendingHumanFindWords: boolean[] = activePlayers
+        .filter(s => s.type === 'human')
+        .map(s => s.findWordsEnabled === true)
+
       const { data: game, error: gameErr } = await supabase
         .from('games')
         .insert({
@@ -211,6 +226,7 @@ export function useCreateConfiguredGame() {
           has_computer: computerPlayers.length > 0 || apiPlayers.length > 0,
           computer_players: allNonHumanPlayers,
           computer_delay: config.computerDelay,
+          pending_human_find_words: pendingHumanFindWords,
           // Legacy single-computer fields (for backward compat)
           computer_difficulty: computerPlayers[0]?.difficulty ?? null,
           computer_rack: computerPlayers[0]?.rack ?? [],
@@ -228,6 +244,7 @@ export function useCreateConfiguredGame() {
             game_id: game.id,
             player_id: userId,
             rack: myTiles,
+            find_words_enabled: meFindWordsEnabled,
           })
         if (playerErr) throw playerErr
       }
@@ -283,7 +300,7 @@ export function useJoinGame() {
     mutationFn: async ({ gameId, userId }: { gameId: string; userId: string }) => {
       const { data: game, error: gErr } = await supabase
         .from('games')
-        .select('tile_bag, turn_order')
+        .select('tile_bag, turn_order, pending_human_find_words')
         .eq('id', gameId)
         .single()
       if (gErr) throw gErr
@@ -292,12 +309,22 @@ export function useJoinGame() {
       const { drawn, remaining } = drawTiles(bag, RACK_SIZE)
       const newTurnOrder = [...(game.turn_order as string[]), userId]
 
+      // Consume the head of the pending instructional-mode queue (#10): the
+      // creator pre-set a per-slot flag for each "human" slot at game creation
+      // time, and joiners take seats in slot order, so the head element is the
+      // flag for this seat. Defaults to false if the queue is empty (legacy
+      // games created before #10 land here).
+      const pendingQueue = (game.pending_human_find_words ?? []) as boolean[]
+      const seatFindWordsEnabled = pendingQueue[0] === true
+      const remainingQueue = pendingQueue.slice(1)
+
       const { error: playerErr } = await supabase
         .from('game_players')
         .insert({
           game_id: gameId,
           player_id: userId,
           rack: drawn,
+          find_words_enabled: seatFindWordsEnabled,
         })
       if (playerErr) throw playerErr
 
@@ -306,6 +333,7 @@ export function useJoinGame() {
         .update({
           tile_bag: remaining,
           turn_order: newTurnOrder,
+          pending_human_find_words: remainingQueue,
         })
         .eq('id', gameId)
       if (updateErr) throw updateErr
@@ -355,7 +383,7 @@ export function useGame(gameId: string | undefined) {
     queryFn: async () => {
       const [gameRes, playersRes] = await Promise.all([
         supabase.from('games').select('*').eq('id', gameId!).single(),
-        supabase.from('game_players_safe').select('player_id, score, rack, profiles:player_id(display_name)').eq('game_id', gameId!),
+        supabase.from('game_players_safe').select('player_id, score, rack, find_words_enabled, profiles:player_id(display_name)').eq('game_id', gameId!),
       ])
       if (gameRes.error) throw gameRes.error
       if (playersRes.error) throw playersRes.error

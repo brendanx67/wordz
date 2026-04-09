@@ -5,7 +5,7 @@ import { useOpenGames, useMyGames, useCreateConfiguredGame, useJoinGame, useStar
 import type { ComputerPlayer } from '@/hooks/useGames'
 import { useGameHistory } from '@/hooks/useGameHistory'
 import { useState, useCallback } from 'react'
-import { LogOut, Plus, Play, Users, Clock, Trophy, History, Eye, X, Bot, Copy, ChevronDown, ChevronUp } from 'lucide-react'
+import { LogOut, Plus, Play, Users, Clock, Trophy, History, Eye, X, Bot, Copy, ChevronDown, ChevronUp, BookOpen } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import CreateGameForm from '@/components/CreateGameForm'
@@ -144,10 +144,21 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
                   const isPlayer = players.some((p: { player_id: string }) => p.player_id === userId)
                   const isSpectator = !isPlayer && isCreator
 
-                  // Build display names including computer players
-                  const allNames: string[] = [
-                    ...players.map((p: { profiles: unknown }) => getDisplayName(p.profiles as { display_name: string })),
-                    ...computerPlayers.map(cp => cp.name),
+                  // Build display names including computer players. We render
+                  // these as JSX rather than a joined string so we can stamp
+                  // the #10 instructional-mode icon next to the seats that
+                  // have it on. Visible to everyone in the lobby.
+                  const nameNodes: { key: string; name: string; instructional: boolean }[] = [
+                    ...players.map((p: { player_id: string; profiles: unknown; find_words_enabled?: boolean }) => ({
+                      key: `h-${p.player_id}`,
+                      name: getDisplayName(p.profiles as { display_name: string }),
+                      instructional: !!p.find_words_enabled,
+                    })),
+                    ...computerPlayers.map(cp => ({
+                      key: `c-${cp.id}`,
+                      name: cp.name,
+                      instructional: !!cp.find_words_enabled,
+                    })),
                   ]
 
                   return (
@@ -157,8 +168,18 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
                     >
                       <div className="flex-1">
                         <div className="flex items-center gap-3 flex-wrap">
-                          <span className="text-amber-200 font-medium">
-                            {allNames.join(' vs ')}
+                          <span className="text-amber-200 font-medium inline-flex items-center gap-1 flex-wrap">
+                            {nameNodes.map((n, idx) => (
+                              <span key={n.key} className="inline-flex items-center gap-1">
+                                {idx > 0 && <span className="text-amber-500/70 mx-0.5">vs</span>}
+                                <span>{n.name}</span>
+                                {n.instructional && (
+                                  <span title="Instructional mode — A&amp;J word list" className="inline-flex">
+                                    <BookOpen className="h-3 w-3 text-sky-300 shrink-0" aria-label="Instructional mode" />
+                                  </span>
+                                )}
+                              </span>
+                            ))}
                           </span>
                           {isWaiting && (
                             <span className="text-xs px-2 py-0.5 rounded-full bg-amber-800/40 text-amber-400">

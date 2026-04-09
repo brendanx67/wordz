@@ -27,6 +27,9 @@ import { useTurnTimer } from '@/hooks/useTurnTimer'
 import { useReviewMode } from '@/hooks/useReviewMode'
 import type { MoveHistoryEntry } from '@/hooks/useReviewMode'
 import { useSuggestionMode } from '@/hooks/useSuggestionMode'
+import { useFindWords, type FindWordsMove } from '@/hooks/useFindWords'
+import InstructionalModePanel, { moveKey as instructionalMoveKey } from '@/components/InstructionalModePanel'
+import { BookOpen } from 'lucide-react'
 
 interface GamePageProps {
   gameId: string
@@ -143,6 +146,28 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
     return rack
   }, [spectatingApiPlayer, suggestionPlacedIds, previewedTiles])
 
+  // #10 Instructional mode for human players. Per-seat opt-in, set at game
+  // creation in CreateGameForm and persisted on game_players.find_words_enabled.
+  // The find-words Edge Function (post-#9) accepts a JWT and returns the same
+  // shape it serves to API players. Refetches on every committed move via the
+  // moveCount in the query key, and on rack changes via rackSignature so an
+  // exchange (no moveCount bump) still triggers a refresh.
+  const findWordsEnabled = !!myPlayer?.find_words_enabled && isActive
+  const rackSignature = useMemo(
+    () => fullRack.map(t => `${t.id}:${t.letter}`).sort().join(','),
+    [fullRack]
+  )
+  const findWordsQuery = useFindWords({
+    gameId,
+    moveCount,
+    rackSignature,
+    enabled: findWordsEnabled,
+  })
+
+  // Track which find-words row (if any) is currently staged on the board, so
+  // the panel can highlight it and a second click on the same row clears it.
+  const [stagedFindWordsKey, setStagedFindWordsKey] = useState<string | null>(null)
+
   // Review mode: board and highlighted tiles for game history on the main board
   const moveHistory = (game?.move_history ?? []) as MoveHistoryEntry[]
 
@@ -228,7 +253,69 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
       next.set(`${row},${col}`, tile)
       return next
     })
+    setStagedFindWordsKey(null)
   }, [board, placedTiles])
+
+  // #10 click-to-stage from the instructional panel. Builds a fresh placedTiles
+  // Map atomically by walking the move's tiles and pulling matching tiles out
+  // of the live rack. The staged map flows through the same recall / submit
+  // path as drag-dropped tiles — no parallel staging system. Cell notation is
+  // `A1`-style: column letter (A-O) then row number (1-15).
+  const stageMoveFromFindWords = useCallback((move: FindWordsMove) => {
+    if (!isMyTurn || !isActive) return
+    const key = instructionalMoveKey(move)
+
+    // Click the same row twice to clear.
+    if (stagedFindWordsKey === key) {
+      setPlacedTiles(new Map())
+      setSelectedSquare(null)
+      setStagedFindWordsKey(null)
+      return
+    }
+
+    // Walk the rack consuming tiles by id so we don't double-use a duplicate.
+    const rackPool = [...fullRack]
+    const next = new Map<string, Tile>()
+    for (const t of move.tiles) {
+      const cellMatch = t.cell.toUpperCase().match(/^([A-O])(\d{1,2})$/)
+      if (!cellMatch) {
+        toast.error(`Couldn't stage move (bad cell ${t.cell})`)
+        return
+      }
+      const col = cellMatch[1].charCodeAt(0) - 65
+      const row = parseInt(cellMatch[2]) - 1
+      // Skip squares that are already committed; the engine wouldn't have put
+      // a tile there, but a stale refetch could disagree with the live board.
+      if (board[row]?.[col]?.tile) {
+        toast.error("That play conflicts with the current board — refreshing")
+        return
+      }
+
+      let pickIdx: number
+      if (t.is_blank) {
+        // Blank: take any blank from the rack and overwrite its letter/value.
+        pickIdx = rackPool.findIndex(r => r.isBlank)
+      } else {
+        // Normal tile: prefer a matching non-blank, but accept a blank as
+        // fallback (the engine treats blanks as wildcards too).
+        pickIdx = rackPool.findIndex(r => !r.isBlank && r.letter === t.letter)
+        if (pickIdx === -1) pickIdx = rackPool.findIndex(r => r.isBlank)
+      }
+      if (pickIdx === -1) {
+        toast.error(`Couldn't stage move — rack changed`)
+        return
+      }
+      const rackTile = rackPool.splice(pickIdx, 1)[0]
+      const placed: Tile = t.is_blank
+        ? { ...rackTile, letter: t.letter.toUpperCase(), value: 0 }
+        : rackTile
+      next.set(`${row},${col}`, placed)
+    }
+
+    setPlacedTiles(next)
+    setSelectedSquare(null)
+    setStagedFindWordsKey(key)
+  }, [isMyTurn, isActive, fullRack, board, stagedFindWordsKey])
 
   const handleBlankLetterChoice = useCallback((letter: string) => {
     if (!blankTileTarget) return
@@ -282,6 +369,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
       next.set(`${row},${col}`, tile)
       return next
     })
+    setStagedFindWordsKey(null)
   }, [isMyTurn, isActive, isSpectatingApi, board, setSuggestionTiles, setSuggestionBlankTarget])
 
   // Keyboard support: type letters to place tiles (works for both own turn and suggestion mode)
@@ -429,7 +517,14 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   const handleRecall = () => {
     setPlacedTiles(new Map())
     setSelectedSquare(null)
+    setStagedFindWordsKey(null)
   }
+
+  // Clear the instructional highlight on any committed move (the staged play
+  // was either submitted or invalidated by the new board state).
+  useEffect(() => {
+    setStagedFindWordsKey(null)
+  }, [moveCount])
 
   const handlePickupTile = useCallback((row: number, col: number, insertIndex?: number) => {
     const key = `${row},${col}`
@@ -448,6 +543,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
       next.delete(key)
       return next
     })
+    setStagedFindWordsKey(null)
     // When the caller requested a specific rack insertion position (e.g. a
     // board → rack drop with a visible drop indicator), update rackOrder
     // so the returning tile lands exactly where the user pointed.
@@ -977,6 +1073,20 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
           setShowHistory={setShowHistory}
         />
 
+        {/* #10 Instructional mode panel — only for human seats with the
+            per-seat flag enabled. Same engine the computer opponent uses. */}
+        {findWordsEnabled && (
+          <InstructionalModePanel
+            data={findWordsQuery.data}
+            isLoading={findWordsQuery.isLoading}
+            isError={findWordsQuery.isError}
+            error={findWordsQuery.error as Error | null}
+            stagedMoveKey={stagedFindWordsKey}
+            onStageMove={stageMoveFromFindWords}
+            isMyTurn={isMyTurn}
+          />
+        )}
+
         {/* Game History Viewer */}
         {showHistory && (
           <Card className="border-amber-900/30 bg-amber-950/30 w-full lg:w-56 shrink-0">
@@ -1076,6 +1186,12 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
             <div className="text-purple-300 text-sm font-medium animate-pulse px-4 py-2 rounded-lg bg-purple-900/15">
               Waiting for {currentApiPlayer.name} to play...
               {isSpectatingApi && <span className="text-amber-400/70 text-xs block mt-1 animate-none">You can suggest a move while you wait</span>}
+            </div>
+          )}
+          {findWordsEnabled && (
+            <div className="flex items-center gap-2 text-sky-200 text-xs font-medium px-3 py-1.5 rounded-lg bg-sky-900/30 border border-sky-700/40">
+              <BookOpen className="h-3.5 w-3.5 shrink-0" />
+              <span>You're playing in instructional mode — A&amp;J word list is on.</span>
             </div>
           )}
           {isActive && isMyTurn && (

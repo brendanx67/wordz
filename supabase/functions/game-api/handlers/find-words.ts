@@ -11,6 +11,37 @@ import {
   jsonOk,
 } from "../api-helpers.ts";
 
+// #10 instructional mode: human players call find-words from the React app
+// using their Supabase session JWT. We resolve their game_players row, check
+// the per-seat find_words_enabled flag from #9, and run the same engine that
+// already serves API/LLM callers. Two completely independent auth paths
+// converge on a single (rack, board, find_words_enabled) shape.
+async function authenticateHumanFromJwt(
+  req: Request,
+  gameId: string,
+): Promise<{ rack: Tile[]; findWordsEnabled: boolean } | null> {
+  const authHeader = req.headers.get("authorization");
+  if (!authHeader?.startsWith("Bearer ")) return null;
+  const token = authHeader.slice("Bearer ".length);
+
+  const supabase = getServiceClient();
+  const { data: userData, error: userErr } = await supabase.auth.getUser(token);
+  if (userErr || !userData.user) return null;
+
+  const { data: gp, error: gpErr } = await supabase
+    .from("game_players")
+    .select("rack, find_words_enabled")
+    .eq("game_id", gameId)
+    .eq("player_id", userData.user.id)
+    .maybeSingle();
+
+  if (gpErr || !gp) return null;
+  return {
+    rack: (gp.rack ?? []) as Tile[],
+    findWordsEnabled: !!gp.find_words_enabled,
+  };
+}
+
 export async function handleFindWords(req: Request): Promise<Response> {
   const body = await req.json();
   const { game_id, sort_by, filter, limit: maxResults } = body as {
@@ -27,34 +58,68 @@ export async function handleFindWords(req: Request): Promise<Response> {
     limit?: number;
   };
 
-  const auth = await authenticateApiKey(req, game_id);
-  if (!auth) return jsonError("Invalid or missing API key", 401);
+  // Dispatch on credential type. API key callers (LLMs/MCP) keep the existing
+  // computer_players-based auth from #9. Bearer tokens (the React UI) drop into
+  // the new game_players path below. We deliberately do not fall back from one
+  // to the other — a JWT request with the wrong game id should fail explicitly,
+  // not get retried as an api-key request. Both paths converge on a single
+  // (rack, board) shape which the move generator runs against.
+  let myRack: Tile[];
+  let boardState: BoardCell[][];
 
   const supabase = getServiceClient();
-  const { data: game, error: gErr } = await supabase
-    .from("games")
-    .select("*")
-    .eq("id", auth.gameId)
-    .single();
 
-  if (gErr || !game) return jsonError("Game not found", 404);
+  if (req.headers.get("x-api-key")) {
+    const auth = await authenticateApiKey(req, game_id);
+    if (!auth) return jsonError("Invalid or missing API key", 401);
 
-  const cpPlayers = (game.computer_players ?? []) as (ApiPlayer & {
-    find_words_enabled?: boolean;
-  })[];
-  const myPlayer = cpPlayers.find((p) => p.id === auth.playerId);
-  if (!myPlayer) return jsonError("Player not found in game", 404);
-  if (!myPlayer.find_words_enabled) {
-    return jsonError(
-      "Word finder is not enabled for this seat. The game creator can enable it when configuring this player.",
-      403,
-    );
+    const { data: game, error: gErr } = await supabase
+      .from("games")
+      .select("computer_players, board")
+      .eq("id", auth.gameId)
+      .single();
+    if (gErr || !game) return jsonError("Game not found", 404);
+
+    const cpPlayers = (game.computer_players ?? []) as (ApiPlayer & {
+      find_words_enabled?: boolean;
+    })[];
+    const myPlayer = cpPlayers.find((p) => p.id === auth.playerId);
+    if (!myPlayer) return jsonError("Player not found in game", 404);
+    if (!myPlayer.find_words_enabled) {
+      return jsonError(
+        "Word finder is not enabled for this seat. The game creator can enable it when configuring this player.",
+        403,
+      );
+    }
+
+    myRack = myPlayer.rack;
+    boardState = game.board as BoardCell[][];
+  } else {
+    if (!game_id) return jsonError("game_id required", 400);
+    const human = await authenticateHumanFromJwt(req, game_id);
+    if (!human) return jsonError("Not authorized for this game", 401);
+    if (!human.findWordsEnabled) {
+      return jsonError(
+        "Instructional mode is not enabled for this seat.",
+        403,
+      );
+    }
+
+    const { data: game, error: gErr } = await supabase
+      .from("games")
+      .select("board")
+      .eq("id", game_id)
+      .single();
+    if (gErr || !game) return jsonError("Game not found", 404);
+
+    myRack = human.rack;
+    boardState = game.board as BoardCell[][];
   }
 
-  const boardState = game.board as BoardCell[][];
+  const myRackForLeave = myRack;
   const trie = await getTrie();
 
-  const allMoves = generateAllMoves(boardState, myPlayer.rack, trie);
+  const allMoves = generateAllMoves(boardState, myRack, trie);
 
   let filtered = allMoves;
   if (filter) {
@@ -133,7 +198,7 @@ export async function handleFindWords(req: Request): Promise<Response> {
     total_score: m.totalScore,
     tiles_used: m.tiles.length,
     is_bingo: m.tiles.length === 7,
-    rack_leave: myPlayer.rack
+    rack_leave: myRackForLeave
       .filter((rt: Tile) => !m.tiles.some(mt => mt.tile.id === rt.id))
       .map((rt: Tile) => rt.letter)
       .join(""),
