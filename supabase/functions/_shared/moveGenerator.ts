@@ -178,29 +178,57 @@ function generateWithPrefix(
 ): void {
   extendRight(board, trie, cc, rackLetters, rack, aR, aC, trie, '', [], dir, moves, true)
 
-  function buildPrefix(node: TrieNode, prefixTiles: { row:number;col:number;tile:Tile }[], remaining: string[], depth: number) {
+  // Build prefixes by walking the trie forward (first letter → second → …).
+  // Tiles are stored in trie order WITHOUT positions; positions are assigned
+  // from the prefix length right before calling extendRight. This avoids the
+  // reversal bug where depth-first trie traversal (left-to-right in the word)
+  // was paired with anchor-outward position assignment (right-to-left on the
+  // board), causing multi-character prefixes to be placed backwards.
+  function buildPrefix(node: TrieNode, prefixTiles: Tile[], remaining: string[], depth: number) {
     if (depth > maxPrefix) return
-    const pos = dir === 'horizontal' ? { row: aR, col: aC - depth } : { row: aR - depth, col: aC }
-    if (pos.row < 0 || pos.col < 0) return
+    // Bounds check: the farthest position this depth could occupy
+    const farPos = dir === 'horizontal' ? aC - depth : aR - depth
+    if (farPos < 0) return
 
     for (const [letter, childNode] of node.children) {
-      const ccKey = dir === 'horizontal' ? `h:${pos.row},${pos.col}` : `v:${pos.row},${pos.col}`
-      const ccSet = cc.get(ccKey)
-      if (ccSet && !ccSet.has(letter)) continue
-
       const tryTile = (tile: Tile, asLetter: string, asValue: number) => {
         const newRemaining = [...remaining]
         const idx = newRemaining.indexOf(tile.isBlank ? '*' : tile.letter)
         if (idx < 0) return
         newRemaining.splice(idx, 1)
         const placed: Tile = { ...tile, letter: asLetter, value: asValue }
-        const newPT = [{ row: pos.row, col: pos.col, tile: placed }, ...prefixTiles]
-        const currentPrefix = newPT.map(t => t.tile.letter).join('')
-        extendRight(board, trie, cc, newRemaining, rack, aR, aC, childNode, currentPrefix, newPT, dir, moves, true)
-        buildPrefix(childNode, newPT, newRemaining, depth + 1)
+        const newPrefixTiles = [...prefixTiles, placed]
+
+        // Assign positions: prefix of length N occupies (anchor-N) to (anchor-1).
+        // prefixTiles[0] (first trie letter) → farthest from anchor.
+        // prefixTiles[N-1] (last trie letter) → closest to anchor.
+        const prefixLen = newPrefixTiles.length
+        const positioned: { row: number; col: number; tile: Tile }[] = newPrefixTiles.map((t, i) => ({
+          row: dir === 'vertical' ? aR - prefixLen + i : aR,
+          col: dir === 'horizontal' ? aC - prefixLen + i : aC,
+          tile: t,
+        }))
+
+        // Validate cross-checks for every prefix tile at its final position.
+        // Positions shift as the prefix grows, so we must recheck all tiles.
+        let valid = true
+        for (const pt of positioned) {
+          const ccKey = dir === 'horizontal' ? `h:${pt.row},${pt.col}` : `v:${pt.row},${pt.col}`
+          const ccSet = cc.get(ccKey)
+          if (ccSet && !ccSet.has(pt.tile.letter)) { valid = false; break }
+        }
+
+        if (valid) {
+          const currentPrefix = newPrefixTiles.map(t => t.letter).join('')
+          extendRight(board, trie, cc, newRemaining, rack, aR, aC, childNode, currentPrefix, positioned, dir, moves, true)
+        }
+
+        // Always try longer prefixes — positions shift so cross-checks
+        // that failed at length N may pass at length N+1.
+        buildPrefix(childNode, newPrefixTiles, newRemaining, depth + 1)
       }
 
-      const usedIds = new Set(prefixTiles.map(t => t.tile.id))
+      const usedIds = new Set(prefixTiles.map(t => t.id))
       const reg = rack.find(t => !t.isBlank && t.letter === letter && !usedIds.has(t.id))
       if (reg) tryTile(reg, letter, reg.value)
       const blank = rack.find(t => t.isBlank && !usedIds.has(t.id))
