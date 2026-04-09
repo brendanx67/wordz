@@ -54,11 +54,30 @@ function rackFromSnapshot(
   }));
 }
 
+// Authenticate via JWT (browser) or API key. Any logged-in user may
+// review finished games — no per-seat gate.
+async function authenticate(
+  req: Request,
+): Promise<boolean> {
+  // Try JWT first (browser client)
+  const authHeader = req.headers.get("authorization");
+  if (authHeader?.startsWith("Bearer ")) {
+    const token = authHeader.slice("Bearer ".length);
+    const supabase = getServiceClient();
+    const { data, error } = await supabase.auth.getUser(token);
+    if (!error && data.user) return true;
+  }
+  // Fall back to API key (MCP/CLI client)
+  const apiAuth = await authenticateUser(req);
+  if (apiAuth) return true;
+  return false;
+}
+
 export async function handleFindWordsAtMove(
   req: Request,
 ): Promise<Response> {
-  const auth = await authenticateUser(req);
-  if (!auth) return jsonError("Not authenticated", 401);
+  const authed = await authenticate(req);
+  if (!authed) return jsonError("Not authenticated", 401);
 
   const body = await req.json();
   const { game_id, move_index } = body as {

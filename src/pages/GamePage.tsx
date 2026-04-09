@@ -245,6 +245,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
     reviewTiming,
     reviewScores,
     reviewTilesRemaining,
+    reviewRack,
   } = useReviewMode(moveHistory, board)
 
   // #11 review-mode instructional panel — fetch alternatives at the
@@ -1526,6 +1527,22 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                 </button>
               )}
             </>
+          )}
+
+          {/* Review-mode rack display */}
+          {reviewMode && reviewRack && (
+            <div className="space-y-1">
+              <div className="text-center text-xs text-amber-400">
+                {reviewCurrentMove?.player_name}&apos;s rack:
+              </div>
+              <TileRack
+                tiles={reviewRack}
+                onTileClick={() => {}}
+                selectedTiles={new Set()}
+                isExchangeMode={false}
+                tileSize={mobileTileSize}
+              />
+            </div>
           )}
 
           {/* Rack + controls */}

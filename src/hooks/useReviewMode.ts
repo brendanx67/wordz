@@ -11,6 +11,8 @@ export interface MoveHistoryEntry {
   board_snapshot: BoardCell[][]
   tiles?: { row: number; col: number; letter: string }[]
   timestamp: string
+  rack_before?: { letter: string; value: number; isBlank: boolean; id?: string }[]
+  rack_snapshot?: { letter: string; value: number; isBlank: boolean }[]
 }
 
 export function useReviewMode(moveHistory: MoveHistoryEntry[], liveBoard: BoardCell[][]) {
@@ -90,6 +92,25 @@ export function useReviewMode(moveHistory: MoveHistoryEntry[], liveBoard: BoardC
     return 100 - onBoard
   }, [reviewMode, reviewMoveIndex, moveHistory])
 
+  // Rack that was held before the current review move
+  const reviewRack = useMemo(() => {
+    if (!reviewMode || reviewMoveIndex < 0 || reviewMoveIndex >= moveHistory.length) return null
+    const entry = moveHistory[reviewMoveIndex]
+    if (entry.rack_before?.length) {
+      return entry.rack_before.map((t, i) => ({
+        letter: t.letter, value: t.value, isBlank: t.isBlank,
+        id: t.id ?? `review-rack-${i}`,
+      }))
+    }
+    if (entry.rack_snapshot?.length) {
+      return entry.rack_snapshot.map((t, i) => ({
+        letter: t.letter, value: t.value, isBlank: t.isBlank,
+        id: `review-rack-${i}`,
+      }))
+    }
+    return null
+  }, [reviewMode, reviewMoveIndex, moveHistory])
+
   return {
     reviewMode,
     setReviewMode,
@@ -101,5 +122,6 @@ export function useReviewMode(moveHistory: MoveHistoryEntry[], liveBoard: BoardC
     reviewTiming,
     reviewScores,
     reviewTilesRemaining,
+    reviewRack,
   }
 }
