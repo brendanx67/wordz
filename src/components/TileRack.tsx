@@ -197,13 +197,13 @@ export default function TileRack({ tiles, onTileClick, selectedTiles, isExchange
             >
               <span
                 className={cn('font-black', !tileSize && 'text-[22px] sm:text-[26px] md:text-[30px]')}
-                style={{ color: '#3d2b1a', fontFamily: "'Playfair Display', serif", textShadow: '0 1px 0 rgba(255,255,255,0.3)', ...(tileSize ? { fontSize: `${Math.round(tileSize * 0.45)}px` } : {}) }}
+                style={{ color: '#3d2b1a', fontFamily: tileSize ? "system-ui, -apple-system, sans-serif" : "'Playfair Display', serif", textShadow: '0 1px 0 rgba(255,255,255,0.3)', ...(tileSize ? { fontSize: `${Math.round(tileSize * 0.45)}px` } : {}) }}
               >
                 {tile.letter || '?'}
               </span>
               <span
                 className={cn('absolute font-bold', !tileSize && 'text-[8px] sm:text-[9px] md:text-[10px]')}
-                style={{ bottom: '2px', right: '4px', color: '#7a5d3a', ...(tileSize ? { fontSize: `${Math.max(7, Math.round(tileSize * 0.17))}px` } : {}) }}
+                style={{ bottom: '2px', right: '4px', color: '#7a5d3a', fontFamily: tileSize ? "system-ui, -apple-system, sans-serif" : undefined, ...(tileSize ? { fontSize: `${Math.max(7, Math.round(tileSize * 0.17))}px` } : {}) }}
               >
                 {tile.value}
               </span>

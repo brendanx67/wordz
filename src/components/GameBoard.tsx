@@ -274,13 +274,13 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
                     <>
                       <span
                         className={cn('font-black tracking-tight pointer-events-none', !cellSize && 'text-[14px] sm:text-[17px] md:text-[19px]')}
-                        style={{ color: '#3d2b1a', fontFamily: "'Playfair Display', serif", textShadow: '0 1px 0 rgba(255,255,255,0.3)', ...(cellSize ? { fontSize: `${Math.round(cellSize * 0.47)}px` } : {}) }}
+                        style={{ color: '#3d2b1a', fontFamily: cellSize ? "system-ui, -apple-system, sans-serif" : "'Playfair Display', serif", textShadow: '0 1px 0 rgba(255,255,255,0.3)', ...(cellSize ? { fontSize: `${Math.round(cellSize * 0.47)}px` } : {}) }}
                       >
                         {displayTile.letter || ''}
                       </span>
                       <span
                         className={cn('absolute font-bold pointer-events-none', !cellSize && 'text-[6px] sm:text-[7px] md:text-[8px]')}
-                        style={{ bottom: '1px', right: '2px', color: '#6b4f30', ...(cellSize ? { fontSize: `${Math.max(5, Math.round(cellSize * 0.2))}px` } : {}) }}
+                        style={{ bottom: '1px', right: '2px', color: '#6b4f30', fontFamily: cellSize ? "system-ui, -apple-system, sans-serif" : undefined, ...(cellSize ? { fontSize: `${Math.max(5, Math.round(cellSize * 0.2))}px` } : {}) }}
                       >
                         {displayTile.value || ''}
                       </span>
@@ -288,7 +288,7 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
                   ) : isPreview ? (
                     <span
                       className={cn('font-black tracking-tight pointer-events-none', !cellSize && 'text-[14px] sm:text-[17px] md:text-[19px]')}
-                      style={{ color: '#ffffff', fontFamily: "'Playfair Display', serif", textShadow: '0 1px 2px rgba(0,0,0,0.3)', ...(cellSize ? { fontSize: `${Math.round(cellSize * 0.47)}px` } : {}) }}
+                      style={{ color: '#ffffff', fontFamily: cellSize ? "system-ui, -apple-system, sans-serif" : "'Playfair Display', serif", textShadow: '0 1px 2px rgba(0,0,0,0.3)', ...(cellSize ? { fontSize: `${Math.round(cellSize * 0.47)}px` } : {}) }}
                     >
                       {preview!.letter}
                     </span>
