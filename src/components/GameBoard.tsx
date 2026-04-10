@@ -314,6 +314,18 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
                       </span>
                     </div>
                   )}
+                  {isSelected && displayTile && (
+                    // Selection ring for cells already holding a tile — the
+                    // inline boxShadow on tile cells would eat Tailwind's
+                    // `ring` utility, so we overlay an absolutely-positioned
+                    // element with its own shadow instead. Keyboard nav
+                    // (arrow keys) stays visible here even though the only
+                    // allowed operation is Backspace/Delete.
+                    <div
+                      className="absolute inset-0 rounded-sm pointer-events-none z-20"
+                      style={{ boxShadow: '0 0 0 2px rgba(255,255,255,0.95), 0 0 8px rgba(255,255,255,0.5)' }}
+                    />
+                  )}
                 </div>
               )
             })
