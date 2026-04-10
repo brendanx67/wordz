@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { useOpenGames, useMyGames, useCreateConfiguredGame, useJoinGame, useStartGame, useCancelGame, useApiKeys, useCreateApiKey, useDeleteApiKey } from '@/hooks/useGames'
 import type { ComputerPlayer } from '@/hooks/useGames'
 import { useGameHistory } from '@/hooks/useGameHistory'
@@ -34,6 +35,9 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
   const startGame = useStartGame()
   const cancelGame = useCancelGame()
   const [showCreateForm, setShowCreateForm] = useState(false)
+  const [resignGameId, setResignGameId] = useState<string | null>(null)
+  const resignGame = myGames?.find((g: { id: string }) => g.id === resignGameId)
+  const resignLabel = resignGame?.status === 'waiting' ? 'Cancel' : 'Resign'
   const [ignoredGames, setIgnoredGames] = useState<Set<string>>(() => {
     try {
       const stored = localStorage.getItem('wordz-ignored-games')
@@ -228,16 +232,7 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
                         </Button>
                         <Button
                           size="sm"
-                          onClick={async () => {
-                            const label = isWaiting ? 'Cancel' : 'Resign'
-                            if (!confirm(`${label} this game?`)) return
-                            try {
-                              const result = await cancelGame.mutateAsync({ gameId: game.id, userId })
-                              toast.success(result.deleted ? 'Game deleted' : 'Game resigned')
-                            } catch {
-                              toast.error('Failed to cancel game')
-                            }
-                          }}
+                          onClick={() => setResignGameId(game.id)}
                           disabled={cancelGame.isPending}
                           className="bg-red-900/50 hover:bg-red-800/60 text-red-300 border border-red-700/30 font-semibold"
                         >
@@ -414,6 +409,40 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
         {/* API & MCP Setup */}
         <ApiSetupSection userId={userId} />
       </main>
+
+      {/* Resign / Cancel confirmation dialog */}
+      <AlertDialog open={!!resignGameId} onOpenChange={(open) => { if (!open) setResignGameId(null) }}>
+        <AlertDialogContent className="bg-amber-950 border-amber-700/50">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-amber-200">{resignLabel} this game?</AlertDialogTitle>
+            <AlertDialogDescription className="text-amber-400/80">
+              {resignLabel === 'Cancel'
+                ? 'This will delete the game. This action cannot be undone.'
+                : 'You will forfeit the game and the remaining player will win.'}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-amber-700/40 text-amber-300 hover:bg-amber-900/50">
+              Never mind
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-700 hover:bg-red-600 text-white"
+              onClick={async () => {
+                if (!resignGameId) return
+                try {
+                  const result = await cancelGame.mutateAsync({ gameId: resignGameId, userId })
+                  toast.success(result.deleted ? 'Game deleted' : 'Game resigned')
+                } catch {
+                  toast.error('Failed to cancel game')
+                }
+                setResignGameId(null)
+              }}
+            >
+              {resignLabel}
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
@@ -422,6 +451,7 @@ function ApiSetupSection({ userId }: { userId: string }) {
   const [expanded, setExpanded] = useState(false)
   const [newKeyName, setNewKeyName] = useState('')
   const [justCreatedKey, setJustCreatedKey] = useState<string | null>(null)
+  const [revokeTarget, setRevokeTarget] = useState<{ id: string; name: string } | null>(null)
   const { data: apiKeys, isLoading } = useApiKeys(userId)
   const createKey = useCreateApiKey()
   const deleteKey = useDeleteApiKey()
@@ -454,17 +484,12 @@ function ApiSetupSection({ userId }: { userId: string }) {
     }
   }
 
-  const handleDeleteKey = async (keyId: string, keyName: string) => {
-    if (!confirm(`Revoke "${keyName}"? Any MCP server or integration using this key will stop working.`)) return
-    try {
-      await deleteKey.mutateAsync(keyId)
-      toast.success('API key revoked')
-    } catch {
-      toast.error('Failed to revoke key')
-    }
+  const handleDeleteKey = (keyId: string, keyName: string) => {
+    setRevokeTarget({ id: keyId, name: keyName })
   }
 
   return (
+    <>
     <Card className="border-purple-900/30 bg-purple-950/20">
       <CardHeader
         className="cursor-pointer select-none"
@@ -730,5 +755,38 @@ function ApiSetupSection({ userId }: { userId: string }) {
         </CardContent>
       )}
     </Card>
+
+      {/* Revoke API key confirmation dialog */}
+      <AlertDialog open={!!revokeTarget} onOpenChange={(open) => { if (!open) setRevokeTarget(null) }}>
+        <AlertDialogContent className="bg-purple-950 border-purple-700/50">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-purple-200">Revoke "{revokeTarget?.name}"?</AlertDialogTitle>
+            <AlertDialogDescription className="text-purple-400/80">
+              Any MCP server or integration using this key will stop working.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-purple-700/40 text-purple-300 hover:bg-purple-900/50">
+              Keep it
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-700 hover:bg-red-600 text-white"
+              onClick={async () => {
+                if (!revokeTarget) return
+                try {
+                  await deleteKey.mutateAsync(revokeTarget.id)
+                  toast.success('API key revoked')
+                } catch {
+                  toast.error('Failed to revoke key')
+                }
+                setRevokeTarget(null)
+              }}
+            >
+              Revoke
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+    </>
   )
 }

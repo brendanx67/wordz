@@ -1,6 +1,7 @@
 import { useState, useCallback, useEffect, useMemo } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
 import { useGame, useStartGame, isComputerPlayerId, isApiPlayerId, useCancelGame } from '@/hooks/useGames'
 import type { ComputerPlayer } from '@/hooks/useGames'
 import { useQueryClient } from '@tanstack/react-query'
@@ -57,6 +58,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   const [exchangeSelection, setExchangeSelection] = useState<Set<string>>(new Set())
   const [showHistory, setShowHistory] = useState(false)
   const [rackOrder, setRackOrder] = useState<string[] | null>(null)
+  const [showResignDialog, setShowResignDialog] = useState(false)
 
   // Rack tiles for current user (excluding placed tiles)
   const myPlayer = game?.game_players?.find(p => p.player_id === userId)
@@ -335,14 +337,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
           onToggleHistory={() => setShowHistory(v => !v)}
           onToggleInstructional={findWordsEnabled ? () => setShowInstructional(v => !v) : undefined}
           onToggleChat={() => setMobileChat(v => !v)}
-          onResign={isActive && myPlayer ? async () => {
-            if (!confirm('Resign this game?')) return
-            try {
-              await cancelGame.mutateAsync({ gameId, userId })
-              toast.success('Game resigned')
-              onBack()
-            } catch { toast.error('Failed to resign') }
-          } : undefined}
+          onResign={isActive && myPlayer ? () => setShowResignDialog(true) : undefined}
           showHistory={showHistory}
           showInstructional={showInstructional}
           canShowInstructional={findWordsEnabled}
@@ -381,16 +376,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
               <Button
                 variant="ghost"
                 size="sm"
-                onClick={async () => {
-                  if (!confirm('Resign this game?')) return
-                  try {
-                    await cancelGame.mutateAsync({ gameId, userId })
-                    toast.success('Game resigned')
-                    onBack()
-                  } catch {
-                    toast.error('Failed to resign')
-                  }
-                }}
+                onClick={() => setShowResignDialog(true)}
                 disabled={cancelGame.isPending}
                 className="text-red-300 hover:text-red-100 hover:bg-red-900/30 text-sm"
               >
@@ -738,6 +724,36 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
         )}
       </main>
 
+      {/* Resign confirmation dialog */}
+      <AlertDialog open={showResignDialog} onOpenChange={setShowResignDialog}>
+        <AlertDialogContent className="bg-amber-950 border-amber-700/50">
+          <AlertDialogHeader>
+            <AlertDialogTitle className="text-amber-200">Resign this game?</AlertDialogTitle>
+            <AlertDialogDescription className="text-amber-400/80">
+              You will forfeit the game and the remaining player will win.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel className="border-amber-700/40 text-amber-300 hover:bg-amber-900/50">
+              Never mind
+            </AlertDialogCancel>
+            <AlertDialogAction
+              className="bg-red-700 hover:bg-red-600 text-white"
+              onClick={async () => {
+                try {
+                  await cancelGame.mutateAsync({ gameId, userId })
+                  toast.success('Game resigned')
+                  onBack()
+                } catch {
+                  toast.error('Failed to resign')
+                }
+              }}
+            >
+              Resign
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   )
 }
