@@ -6,26 +6,24 @@ import { test, expect, type Page } from '@playwright/test';
  * production database.
  */
 
-const TEST_EMAIL = `test-${Date.now()}@wordz-test.example`;
+const TEST_EMAIL = 'playwright-lifecycle@wordz-test.example';
 const TEST_PASSWORD = 'TestPass123!';
-const TEST_DISPLAY_NAME = `TestBot-${Date.now().toString(36)}`;
+const TEST_DISPLAY_NAME = 'PlaywrightBot';
 
 async function signUp(page: Page) {
   await page.goto('/');
-  // Switch to sign-up mode
   await page.getByRole('button', { name: /don't have an account/i }).click();
-  await page.getByLabel(/display name/i).fill(TEST_DISPLAY_NAME);
-  await page.getByLabel(/email/i).fill(TEST_EMAIL);
-  await page.getByLabel(/password/i).fill(TEST_PASSWORD);
+  await page.getByPlaceholder('Your name').fill(TEST_DISPLAY_NAME);
+  await page.getByPlaceholder('you@example.com').fill(TEST_EMAIL);
+  await page.getByPlaceholder('••••••••').fill(TEST_PASSWORD);
   await page.getByRole('button', { name: /create account/i }).click();
-  // Wait for lobby
   await expect(page.getByText(/new game/i).first()).toBeVisible({ timeout: 15_000 });
 }
 
 async function signIn(page: Page) {
   await page.goto('/');
-  await page.getByLabel(/email/i).fill(TEST_EMAIL);
-  await page.getByLabel(/password/i).fill(TEST_PASSWORD);
+  await page.getByPlaceholder('you@example.com').fill(TEST_EMAIL);
+  await page.getByPlaceholder('••••••••').fill(TEST_PASSWORD);
   await page.getByRole('button', { name: /sign in/i }).click();
   await expect(page.getByText(/new game/i).first()).toBeVisible({ timeout: 15_000 });
 }
@@ -44,10 +42,37 @@ async function deleteAccount(page: Page) {
     .toBeVisible({ timeout: 10_000 });
 }
 
+/**
+ * Cleanup: if the test account exists from a prior failed run,
+ * sign in and delete it before proceeding.
+ */
+async function cleanupIfExists(page: Page) {
+  await page.goto('/');
+  await page.getByPlaceholder('you@example.com').fill(TEST_EMAIL);
+  await page.getByPlaceholder('••••••••').fill(TEST_PASSWORD);
+  await page.getByRole('button', { name: /sign in/i }).click();
+
+  // Wait briefly to see if sign-in succeeds (lobby) or fails (stays on auth)
+  try {
+    await expect(page.getByText(/new game/i).first()).toBeVisible({ timeout: 8_000 });
+    // Sign-in succeeded — account exists from a prior run. Delete it.
+    await deleteAccount(page);
+  } catch {
+    // Sign-in failed — account doesn't exist. Nothing to clean up.
+    // Navigate away from any error state
+    await page.goto('/');
+  }
+}
+
 test.describe('Game lifecycle', () => {
   test.describe.configure({ timeout: 120_000 }); // 2 minutes for the full flow
 
   test('full lifecycle: signup → game → review → chat → logout → login → resign → delete', async ({ page }) => {
+    // ─── 0. Cleanup from prior failed runs ──────────────────────────
+    await test.step('cleanup prior test account if exists', async () => {
+      await cleanupIfExists(page);
+    });
+
     // ─── 1. Create account ──────────────────────────────────────────
     await test.step('create account', async () => {
       await signUp(page);
@@ -107,8 +132,8 @@ test.describe('Game lifecycle', () => {
       await expect(page.getByText(/move \d+/i)).toBeVisible({ timeout: 5_000 });
     });
 
-    // Close history by clicking the button again
-    await page.getByRole('button', { name: /game history/i }).click();
+    // Close history by clicking "Hide History"
+    await page.getByRole('button', { name: /hide history/i }).click();
 
     // ─── 5. Leave a chat message ────────────────────────────────────
     await test.step('post chat message', async () => {
@@ -150,23 +175,33 @@ test.describe('Game lifecycle', () => {
 
     // ─── 8. Check MCP instructions can be expanded ──────────────────
     await test.step('verify MCP section', async () => {
-      // Scroll down to find the source code / MCP section
-      // Look for the download link or expandable section
-      const mcpSection = page.getByText(/download/i)
-        .or(page.getByText(/mcp/i))
-        .or(page.getByText(/source/i));
-      // Just verify something MCP/download-related exists on the page
+      // Scroll down to find the source code / download section
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
-      await expect(mcpSection.first()).toBeVisible({ timeout: 5_000 });
+      await page.waitForTimeout(500);
+      // Look for download link for source zip
+      const downloadLink = page.getByRole('link', { name: /download|source/i })
+        .or(page.getByText(/wordz-source/i))
+        .or(page.getByText(/wordz-mcp/i));
+      await expect(downloadLink.first()).toBeVisible({ timeout: 5_000 });
     });
 
     // ─── 9. Return to the game via Play button ──────────────────────
     await test.step('return to game from lobby', async () => {
-      // Scroll back up to game list
+      // Scroll back to top and make sure we're on the lobby
       await page.evaluate(() => window.scrollTo(0, 0));
+      await page.waitForTimeout(500);
 
-      // Find the game in "My Games" and click Play/View
-      const playButton = page.getByRole('button', { name: /play|view|watch/i }).first();
+      // If we're not on the lobby (e.g. accidentally navigated away), go back
+      const onLobby = await page.getByText(/my games/i).first().isVisible();
+      if (!onLobby) {
+        await page.getByRole('button', { name: /lobby/i }).first().click();
+        await expect(page.getByText(/my games/i).first()).toBeVisible({ timeout: 5_000 });
+      }
+
+      // Find the game in "My Games" and click the play/view button
+      // Use a more specific selector — the button inside the game card, not the header
+      const gameCard = page.getByText(/my games/i).first().locator('..').locator('..');
+      const playButton = gameCard.getByRole('button', { name: /play|view|watch/i }).first();
       await expect(playButton).toBeVisible({ timeout: 5_000 });
       await playButton.click();
 
@@ -182,10 +217,12 @@ test.describe('Game lifecycle', () => {
 
     // ─── Log out and log back in ────────────────────────────────────
     await test.step('log out and log back in', async () => {
-      // Click sign out
-      await page.getByRole('button', { name: /log out/i })
-        .or(page.locator('button[title*="Log out"]'))
-        .first().click();
+      // Sign out — icon-only button with tooltip "Log out", no accessible name.
+      // Find it by the LogOut SVG icon class or by being near the display name.
+      const signOutButton = page.locator('button:has(svg.lucide-log-out)')
+        .or(page.locator('button').filter({ has: page.locator('.lucide-log-out') }));
+      await expect(signOutButton.first()).toBeVisible({ timeout: 5_000 });
+      await signOutButton.first().click();
 
       // Verify we're on the auth page
       await expect(page.getByRole('button', { name: /sign in/i }))
@@ -205,10 +242,11 @@ test.describe('Game lifecycle', () => {
       await expect(resignButton).toBeVisible({ timeout: 5_000 });
       await resignButton.click();
 
-      // Confirm in the AlertDialog
-      const confirmButton = page.getByRole('button', { name: /yes.*resign|confirm/i });
-      await expect(confirmButton).toBeVisible({ timeout: 3_000 });
-      await confirmButton.click();
+      // Confirm in the AlertDialog — button text is just "Resign" (or "Cancel" for waiting games).
+      // Use the AlertDialog action button which has the red styling.
+      const dialog = page.locator('[role="alertdialog"]');
+      await expect(dialog).toBeVisible({ timeout: 3_000 });
+      await dialog.getByRole('button', { name: /^resign$|^cancel$/i }).click();
 
       // The game should move to history or disappear from active games
       // Wait a moment for the state to update
@@ -230,8 +268,8 @@ test.describe('Game lifecycle', () => {
     // ─── Verify deletion ────────────────────────────────────────────
     await test.step('verify account is deleted', async () => {
       // Try to sign in with deleted credentials — should fail
-      await page.getByLabel(/email/i).fill(TEST_EMAIL);
-      await page.getByLabel(/password/i).fill(TEST_PASSWORD);
+      await page.getByPlaceholder('you@example.com').fill(TEST_EMAIL);
+      await page.getByPlaceholder('••••••••').fill(TEST_PASSWORD);
       await page.getByRole('button', { name: /sign in/i }).click();
 
       // Should see an error toast or stay on the auth page
