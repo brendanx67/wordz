@@ -293,6 +293,49 @@ export function useAnalysisState() {
     })
   }, [])
 
+  // Load a saved state: reconstruct board + rack from compact format,
+  // removing consumed tiles from a fresh bag.
+  const loadState = useCallback((
+    boardTiles: { row: number; col: number; letter: string; is_blank: boolean }[],
+    rackLetters: string,
+  ) => {
+    const freshBag = createFullTileSet()
+    const newBoard = createEmptyBoard()
+    const newRack: Tile[] = []
+    const remaining = [...freshBag]
+
+    // Place board tiles
+    for (const t of boardTiles) {
+      const upper = t.letter.toUpperCase()
+      let idx: number
+      if (t.is_blank) {
+        idx = remaining.findIndex(b => b.isBlank)
+      } else {
+        idx = remaining.findIndex(b => b.letter === upper && !b.isBlank)
+      }
+      if (idx === -1) continue // tile unavailable, skip
+      const tile = remaining.splice(idx, 1)[0]
+      const placed = t.is_blank ? { ...tile, letter: upper, value: 0 } : tile
+      newBoard[t.row][t.col] = { ...newBoard[t.row][t.col], tile: placed, isNew: true }
+    }
+
+    // Build rack
+    for (const ch of rackLetters) {
+      if (ch === '?' || ch === '_') {
+        const idx = remaining.findIndex(b => b.isBlank)
+        if (idx !== -1) newRack.push(remaining.splice(idx, 1)[0])
+      } else {
+        const upper = ch.toUpperCase()
+        const idx = remaining.findIndex(b => b.letter === upper && !b.isBlank)
+        if (idx !== -1) newRack.push(remaining.splice(idx, 1)[0])
+      }
+    }
+
+    setBoard(newBoard)
+    setRack(newRack)
+    setBag(remaining)
+  }, [])
+
   // Compute remaining tile counts by letter (for the tile counter display).
   const remainingCounts = useMemo(() => {
     const counts: Record<string, number> = {}
@@ -338,5 +381,6 @@ export function useAnalysisState() {
     clearAll,
     reorderRack,
     shuffleRack,
+    loadState,
   }
 }

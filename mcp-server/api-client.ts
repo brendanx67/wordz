@@ -49,7 +49,7 @@ if (!API_URL || !API_KEY) {
 
 export async function apiCall(
   path: string,
-  method: "GET" | "POST" = "GET",
+  method: "GET" | "POST" | "PUT" = "GET",
   body?: unknown,
   gameId?: string,
 ): Promise<unknown> {

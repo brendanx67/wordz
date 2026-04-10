@@ -14,6 +14,27 @@ export type Database = {
   }
   public: {
     Tables: {
+      analysis_boards: {
+        Row: {
+          board: Json
+          rack: string
+          updated_at: string
+          user_id: string
+        }
+        Insert: {
+          board?: Json
+          rack?: string
+          updated_at?: string
+          user_id: string
+        }
+        Update: {
+          board?: Json
+          rack?: string
+          updated_at?: string
+          user_id?: string
+        }
+        Relationships: []
+      }
       api_keys: {
         Row: {
           api_key: string

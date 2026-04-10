@@ -10,6 +10,7 @@ import InstructionalModePanel from '@/components/InstructionalModePanel'
 import { moveKey as instructionalMoveKey } from '@/components/InstructionalModePanel'
 import { useAnalysisState, validateBoard } from '@/hooks/useAnalysisState'
 import { useAnalyzeBoard } from '@/hooks/useAnalyzeBoard'
+import { useAnalysisPersistence } from '@/hooks/useAnalysisPersistence'
 import { useMobileLayout, useMobileCellSize } from '@/hooks/useMobileLayout'
 import { BOARD_SIZE, TILE_DISTRIBUTION } from '@/lib/gameConstants'
 import type { Tile } from '@/lib/gameConstants'
@@ -26,6 +27,16 @@ export default function AnalysisPage({ onBack }: AnalysisPageProps) {
   const analysis = useAnalysisState()
   const isMobile = useMobileLayout()
   const mobileCellSize = useMobileCellSize(isMobile)
+
+  // Persist board state to database (auto-load on mount, auto-save on change)
+  const { isLoading: _isLoadingBoard } = useAnalysisPersistence(
+    analysis.board,
+    analysis.rack,
+    useCallback((data) => {
+      analysis.loadState(data.boardTiles, data.rack)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, []),
+  )
 
   const [selectedSquare, setSelectedSquare] = useState<{ row: number; col: number } | null>(null)
   const [direction, setDirection] = useState<'across' | 'down'>('across')
