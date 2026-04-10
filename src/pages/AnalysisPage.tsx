@@ -305,7 +305,7 @@ export default function AnalysisPage({ onBack }: AnalysisPageProps) {
             Lobby
           </Button>
           <h1 className="text-lg font-bold tracking-widest text-amber-400" style={{ fontFamily: "'Playfair Display', serif" }}>
-            ANALYSIS
+            WORDZ <span className="text-amber-500/80 font-normal text-sm tracking-wide ml-1">Analysis</span>
           </h1>
           <Button
             variant="ghost"
@@ -328,62 +328,72 @@ export default function AnalysisPage({ onBack }: AnalysisPageProps) {
 
       <main className={cn(
         'container mx-auto px-2 sm:px-4 py-4',
-        isMobile ? 'max-w-lg' : 'max-w-6xl'
+        isMobile ? 'max-w-lg' : 'max-w-7xl'
       )}>
         <div className={cn(
-          isMobile ? 'flex flex-col gap-4' : 'flex gap-6'
-        )}>
-          {/* Left column: Board + Rack + Controls */}
-          <div className={cn('flex flex-col items-center gap-3', isMobile ? 'w-full' : 'shrink-0')}>
-            {/* Input mode indicator */}
-            <div className="flex gap-2 w-full justify-center">
-              <button
-                onClick={() => setInputTarget('board')}
-                className={cn(
-                  'px-3 py-1 rounded text-xs font-medium transition-colors',
-                  inputTarget === 'board'
-                    ? 'bg-amber-700/60 text-amber-100'
-                    : 'bg-amber-900/30 text-amber-400/60 hover:text-amber-300'
-                )}
-              >
-                Typing on Board
-              </button>
-              <button
-                onClick={() => setInputTarget('rack')}
-                className={cn(
-                  'px-3 py-1 rounded text-xs font-medium transition-colors',
-                  inputTarget === 'rack'
-                    ? 'bg-amber-700/60 text-amber-100'
-                    : 'bg-amber-900/30 text-amber-400/60 hover:text-amber-300'
-                )}
-              >
-                Typing on Rack
-              </button>
-              <span className="text-amber-500/50 text-xs self-center ml-1">(Tab to switch)</span>
-            </div>
+          isMobile ? 'flex flex-col gap-4' : 'grid gap-5'
+        )} style={isMobile ? undefined : { gridTemplateColumns: '200px 1fr 1fr' }}>
 
-            {/* Direction indicator */}
-            <div className="flex items-center gap-2 text-xs text-amber-400/70">
-              <span>Direction:</span>
-              <button
-                onClick={() => setDirection('across')}
-                className={cn(
-                  'px-2 py-0.5 rounded transition-colors',
-                  direction === 'across' ? 'bg-amber-700/50 text-amber-100' : 'hover:text-amber-300'
-                )}
-              >
-                Across →
-              </button>
-              <button
-                onClick={() => setDirection('down')}
-                className={cn(
-                  'px-2 py-0.5 rounded transition-colors',
-                  direction === 'down' ? 'bg-amber-700/50 text-amber-100' : 'hover:text-amber-300'
-                )}
-              >
-                Down ↓
-              </button>
-              <span className="text-amber-500/40 text-[10px]">(Ctrl+Arrow)</span>
+          {/* Left column: Tile bag */}
+          {!isMobile && (
+            <div className="flex flex-col gap-3">
+              <TileBagCounter remainingCounts={analysis.remainingCounts} tilesLeft={analysis.tilesLeft} />
+            </div>
+          )}
+
+          {/* Center column: Controls + Board + Rack */}
+          <div className="flex flex-col items-center gap-2">
+            {/* Controls bar: input target + direction on one line */}
+            <div className="flex items-center gap-3 w-full justify-center flex-wrap">
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setInputTarget('board')}
+                  className={cn(
+                    'px-2.5 py-1 rounded text-xs font-medium transition-colors',
+                    inputTarget === 'board'
+                      ? 'bg-amber-700/60 text-amber-100'
+                      : 'bg-amber-900/30 text-amber-400/60 hover:text-amber-300'
+                  )}
+                >
+                  Board
+                </button>
+                <button
+                  onClick={() => setInputTarget('rack')}
+                  className={cn(
+                    'px-2.5 py-1 rounded text-xs font-medium transition-colors',
+                    inputTarget === 'rack'
+                      ? 'bg-amber-700/60 text-amber-100'
+                      : 'bg-amber-900/30 text-amber-400/60 hover:text-amber-300'
+                  )}
+                >
+                  Rack
+                </button>
+                <span className="text-amber-500/40 text-[10px]">Tab</span>
+              </div>
+
+              <span className="text-amber-800/60">|</span>
+
+              <div className="flex items-center gap-1">
+                <button
+                  onClick={() => setDirection('across')}
+                  className={cn(
+                    'px-2 py-1 rounded text-xs transition-colors',
+                    direction === 'across' ? 'bg-amber-700/50 text-amber-100 font-medium' : 'text-amber-400/60 hover:text-amber-300'
+                  )}
+                >
+                  Across →
+                </button>
+                <button
+                  onClick={() => setDirection('down')}
+                  className={cn(
+                    'px-2 py-1 rounded text-xs transition-colors',
+                    direction === 'down' ? 'bg-amber-700/50 text-amber-100 font-medium' : 'text-amber-400/60 hover:text-amber-300'
+                  )}
+                >
+                  Down ↓
+                </button>
+                <span className="text-amber-500/40 text-[10px]">Ctrl+Arrow</span>
+              </div>
             </div>
 
             {/* Board */}
@@ -419,12 +429,14 @@ export default function AnalysisPage({ onBack }: AnalysisPageProps) {
               />
             </div>
 
-            {/* Tile bag summary */}
-            <TileBagCounter remainingCounts={analysis.remainingCounts} tilesLeft={analysis.tilesLeft} />
+            {/* Tile bag on mobile (below rack) */}
+            {isMobile && (
+              <TileBagCounter remainingCounts={analysis.remainingCounts} tilesLeft={analysis.tilesLeft} />
+            )}
           </div>
 
           {/* Right column: Word finder + Errors */}
-          <div className={cn('flex flex-col gap-3', isMobile ? 'w-full' : 'flex-1 min-w-0')}>
+          <div className={cn('flex flex-col gap-3', isMobile ? 'w-full' : 'min-w-0')}>
             {/* Status / Errors */}
             {!canAnalyze && (
               <Card className="border-amber-900/30 bg-amber-950/30">
@@ -535,50 +547,68 @@ function TileBagCounter({ remainingCounts, tilesLeft }: { remainingCounts: Recor
   const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
 
   return (
-    <Card className="border-amber-900/30 bg-amber-950/30 w-full max-w-md">
-      <CardHeader className="py-2 px-3">
-        <CardTitle className="text-amber-300 text-xs flex items-center justify-between">
-          <span>Tiles Remaining</span>
-          <span className="text-amber-200 font-bold">{tilesLeft}</span>
-        </CardTitle>
-      </CardHeader>
-      <CardContent className="px-3 pb-2">
-        <div className="flex flex-wrap gap-x-1.5 gap-y-0.5">
-          {letters.map(letter => {
-            const total = TILE_DISTRIBUTION[letter] ?? 0
-            const remaining = remainingCounts[letter] ?? 0
-            return (
-              <div key={letter} className="flex items-center gap-0.5 text-[10px] font-mono">
-                <span className={cn(
-                  'font-bold w-3 text-center',
-                  remaining === 0 ? 'text-amber-900/40' : 'text-amber-200'
-                )}>
-                  {letter}
-                </span>
-                <span className={cn(
-                  remaining === 0 ? 'text-amber-900/30' : remaining < total ? 'text-amber-400' : 'text-amber-500/60'
-                )}>
-                  {remaining}/{total}
-                </span>
+    <div className="w-full">
+      <div className="flex items-center justify-between mb-2 px-1">
+        <span className="text-xs font-medium text-amber-400/80 tracking-wide uppercase">Bag</span>
+        <span className="text-xs font-bold text-amber-200 tabular-nums">{tilesLeft}</span>
+      </div>
+      <div className="space-y-px">
+        {letters.map(letter => {
+          const total = TILE_DISTRIBUTION[letter] ?? 0
+          const remaining = remainingCounts[letter] ?? 0
+          const used = total - remaining
+          return (
+            <div key={letter} className="flex items-center gap-1.5 text-xs font-mono px-1 py-px rounded hover:bg-amber-900/20">
+              <span className={cn(
+                'font-bold w-3.5 text-center text-[11px]',
+                remaining === 0 ? 'text-amber-900/40' : 'text-amber-200'
+              )}>
+                {letter}
+              </span>
+              {/* Mini bar showing used vs remaining */}
+              <div className="flex-1 h-1.5 rounded-full bg-amber-900/20 overflow-hidden">
+                <div
+                  className={cn(
+                    'h-full rounded-full transition-all',
+                    remaining === 0 ? 'bg-amber-900/30' : remaining < total ? 'bg-amber-600/60' : 'bg-amber-700/30'
+                  )}
+                  style={{ width: `${total > 0 ? (remaining / total) * 100 : 0}%` }}
+                />
               </div>
-            )
-          })}
-          {/* Blanks */}
-          <div className="flex items-center gap-0.5 text-[10px] font-mono">
-            <span className={cn(
-              'font-bold w-3 text-center',
-              (remainingCounts['blank'] ?? 0) === 0 ? 'text-amber-900/40' : 'text-amber-200'
-            )}>
-              ?
-            </span>
-            <span className={cn(
-              (remainingCounts['blank'] ?? 0) === 0 ? 'text-amber-900/30' : 'text-amber-400'
-            )}>
-              {remainingCounts['blank'] ?? 0}/2
-            </span>
+              <span className={cn(
+                'w-7 text-right text-[10px] tabular-nums',
+                remaining === 0 ? 'text-amber-900/30' : used > 0 ? 'text-amber-400' : 'text-amber-500/50'
+              )}>
+                {remaining}/{total}
+              </span>
+            </div>
+          )
+        })}
+        {/* Blanks */}
+        <div className="flex items-center gap-1.5 text-xs font-mono px-1 py-px rounded hover:bg-amber-900/20">
+          <span className={cn(
+            'font-bold w-3.5 text-center text-[11px]',
+            (remainingCounts['blank'] ?? 0) === 0 ? 'text-amber-900/40' : 'text-amber-200'
+          )}>
+            ?
+          </span>
+          <div className="flex-1 h-1.5 rounded-full bg-amber-900/20 overflow-hidden">
+            <div
+              className={cn(
+                'h-full rounded-full transition-all',
+                (remainingCounts['blank'] ?? 0) === 0 ? 'bg-amber-900/30' : 'bg-amber-600/60'
+              )}
+              style={{ width: `${((remainingCounts['blank'] ?? 0) / 2) * 100}%` }}
+            />
           </div>
+          <span className={cn(
+            'w-7 text-right text-[10px] tabular-nums',
+            (remainingCounts['blank'] ?? 0) === 0 ? 'text-amber-900/30' : 'text-amber-400'
+          )}>
+            {remainingCounts['blank'] ?? 0}/2
+          </span>
         </div>
-      </CardContent>
-    </Card>
+      </div>
+    </div>
   )
 }
