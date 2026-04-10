@@ -196,4 +196,13 @@ A `security-scan` subagent is available. Read-only, ~2–5 min. Checks dependenc
 
 ### Pre-publish
 
-`bun run build` in the project directory. The dev server doesn't run `tsc`; type errors only surface here.
+Two commands, both required before asking the developer to publish:
+
+1. `bun run build` — runs `tsc -b && vite build`. The dev server doesn't run `tsc`, so type errors only surface here.
+2. `bun run build:source` — regenerates `public/wordz-source.zip` from the current `HEAD` via a clean clone. **This is not automatic.** The publish UI just re-uploads whatever's already in `public/`, so if you commit new work without rerunning this script, the CDN keeps serving a stale snapshot and CC pulls an old ZIP. Always verify the ZIP's embedded master after running:
+
+```
+unzip -p public/wordz-source.zip .git/packed-refs | grep 'refs/heads/master'
+```
+
+The SHA should match `git rev-parse HEAD`. If it doesn't, the ZIP is stale — rerun `build:source`.
