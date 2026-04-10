@@ -127,13 +127,15 @@ mcp-server/                       # Stdio MCP server, one tool per file
 
 ## Shared engine via symlinks
 
-The trie, move generator, and game constants live in `supabase/functions/_shared/`. Each Edge Function that needs them has a symlink — `game-api/_shared`, `computer-turn/_shared`, and `validate-word/_shared` all point at `../_shared`. The Supabase CLI follows these symlinks during `supabase functions deploy` and bundles the linked files into each function's deploy artifact, so the engine code ships once at the source level but ends up in every function's runtime.
+The trie, move generator, game constants, and scoring all live in `supabase/functions/_shared/`. Each Edge Function that needs them has a symlink — `game-api/_shared`, `computer-turn/_shared`, and `validate-word/_shared` all point at `../_shared`. The Supabase CLI follows these symlinks during `supabase functions deploy` and bundles the linked files into each function's deploy artifact, so the engine code ships once at the source level but ends up in every function's runtime.
 
-If you edit anything under `_shared/`, every function picks it up automatically — no manual sync. Don't replace any of these symlinks with copies; deploys would still work, but you'd reintroduce the duplication that Phase 1 of the refactor removed.
+The frontend reaches the same files via `src/lib/_shared`, another symlink pointing at `../../supabase/functions/_shared/`. Vite follows symlinks by default, so imports like `@/lib/_shared/scoring.ts` resolve to the same file the Edge Functions consume. This means the scoring module is literally one file shared across the whole three-tier system — fix a bug in `_shared/scoring.ts` and every caller picks it up.
+
+If you edit anything under `_shared/`, every function and the frontend picks it up automatically — no manual sync. Don't replace any of these symlinks with copies; deploys would still work, but you'd reintroduce the duplication that Phase 1 of the refactor removed.
 
 ## Known incomplete refactors
 
-**Scoring dedup never landed.** The Phase-1 plan called for a single scoring module shared between the frontend and Edge Functions, but `supabase/functions/game-api/scoring.ts` (138 lines) and `src/lib/scoring.ts` (170 lines) have drifted independently — different function names (`scoreMove` vs `validateAndScoreMove`), different imported types (`Tile` vs `PlacedTile`), and different internal details. Any scoring bug fix currently has to be applied to both files by hand. A future refactor cycle should pull scoring into `_shared/` like the trie and move generator, so both sides consume one source. Until then: **when you touch one scoring file, check the other**, and write a regression test that exercises the same input on both paths.
+(Nothing currently tracked here. #17 — scoring dedup — landed. If you spot something that drifted, add it back.)
 
 ## Known oversized files
 
