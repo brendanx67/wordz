@@ -12,6 +12,7 @@ import {
   handleGetAnalysisBoard,
   handleSaveAnalysisBoard,
 } from "./handlers/analysis-board-store.ts";
+import { handleDeleteAccount } from "./handlers/delete-account.ts";
 import {
   handleListChannels,
   handleReadMessages,
@@ -40,6 +41,9 @@ Deno.serve(async (req) => {
     // Analysis board persistence (issue #13)
     if (req.method === "GET" && path === "analysis-board") return await handleGetAnalysisBoard(req);
     if (req.method === "PUT" && path === "analysis-board") return await handleSaveAnalysisBoard(req);
+
+    // Account management (issue #19)
+    if (req.method === "POST" && path === "delete-account") return await handleDeleteAccount(req);
 
     // Chat endpoints (issue #6)
     if (req.method === "GET" && path === "chat/channels") {

@@ -188,7 +188,7 @@ export type Database = {
           game_id: string
           id: string
           move_type: string
-          player_id: string
+          player_id: string | null
           score: number
           tiles_placed: Json | null
           words_formed: Json | null
@@ -198,7 +198,7 @@ export type Database = {
           game_id: string
           id?: string
           move_type: string
-          player_id: string
+          player_id?: string | null
           score?: number
           tiles_placed?: Json | null
           words_formed?: Json | null
@@ -208,7 +208,7 @@ export type Database = {
           game_id?: string
           id?: string
           move_type?: string
-          player_id?: string
+          player_id?: string | null
           score?: number
           tiles_placed?: Json | null
           words_formed?: Json | null
@@ -236,7 +236,7 @@ export type Database = {
           game_id: string
           id: string
           joined_at: string | null
-          player_id: string
+          player_id: string | null
           rack: Json
           score: number
         }
@@ -245,7 +245,7 @@ export type Database = {
           game_id: string
           id?: string
           joined_at?: string | null
-          player_id: string
+          player_id?: string | null
           rack?: Json
           score?: number
         }
@@ -254,7 +254,7 @@ export type Database = {
           game_id?: string
           id?: string
           joined_at?: string | null
-          player_id?: string
+          player_id?: string | null
           rack?: Json
           score?: number
         }
@@ -285,7 +285,7 @@ export type Database = {
           computer_score: number
           consecutive_passes: number
           created_at: string | null
-          created_by: string
+          created_by: string | null
           current_turn: string | null
           has_computer: boolean
           id: string
@@ -310,7 +310,7 @@ export type Database = {
           computer_score?: number
           consecutive_passes?: number
           created_at?: string | null
-          created_by: string
+          created_by?: string | null
           current_turn?: string | null
           has_computer?: boolean
           id?: string
@@ -335,7 +335,7 @@ export type Database = {
           computer_score?: number
           consecutive_passes?: number
           created_at?: string | null
-          created_by?: string
+          created_by?: string | null
           current_turn?: string | null
           has_computer?: boolean
           id?: string

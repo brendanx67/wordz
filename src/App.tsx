@@ -88,6 +88,7 @@ function App() {
           email={user.email || ''}
           onBack={() => setShowAccount(false)}
           onDisplayNameChange={setDisplayName}
+          onDeleteAccount={() => { setShowAccount(false); setCurrentGameId(null) }}
         />
         <Toaster />
       </>

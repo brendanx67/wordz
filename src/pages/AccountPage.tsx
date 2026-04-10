@@ -3,7 +3,18 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { ArrowLeft } from 'lucide-react'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+  AlertDialogTrigger,
+} from '@/components/ui/alert-dialog'
+import { ArrowLeft, Trash2 } from 'lucide-react'
 import { toast } from 'sonner'
 import { supabase } from '@/lib/supabase'
 
@@ -13,9 +24,10 @@ interface AccountPageProps {
   email: string
   onBack: () => void
   onDisplayNameChange: (name: string) => void
+  onDeleteAccount?: () => void
 }
 
-export default function AccountPage({ userId, displayName, email, onBack, onDisplayNameChange }: AccountPageProps) {
+export default function AccountPage({ userId, displayName, email, onBack, onDisplayNameChange, onDeleteAccount }: AccountPageProps) {
   const [newName, setNewName] = useState(displayName)
   const [newEmail, setNewEmail] = useState(email)
   const [currentPassword, setCurrentPassword] = useState('')
@@ -24,6 +36,35 @@ export default function AccountPage({ userId, displayName, email, onBack, onDisp
   const [savingName, setSavingName] = useState(false)
   const [savingEmail, setSavingEmail] = useState(false)
   const [savingPassword, setSavingPassword] = useState(false)
+  const [deleting, setDeleting] = useState(false)
+
+  const handleDeleteAccount = async () => {
+    setDeleting(true)
+    try {
+      const { data: { session } } = await supabase.auth.getSession()
+      if (!session?.access_token) throw new Error('Not authenticated')
+
+      const res = await fetch(
+        `${import.meta.env.VITE_SUPABASE_URL}/functions/v1/game-api/delete-account`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${session.access_token}`,
+            'Content-Type': 'application/json',
+          },
+        }
+      )
+      const data = await res.json()
+      if (!res.ok) throw new Error((data as { error?: string }).error ?? 'Delete failed')
+
+      toast.success('Account deleted')
+      await supabase.auth.signOut()
+      onDeleteAccount?.()
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to delete account')
+      setDeleting(false)
+    }
+  }
 
   useEffect(() => {
     setNewName(displayName)
@@ -230,6 +271,51 @@ export default function AccountPage({ userId, displayName, email, onBack, onDisp
                 {savingPassword ? 'Saving...' : 'Update Password'}
               </Button>
             </form>
+          </CardContent>
+        </Card>
+        {/* Delete Account */}
+        <Card className="border-red-900/30 bg-red-950/20">
+          <CardHeader>
+            <CardTitle className="text-red-300 text-base">Danger Zone</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-red-200/70 text-sm mb-4">
+              Permanently delete your account and all associated data. This cannot be undone.
+            </p>
+            <AlertDialog>
+              <AlertDialogTrigger asChild>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className="border-red-700/50 text-red-300 hover:bg-red-900/40 hover:text-red-200"
+                >
+                  <Trash2 className="h-4 w-4 mr-1" />
+                  Delete Account
+                </Button>
+              </AlertDialogTrigger>
+              <AlertDialogContent className="bg-amber-950 border-red-900/50">
+                <AlertDialogHeader>
+                  <AlertDialogTitle className="text-red-300">Delete your account?</AlertDialogTitle>
+                  <AlertDialogDescription className="text-amber-300/70">
+                    This will permanently delete your account, your API keys, and any games where you
+                    are the only human player. Games with other players will continue without you.
+                    This cannot be undone.
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+                <AlertDialogFooter>
+                  <AlertDialogCancel className="bg-amber-900/40 border-amber-700/30 text-amber-200 hover:bg-amber-800/50">
+                    Cancel
+                  </AlertDialogCancel>
+                  <AlertDialogAction
+                    onClick={handleDeleteAccount}
+                    disabled={deleting}
+                    className="bg-red-900/60 hover:bg-red-800/70 text-red-100 border border-red-700/40"
+                  >
+                    {deleting ? 'Deleting...' : 'Yes, delete my account'}
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
           </CardContent>
         </Card>
       </main>
