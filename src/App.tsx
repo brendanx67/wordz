@@ -4,11 +4,13 @@ import { useAuth } from '@/hooks/useAuth'
 import AuthPage from '@/pages/AuthPage'
 import LobbyPage from '@/pages/LobbyPage'
 import GamePage from '@/pages/GamePage'
+import AccountPage from '@/pages/AccountPage'
 import { supabase } from '@/lib/supabase'
 
 function App() {
   const { user, loading, signUp, signIn, signOut } = useAuth()
   const [currentGameId, setCurrentGameId] = useState<string | null>(null)
+  const [showAccount, setShowAccount] = useState(false)
   const [displayName, setDisplayName] = useState('')
 
   useEffect(() => {
@@ -55,6 +57,21 @@ function App() {
     )
   }
 
+  if (showAccount) {
+    return (
+      <>
+        <AccountPage
+          userId={user.id}
+          displayName={displayName || user.email?.split('@')[0] || 'Player'}
+          email={user.email || ''}
+          onBack={() => setShowAccount(false)}
+          onDisplayNameChange={setDisplayName}
+        />
+        <Toaster />
+      </>
+    )
+  }
+
   if (currentGameId) {
     return (
       <>
@@ -75,6 +92,7 @@ function App() {
         displayName={displayName || user.email?.split('@')[0] || 'Player'}
         onSignOut={signOut}
         onOpenGame={setCurrentGameId}
+        onOpenAccount={() => setShowAccount(true)}
       />
       <Toaster />
     </>

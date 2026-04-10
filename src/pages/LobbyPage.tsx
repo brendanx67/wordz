@@ -6,7 +6,8 @@ import { useOpenGames, useMyGames, useCreateConfiguredGame, useJoinGame, useStar
 import type { ComputerPlayer } from '@/hooks/useGames'
 import { useGameHistory } from '@/hooks/useGameHistory'
 import { useState, useCallback } from 'react'
-import { LogOut, Plus, Play, Users, Clock, Trophy, History, Eye, X, Bot, Copy, ChevronDown, ChevronUp, BookOpen } from 'lucide-react'
+import { LogOut, Plus, Play, Users, Clock, Trophy, History, Eye, X, Bot, Copy, ChevronDown, ChevronUp, BookOpen, Settings } from 'lucide-react'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import CreateGameForm from '@/components/CreateGameForm'
@@ -24,9 +25,10 @@ interface LobbyPageProps {
   displayName: string
   onSignOut: () => void
   onOpenGame: (gameId: string) => void
+  onOpenAccount?: () => void
 }
 
-export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }: LobbyPageProps) {
+export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame, onOpenAccount }: LobbyPageProps) {
   const { data: openGames, isLoading: loadingOpen } = useOpenGames()
   const { data: myGames, isLoading: loadingMine } = useMyGames(userId)
   const { data: gameHistory, isLoading: loadingHistory } = useGameHistory(userId)
@@ -92,11 +94,26 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
           <h1 className="text-2xl font-bold tracking-widest text-amber-400" style={{ fontFamily: "'Playfair Display', serif" }}>
             WORDZ
           </h1>
-          <div className="flex items-center gap-4">
-            <span className="text-amber-300/70 text-sm">{displayName}</span>
-            <Button variant="ghost" size="sm" onClick={onSignOut} className="text-amber-400/80 hover:text-amber-300">
-              <LogOut className="h-4 w-4" />
-            </Button>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={onOpenAccount}
+              className="text-amber-300/70 text-sm hover:text-amber-200 transition-colors cursor-pointer flex items-center gap-1.5"
+            >
+              {displayName}
+              <Settings className="h-3.5 w-3.5 opacity-0 group-hover:opacity-100" />
+            </button>
+            <TooltipProvider delayDuration={300}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button variant="ghost" size="sm" onClick={onSignOut} className="text-amber-400/80 hover:text-amber-200 hover:bg-amber-900/40">
+                    <LogOut className="h-4 w-4" />
+                  </Button>
+                </TooltipTrigger>
+                <TooltipContent side="bottom" className="bg-amber-950 border-amber-700/50 text-amber-200">
+                  Log out
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
           </div>
         </div>
       </header>
