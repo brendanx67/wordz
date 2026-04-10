@@ -12,7 +12,7 @@ import {
   jsonOk,
   normalizeTile,
 } from "../api-helpers.ts";
-import { scoreMove } from "../scoring.ts";
+import { scoreMove, validateMove } from "../_shared/scoring.ts";
 
 export async function handlePlayMove(req: Request): Promise<Response> {
   const body = await req.json();
@@ -184,10 +184,11 @@ export async function handlePlayMove(req: Request): Promise<Response> {
     row.some((cell: BoardCell) => cell.tile !== null)
   );
 
-  const result = scoreMove(boardState, placedTiles, isFirstMove);
-  if (!result.valid) {
-    return jsonError(result.error || "Invalid move", 400);
+  const validationError = validateMove(placedTiles, boardState, isFirstMove);
+  if (validationError) {
+    return jsonError(validationError, 400);
   }
+  const result = scoreMove(placedTiles, boardState);
 
   const trie = await getTrie();
   for (const w of result.words) {

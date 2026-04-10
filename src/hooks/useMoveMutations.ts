@@ -1,7 +1,7 @@
 import { useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
-import { validateAndScoreMove } from '@/lib/scoring'
+import { validateMove, scoreMove } from '@/lib/_shared/scoring.ts'
 import { drawTiles } from '@/lib/gameConstants'
 import type { Tile, BoardCell, PlacedTile } from '@/lib/gameConstants'
 import type { ComputerPlayer } from '@/hooks/useGames'
@@ -81,12 +81,13 @@ export function useMoveMutations({
         return { row, col, tile }
       })
 
-      const result = validateAndScoreMove(board, placed, isFirstMove)
-      if (!result.valid) {
-        toast.error(result.error || 'Invalid move')
+      const validationError = validateMove(placed, board, isFirstMove)
+      if (validationError) {
+        toast.error(validationError)
         setSubmitting(false)
         return
       }
+      const result = scoreMove(placed, board)
 
       // Validate words against dictionary when playing against computer
       if (game.has_computer && result.words.length > 0) {
