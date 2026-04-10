@@ -734,11 +734,11 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-amber-700/40 text-amber-300 hover:bg-amber-900/50">
+            <AlertDialogCancel className="bg-amber-900/60 hover:bg-amber-800/70 text-amber-200 border-amber-700/40">
               Never mind
             </AlertDialogCancel>
             <AlertDialogAction
-              className="bg-red-700 hover:bg-red-600 text-white"
+              className="bg-red-900/50 hover:bg-red-800/60 text-red-300 border border-red-700/30"
               onClick={async () => {
                 try {
                   await cancelGame.mutateAsync({ gameId, userId })

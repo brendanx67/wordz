@@ -422,11 +422,11 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame }
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-amber-700/40 text-amber-300 hover:bg-amber-900/50">
+            <AlertDialogCancel className="bg-amber-900/60 hover:bg-amber-800/70 text-amber-200 border-amber-700/40">
               Never mind
             </AlertDialogCancel>
             <AlertDialogAction
-              className="bg-red-700 hover:bg-red-600 text-white"
+              className="bg-red-900/50 hover:bg-red-800/60 text-red-300 border border-red-700/30"
               onClick={async () => {
                 if (!resignGameId) return
                 try {
@@ -766,11 +766,11 @@ function ApiSetupSection({ userId }: { userId: string }) {
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel className="border-purple-700/40 text-purple-300 hover:bg-purple-900/50">
+            <AlertDialogCancel className="bg-purple-900/60 hover:bg-purple-800/70 text-purple-200 border-purple-700/40">
               Keep it
             </AlertDialogCancel>
             <AlertDialogAction
-              className="bg-red-700 hover:bg-red-600 text-white"
+              className="bg-red-900/50 hover:bg-red-800/60 text-red-300 border border-red-700/30"
               onClick={async () => {
                 if (!revokeTarget) return
                 try {
