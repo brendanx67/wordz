@@ -236,6 +236,23 @@ export function useMoveMutations({
       } else {
         toast.success(`${result.words.map(w => w.word).join(', ')} — ${result.totalScore} points!`)
       }
+      // Optimistically update the query cache BEFORE clearing the local
+      // overlay so the board doesn't flash back to the pre-move state.
+      queryClient.setQueryData(['game', gameId], (old: Record<string, unknown> | undefined) => {
+        if (!old) return old
+        return {
+          ...old,
+          board: newBoard,
+          tile_bag: remaining,
+          current_turn: nextPlayer,
+          turn_index: nextIndex,
+          consecutive_passes: 0,
+          move_history: updatedHistory,
+          game_players: (old.game_players as { player_id: string }[] | undefined)?.map(p =>
+            p.player_id === userId ? { ...p, rack: newRack, score: (myPlayer?.score ?? 0) + result.totalScore } : p
+          ),
+        }
+      })
       setPlacedTiles(new Map())
       setSelectedSquare(null)
       invalidateGame()
