@@ -17,10 +17,12 @@ vite.config.d.ts
 # Vite dep pre-bundle cache
 .vite
 
-# Playwright MCP output
+# Playwright
 .playwright-mcp/
 test-results/
 playwright-report/
+.env.test
+!.env.test.example
 
 # Source snapshot — regenerated from a fresh clone before each publish
 # (see "Source code" section in src/pages/LobbyPage.tsx). Tracking this
