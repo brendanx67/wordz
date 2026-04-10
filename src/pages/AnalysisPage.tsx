@@ -332,7 +332,7 @@ export default function AnalysisPage({ onBack }: AnalysisPageProps) {
       )}>
         <div className={cn(
           isMobile ? 'flex flex-col gap-4' : 'grid gap-5'
-        )} style={isMobile ? undefined : { gridTemplateColumns: '200px 1fr 1fr' }}>
+        )} style={isMobile ? undefined : { gridTemplateColumns: '180px auto 1fr' }}>
 
           {/* Left column: Tile bag */}
           {!isMobile && (
