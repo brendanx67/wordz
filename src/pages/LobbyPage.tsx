@@ -26,9 +26,10 @@ interface LobbyPageProps {
   onSignOut: () => void
   onOpenGame: (gameId: string) => void
   onOpenAccount?: () => void
+  onOpenOverview?: () => void
 }
 
-export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame, onOpenAccount }: LobbyPageProps) {
+export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame, onOpenAccount, onOpenOverview }: LobbyPageProps) {
   const { data: openGames, isLoading: loadingOpen } = useOpenGames()
   const { data: myGames, isLoading: loadingMine } = useMyGames(userId)
   const { data: gameHistory, isLoading: loadingHistory } = useGameHistory(userId)
@@ -91,9 +92,13 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame, 
     <div className="min-h-screen" style={{ background: 'linear-gradient(145deg, #1a1208 0%, #2d1f0e 50%, #1a1208 100%)' }}>
       <header className="border-b border-amber-900/30 bg-amber-950/40 backdrop-blur sticky top-0 z-50">
         <div className="container mx-auto px-4 py-4 flex items-center justify-between">
-          <h1 className="text-2xl font-bold tracking-widest text-amber-400" style={{ fontFamily: "'Playfair Display', serif" }}>
+          <button
+            onClick={onOpenOverview}
+            className="text-2xl font-bold tracking-widest text-amber-400 hover:text-amber-300 transition-colors"
+            style={{ fontFamily: "'Playfair Display', serif" }}
+          >
             WORDZ
-          </h1>
+          </button>
           <div className="flex items-center gap-3">
             <button
               onClick={onOpenAccount}

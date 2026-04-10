@@ -5,12 +5,14 @@ import AuthPage from '@/pages/AuthPage'
 import LobbyPage from '@/pages/LobbyPage'
 import GamePage from '@/pages/GamePage'
 import AccountPage from '@/pages/AccountPage'
+import OverviewPage from '@/pages/OverviewPage'
 import { supabase } from '@/lib/supabase'
 
 function App() {
   const { user, loading, signUp, signIn, signOut } = useAuth()
   const [currentGameId, setCurrentGameId] = useState<string | null>(null)
   const [showAccount, setShowAccount] = useState(false)
+  const [showOverview, setShowOverview] = useState(false)
   const [displayName, setDisplayName] = useState('')
 
   useEffect(() => {
@@ -57,6 +59,15 @@ function App() {
     )
   }
 
+  if (showOverview) {
+    return (
+      <>
+        <OverviewPage onBack={() => setShowOverview(false)} />
+        <Toaster />
+      </>
+    )
+  }
+
   if (showAccount) {
     return (
       <>
@@ -93,6 +104,7 @@ function App() {
         onSignOut={signOut}
         onOpenGame={setCurrentGameId}
         onOpenAccount={() => setShowAccount(true)}
+        onOpenOverview={() => setShowOverview(true)}
       />
       <Toaster />
     </>
