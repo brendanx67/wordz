@@ -2,7 +2,7 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle } from '@/components/ui/alert-dialog'
-import { useOpenGames, useMyGames, useCreateConfiguredGame, useJoinGame, useStartGame, useCancelGame, useApiKeys, useCreateApiKey, useDeleteApiKey } from '@/hooks/useGames'
+import { useOpenGames, useMyGames, useCreateConfiguredGame, useJoinGame, useStartGame, useCancelGame, useApiKeys, useCreateApiKey, useDeleteApiKey, resolvePlayerName } from '@/hooks/useGames'
 import type { ComputerPlayer } from '@/hooks/useGames'
 import { useGameHistory } from '@/hooks/useGameHistory'
 import { useState, useCallback } from 'react'
@@ -177,7 +177,7 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame, 
                     })),
                     ...computerPlayers.map(cp => ({
                       key: `c-${cp.id}`,
-                      name: cp.name,
+                      name: resolvePlayerName(cp, players as Parameters<typeof resolvePlayerName>[1]),
                       instructional: !!cp.find_words_enabled,
                     })),
                   ]
@@ -224,7 +224,7 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame, 
                           {players.map((p: { profiles: unknown; score: number }) =>
                             `${getDisplayName(p.profiles as { display_name: string })}: ${p.score}`
                           ).join(' | ')}
-                          {computerPlayers.map(cp => ` | ${cp.name}: ${cp.score}`).join('')}
+                          {computerPlayers.map(cp => ` | ${resolvePlayerName(cp, players as Parameters<typeof resolvePlayerName>[1])}: ${cp.score}`).join('')}
                         </div>
                       )}
                       <div className="flex gap-2 flex-wrap">
@@ -371,7 +371,7 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame, 
                     ...players.map((p: { profiles: unknown; score: number }) =>
                       `${getDisplayName(p.profiles as { display_name: string })}: ${p.score}`
                     ),
-                    ...cpuPlayers.map(cp => `${cp.name}: ${cp.score}`),
+                    ...cpuPlayers.map(cp => `${resolvePlayerName(cp, players as Parameters<typeof resolvePlayerName>[1])}: ${cp.score}`),
                   ]
 
                   // Find winner name
@@ -379,7 +379,7 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame, 
                   const cpuWinner = cpuPlayers.find(cp => cp.id === game.winner)
                   const winnerDisplay = humanWinner
                     ? getDisplayName((humanWinner as { profiles: unknown }).profiles as { display_name: string })
-                    : cpuWinner?.name ?? 'Unknown'
+                    : cpuWinner ? resolvePlayerName(cpuWinner, players as Parameters<typeof resolvePlayerName>[1]) : 'Unknown'
 
                   return (
                     <div

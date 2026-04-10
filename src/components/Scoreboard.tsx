@@ -3,6 +3,7 @@ import { Button } from '@/components/ui/button'
 import { History, BookOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { formatTimer } from '@/hooks/useTurnTimer'
+import { resolvePlayerName } from '@/hooks/useGames'
 import type { ComputerPlayer } from '@/hooks/useGames'
 import type { MoveHistoryEntry } from '@/hooks/useReviewMode'
 
@@ -138,7 +139,7 @@ export default function Scoreboard({
                   'font-medium text-sm flex items-center gap-1.5',
                   isReviewActive ? 'text-amber-100' : (currentTurn === cp.id && !reviewMode) ? 'text-amber-100' : 'text-amber-300'
                 )}>
-                  <span>{cp.name}</span>
+                  <span>{resolvePlayerName(cp, players)}</span>
                   {cp.find_words_enabled && (
                     <span title="Instructional mode — A&amp;J word list" className="inline-flex">
                       <BookOpen className="h-3 w-3 text-sky-300 shrink-0" aria-label="Instructional mode" />

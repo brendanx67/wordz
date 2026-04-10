@@ -1,6 +1,7 @@
 import { Button } from '@/components/ui/button'
 import { Play, History, X, BookOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { resolvePlayerName } from '@/hooks/useGames'
 import type { ComputerPlayer } from '@/hooks/useGames'
 
 // Extracted from GamePage.tsx (#16 refactor). Renders the status banners
@@ -77,7 +78,7 @@ export default function GameStatusBanners({
       {gameStatus === 'finished' && !reviewMode && (() => {
         const allPlayerScores = [
           ...players.map(p => ({ name: p.profiles.display_name, score: p.score })),
-          ...computerPlayers.map(cp => ({ name: cp.name, score: cp.score })),
+          ...computerPlayers.map(cp => ({ name: resolvePlayerName(cp, players), score: cp.score })),
         ]
         const actualWinner = allPlayerScores.reduce((best, p) => p.score > best.score ? p : best, allPlayerScores[0])
         const isTie = allPlayerScores.filter(p => p.score === actualWinner?.score).length > 1

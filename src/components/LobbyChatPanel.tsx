@@ -8,7 +8,7 @@ import {
 } from '@/components/ui/tooltip'
 import { MessageSquare, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
 import { useChatChannels, type ChatChannel } from '@/hooks/useChatChannel'
-import { useMyGames, type ComputerPlayer } from '@/hooks/useGames'
+import { useMyGames, resolvePlayerName, type ComputerPlayer } from '@/hooks/useGames'
 import ChatChannelView from './ChatChannelView'
 
 interface LobbyChatPanelProps {
@@ -44,14 +44,18 @@ function getDisplayName(
 function buildGameInfo(game: {
   status: string
   created_at: string
-  game_players?: { profiles: unknown }[] | null
+  game_players?: { player_id?: string; profiles: unknown }[] | null
   computer_players?: unknown
 }): GameInfo {
   const humans = (game.game_players ?? []).map((p) =>
     getDisplayName(p.profiles as { display_name: string })
   )
   const cps = (game.computer_players ?? []) as ComputerPlayer[]
-  const computers = cps.map((cp) => cp.name)
+  const gamePlayers = (game.game_players ?? []).map(p => ({
+    player_id: p.player_id ?? '',
+    profiles: p.profiles as { display_name: string },
+  }))
+  const computers = cps.map((cp) => resolvePlayerName(cp, gamePlayers))
   const title = [...humans, ...computers].join(' vs ') || 'Game'
   return {
     title,

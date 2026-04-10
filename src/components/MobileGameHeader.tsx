@@ -1,18 +1,14 @@
 import { useState } from 'react'
 import { ArrowLeft, History, BookOpen, MessageSquare, LogOut, MoreVertical } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { resolvePlayerName } from '@/hooks/useGames'
+import type { ComputerPlayer } from '@/hooks/useGames'
 
 interface Player {
   player_id: string
   score: number
   find_words_enabled?: boolean
   profiles: { display_name: string }
-}
-
-interface ComputerPlayer {
-  id: string
-  name: string
-  score: number
 }
 
 interface MobileGameHeaderProps {
@@ -63,7 +59,7 @@ export default function MobileGameHeader({
     })),
     ...computerPlayers.map(cp => ({
       id: cp.id,
-      name: cp.name.split(' ')[0],
+      name: resolvePlayerName(cp, players).split(' ')[0],
       score: cp.score,
       isCurrent: cp.id === currentTurn,
     })),

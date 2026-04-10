@@ -18,6 +18,23 @@ export interface ComputerPlayer {
   find_words_enabled?: boolean
 }
 
+/** Resolve an API player's display name using the current profile name
+ *  instead of the snapshot baked in at game creation. For non-API players
+ *  (built-in computer opponents), returns `cp.name` unchanged. */
+export function resolvePlayerName(
+  cp: ComputerPlayer,
+  gamePlayers?: { player_id: string; profiles: { display_name: string } | { display_name: string }[] }[],
+): string {
+  if (!cp.owner_id || !cp.id.startsWith('api-')) return cp.name
+  const ownerProfile = gamePlayers?.find(gp => gp.player_id === cp.owner_id)
+  if (!ownerProfile) return cp.name
+  const p = ownerProfile.profiles
+  const name = Array.isArray(p) ? p[0]?.display_name : p.display_name
+  if (!name) return cp.name
+  const base = cp.name.replace(/\s*\(on behalf of .*\)$/, '')
+  return `${base} (on behalf of ${name})`
+}
+
 export interface GameRow {
   id: string
   created_by: string
