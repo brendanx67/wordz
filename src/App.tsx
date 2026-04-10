@@ -6,6 +6,7 @@ import LobbyPage from '@/pages/LobbyPage'
 import GamePage from '@/pages/GamePage'
 import AccountPage from '@/pages/AccountPage'
 import OverviewPage from '@/pages/OverviewPage'
+import AnalysisPage from '@/pages/AnalysisPage'
 import { supabase } from '@/lib/supabase'
 
 function App() {
@@ -13,6 +14,7 @@ function App() {
   const [currentGameId, setCurrentGameId] = useState<string | null>(null)
   const [showAccount, setShowAccount] = useState(false)
   const [showOverview, setShowOverview] = useState(false)
+  const [showAnalysis, setShowAnalysis] = useState(false)
   const [displayName, setDisplayName] = useState('')
 
   useEffect(() => {
@@ -54,6 +56,15 @@ function App() {
             return signIn(email, password)
           }}
         />
+        <Toaster />
+      </>
+    )
+  }
+
+  if (showAnalysis) {
+    return (
+      <>
+        <AnalysisPage onBack={() => setShowAnalysis(false)} />
         <Toaster />
       </>
     )
@@ -105,6 +116,7 @@ function App() {
         onOpenGame={setCurrentGameId}
         onOpenAccount={() => setShowAccount(true)}
         onOpenOverview={() => setShowOverview(true)}
+        onOpenAnalysis={() => setShowAnalysis(true)}
       />
       <Toaster />
     </>

@@ -7,6 +7,7 @@ import { handleFindWords } from "./handlers/find-words.ts";
 import { handleFindWordsAtMove } from "./handlers/find-words-at-move.ts";
 import { handlePreviewMove } from "./handlers/preview-move.ts";
 import { handleSuggestMove } from "./handlers/suggest-move.ts";
+import { handleAnalyzeBoard } from "./handlers/analyze-board.ts";
 import {
   handleListChannels,
   handleReadMessages,
@@ -30,6 +31,7 @@ Deno.serve(async (req) => {
     if (req.method === "POST" && path === "find-words-at-move") return await handleFindWordsAtMove(req);
     if (req.method === "POST" && path === "preview") return await handlePreviewMove(req);
     if (req.method === "POST" && path === "suggest") return await handleSuggestMove(req);
+    if (req.method === "POST" && path === "analyze") return await handleAnalyzeBoard(req);
 
     // Chat endpoints (issue #6)
     if (req.method === "GET" && path === "chat/channels") {

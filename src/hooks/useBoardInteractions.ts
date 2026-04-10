@@ -207,12 +207,22 @@ export function useBoardInteractions({
         return
       }
 
-      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
+      if (e.key === 'ArrowUp' || e.key === 'ArrowDown' || e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
         e.preventDefault()
-        if (isSpectatingApi) {
-          setSuggestionDirection(e.key === 'ArrowDown' ? 'down' : 'across')
-        } else {
-          setDirection(e.key === 'ArrowDown' ? 'down' : 'across')
+        if (e.ctrlKey || e.metaKey) {
+          // Ctrl+Arrow: set typing direction
+          const newDir = (e.key === 'ArrowDown' || e.key === 'ArrowUp') ? 'down' : 'across'
+          if (isSpectatingApi) setSuggestionDirection(newDir)
+          else setDirection(newDir)
+        } else if (activeSquare) {
+          // Plain arrow: move cursor
+          let { row, col } = activeSquare
+          if (e.key === 'ArrowUp') row = Math.max(0, row - 1)
+          else if (e.key === 'ArrowDown') row = Math.min(14, row + 1)
+          else if (e.key === 'ArrowLeft') col = Math.max(0, col - 1)
+          else if (e.key === 'ArrowRight') col = Math.min(14, col + 1)
+          if (isSpectatingApi) setSuggestionSquare({ row, col })
+          else setSelectedSquare({ row, col })
         }
         return
       }

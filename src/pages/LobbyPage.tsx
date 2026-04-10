@@ -27,9 +27,10 @@ interface LobbyPageProps {
   onOpenGame: (gameId: string) => void
   onOpenAccount?: () => void
   onOpenOverview?: () => void
+  onOpenAnalysis?: () => void
 }
 
-export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame, onOpenAccount, onOpenOverview }: LobbyPageProps) {
+export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame, onOpenAccount, onOpenOverview, onOpenAnalysis }: LobbyPageProps) {
   const { data: openGames, isLoading: loadingOpen } = useOpenGames()
   const { data: myGames, isLoading: loadingMine } = useMyGames(userId)
   const { data: gameHistory, isLoading: loadingHistory } = useGameHistory(userId)
@@ -132,7 +133,7 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame, 
             isPending={createConfiguredGame.isPending}
           />
         ) : (
-          <div className="flex justify-center">
+          <div className="flex justify-center gap-3">
             <Button
               onClick={() => setShowCreateForm(true)}
               className="bg-amber-700 hover:bg-amber-600 text-amber-50 font-semibold text-lg px-8 py-6"
@@ -140,6 +141,16 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame, 
               <Plus className="h-5 w-5 mr-2" />
               New Game
             </Button>
+            {onOpenAnalysis && (
+              <Button
+                onClick={onOpenAnalysis}
+                variant="outline"
+                className="border-sky-700/50 bg-sky-950/30 hover:bg-sky-900/40 text-sky-200 hover:text-sky-100 font-semibold text-lg px-6 py-6"
+              >
+                <BookOpen className="h-5 w-5 mr-2" />
+                Analyze
+              </Button>
+            )}
           </div>
         )}
 
