@@ -181,6 +181,78 @@ describe("generateAllMoves", () => {
   });
 });
 
+  test("blank tiles: moves are generated with blanks acting as wildcards", () => {
+    const trie = buildSmallTrie("CAT", "AT");
+    const board = makeBoard();
+    const blankTile: Tile = { letter: "", value: 0, isBlank: true, id: `t-${tileIdCounter++}` };
+    const rack: Tile[] = [makeTile("C"), blankTile, makeTile("T")];
+
+    const moves = generateAllMoves(board, rack, trie);
+    expect(moves.length).toBeGreaterThan(0);
+
+    const usesBlank = moves.some((m) =>
+      m.tiles.some((t) => t.tile.isBlank)
+    );
+    expect(usesBlank).toBe(true);
+  });
+
+  test("single tile in rack: only single-tile plays at valid positions", () => {
+    const trie = buildSmallTrie("AS", "AT", "AH", "HA", "HI");
+    const board = makeBoard();
+    placeStatic(board, 7, 7, "A");
+
+    const rack: Tile[] = [makeTile("H")];
+    const moves = generateAllMoves(board, rack, trie);
+
+    expect(moves.length).toBeGreaterThan(0);
+    for (const move of moves) {
+      expect(move.tiles).toHaveLength(1);
+    }
+  });
+
+  test("no valid moves returns empty array", () => {
+    const trie = buildSmallTrie("CAT", "DOG");
+    const board = makeBoard();
+    placeStatic(board, 7, 7, "X");
+
+    const rack: Tile[] = [makeTile("Q")];
+    const moves = generateAllMoves(board, rack, trie);
+
+    expect(moves).toHaveLength(0);
+  });
+
+  test("cross-word validation: placed tile must form valid words in both directions", () => {
+    const trie = buildSmallTrie("HI", "HIS", "IS", "SI");
+    const board = makeBoard();
+    placeStatic(board, 7, 7, "H");
+    placeStatic(board, 7, 8, "I");
+
+    const rack: Tile[] = [makeTile("S")];
+    const moves = generateAllMoves(board, rack, trie);
+
+    const hisMove = moves.find((m) =>
+      m.tiles.length === 1 && m.tiles[0].row === 7 && m.tiles[0].col === 9
+    );
+    expect(hisMove).toBeDefined();
+    expect(hisMove!.words.some((w) => w.word === "HIS")).toBe(true);
+  });
+
+  test("duplicate letters in rack: correct number of plays, no double-counting", () => {
+    const trie = buildSmallTrie("AA", "AB", "BA");
+    const board = makeBoard();
+
+    const rack: Tile[] = [makeTile("A"), makeTile("A"), makeTile("B")];
+    const moves = generateAllMoves(board, rack, trie);
+
+    expect(moves.length).toBeGreaterThan(0);
+
+    const moveKeys = moves.map((m) =>
+      m.tiles.map((t) => `${t.row},${t.col}:${t.tile.letter}`).sort().join("|")
+    );
+    const uniqueKeys = new Set(moveKeys);
+    expect(uniqueKeys.size).toBe(moveKeys.length);
+  });
+
 // ─── selectMove ──────────────────────────────────────────────────────────────
 
 describe("selectMove", () => {
