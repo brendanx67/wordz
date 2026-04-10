@@ -4,7 +4,7 @@ import { generateAllMoves } from "../_shared/moveGenerator.ts";
 import type { ApiPlayer } from "../api-helpers.ts";
 import {
   authenticateApiKey,
-  cellNotation,
+  formatMoveResult,
   getServiceClient,
   getTrie,
   jsonError,
@@ -187,22 +187,9 @@ export async function handleFindWords(req: Request): Promise<Response> {
   const cap = Math.min(maxResults || 10, 50);
   const results = filtered.slice(0, cap);
 
-  const formatted = results.map((m: GeneratedMove) => ({
-    tiles: m.tiles.map(t => ({
-      cell: cellNotation(t.row, t.col),
-      letter: t.tile.letter,
-      value: t.tile.value,
-      is_blank: t.tile.isBlank,
-    })),
-    words: m.words.map(w => ({ word: w.word, score: w.score })),
-    total_score: m.totalScore,
-    tiles_used: m.tiles.length,
-    is_bingo: m.tiles.length === 7,
-    rack_leave: myRackForLeave
-      .filter((rt: Tile) => !m.tiles.some(mt => mt.tile.id === rt.id))
-      .map((rt: Tile) => rt.letter)
-      .join(""),
-  }));
+  const formatted = results.map((m: GeneratedMove) =>
+    formatMoveResult(m, myRackForLeave)
+  );
 
   return jsonOk({
     total_moves_found: allMoves.length,

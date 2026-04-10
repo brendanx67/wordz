@@ -34,6 +34,8 @@ src/                              # React frontend
 │   ├── SuggestionControls.tsx    # Co-play staging UI
 │   ├── Scoreboard.tsx
 │   ├── GameControls.tsx          # Submit/pass/exchange/shuffle
+│   ├── GameStatusBanners.tsx     # Waiting/game-over/turn status banners
+│   ├── ReviewControls.tsx        # Post-game review navigation
 │   ├── GameHistoryViewer.tsx     # Move-by-move replay
 │   └── ui/                       # shadcn/ui components (don't edit these by hand)
 ├── hooks/
@@ -41,6 +43,10 @@ src/                              # React frontend
 │   ├── useGames.ts               # TanStack Query hooks for game CRUD (large)
 │   ├── useGameRealtime.ts        # Supabase Realtime subscription
 │   ├── useComputerPlayer.ts      # Triggers computer-turn Edge Function
+│   ├── useMoveMutations.ts       # Move submit/pass/exchange/challenge logic
+│   ├── useReviewAnalysis.ts      # Review-mode find-words analysis state
+│   ├── useBoardInteractions.ts   # Board click/drop/keyboard handlers
+│   ├── useMobileLayout.ts        # Media-query hook + mobile cell sizing
 │   ├── useSuggestionMode.ts      # Co-play staging state
 │   ├── useReviewMode.ts          # Post-game replay state
 │   └── useTurnTimer.ts           # Per-turn countdown
@@ -58,7 +64,7 @@ supabase/functions/               # Deno Edge Functions
 │   └── gameConstants.ts          # Mirror of src/lib/gameConstants.ts
 ├── game-api/                     # Main router
 │   ├── index.ts                  # Router shell (~30 lines after Phase 3)
-│   ├── api-helpers.ts            # Auth, error wrappers
+│   ├── api-helpers.ts            # Auth, error wrappers, formatMoveResult
 │   ├── scoring.ts                # Server-side scoring (diverged from src/lib/scoring.ts — see "Known incomplete refactors")
 │   ├── _shared -> ../_shared     # Symlink → ../_shared
 │   └── handlers/
@@ -133,9 +139,10 @@ If you edit anything under `_shared/`, every function picks it up automatically 
 
 These are over the 300-line target from the modular restructure. Lower priority than features and bugs, but worth splitting eventually:
 
-- `src/pages/GamePage.tsx` — 1162 lines
-- `src/hooks/useGames.ts` — 490 lines
-- `supabase/functions/computer-turn/index.ts` — 393 lines
+- `src/pages/GamePage.tsx` — 743 lines (down from 1628 via #16: `useMoveMutations`, `useReviewAnalysis`, `useBoardInteractions`, `GameStatusBanners`)
+- `src/hooks/useGames.ts` — 530 lines
+- `src/hooks/useMoveMutations.ts` — 470 lines (extracted from GamePage)
+- `supabase/functions/computer-turn/index.ts` — 395 lines
 
 Don't make them bigger.
 
@@ -147,6 +154,7 @@ Don't make them bigger.
 - Inline Supabase queries inside components. Wrap them in a hook.
 - Edit `src/lib/database.types.ts` by hand — regenerate it from the schema.
 - Install alternative bundlers, CSS frameworks, or component libraries.
+- Commit `public/wordz-source.zip` or `public/wordz-mcp.zip` to git. These are build artifacts listed in `.gitignore`. Committing them causes recursive bloat — each snapshot's `.git/` contains every prior snapshot's ZIP. The `build:source` script generates them at publish time; they must stay untracked.
 
 ---
 

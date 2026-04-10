@@ -4,7 +4,8 @@ import type { GeneratedMove } from "../_shared/moveGenerator.ts";
 import { generateAllMoves } from "../_shared/moveGenerator.ts";
 import {
   authenticateUser,
-  cellNotation,
+  formatMoveResult,
+  formatTiles,
   getServiceClient,
   getTrie,
   jsonError,
@@ -132,12 +133,7 @@ export async function handleFindWordsAtMove(
         ? {
             words: entry.words,
             total_score: entry.score,
-            tiles: (entry.tiles ?? []).map((t) => ({
-              cell: cellNotation(t.row, t.col),
-              letter: t.tile.letter,
-              value: t.tile.value,
-              is_blank: t.tile.isBlank,
-            })),
+            tiles: formatTiles(entry.tiles ?? []),
           }
         : null,
       alternatives: [],
@@ -152,18 +148,9 @@ export async function handleFindWordsAtMove(
   );
 
   const cap = Math.min(allMoves.length, 50);
-  const formatted = allMoves.slice(0, cap).map((m: GeneratedMove) => ({
-    tiles: m.tiles.map((t) => ({
-      cell: cellNotation(t.row, t.col),
-      letter: t.tile.letter,
-      value: t.tile.value,
-      is_blank: t.tile.isBlank,
-    })),
-    words: m.words.map((w) => ({ word: w.word, score: w.score })),
-    total_score: m.totalScore,
-    tiles_used: m.tiles.length,
-    is_bingo: m.tiles.length === 7,
-  }));
+  const formatted = allMoves.slice(0, cap).map((m: GeneratedMove) =>
+    formatMoveResult(m)
+  );
 
   // Build the actually-played move info (null for pass/exchange).
   const played =
@@ -171,12 +158,7 @@ export async function handleFindWordsAtMove(
       ? {
           words: entry.words,
           total_score: entry.score,
-          tiles: (entry.tiles ?? []).map((t) => ({
-            cell: cellNotation(t.row, t.col),
-            letter: t.tile.letter,
-            value: t.tile.value,
-            is_blank: t.tile.isBlank,
-          })),
+          tiles: formatTiles(entry.tiles ?? []),
         }
       : null;
 

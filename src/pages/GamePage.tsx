@@ -3,15 +3,12 @@ import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { useGame, useStartGame, isComputerPlayerId, isApiPlayerId, useCancelGame } from '@/hooks/useGames'
 import type { ComputerPlayer } from '@/hooks/useGames'
-import { supabase } from '@/lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
-import { validateAndScoreMove } from '@/lib/scoring'
-import { drawTiles } from '@/lib/gameConstants'
-import type { Tile, BoardCell, PlacedTile } from '@/lib/gameConstants'
+import type { Tile, BoardCell } from '@/lib/gameConstants'
 import GameBoard from '@/components/GameBoard'
 import TileRack from '@/components/TileRack'
 import { toast } from 'sonner'
-import { ArrowLeft, Play, History, LogOut, Grid3X3, X } from 'lucide-react'
+import { ArrowLeft, History, LogOut, Grid3X3, X } from 'lucide-react'
 import { createEmptyBoard } from '@/lib/gameConstants'
 import GameHistoryViewer from '@/components/GameHistoryViewer'
 import GameChatSidebar from '@/components/GameChatSidebar'
@@ -20,6 +17,7 @@ import Scoreboard from '@/components/Scoreboard'
 import ReviewControls from '@/components/ReviewControls'
 import GameControls from '@/components/GameControls'
 import SuggestionControls from '@/components/SuggestionControls'
+import GameStatusBanners from '@/components/GameStatusBanners'
 import { cn } from '@/lib/utils'
 import { useGameRealtime } from '@/hooks/useGameRealtime'
 import { useComputerPlayer } from '@/hooks/useComputerPlayer'
@@ -27,46 +25,14 @@ import { useTurnTimer } from '@/hooks/useTurnTimer'
 import { useReviewMode } from '@/hooks/useReviewMode'
 import type { MoveHistoryEntry } from '@/hooks/useReviewMode'
 import { useSuggestionMode } from '@/hooks/useSuggestionMode'
-import { useFindWords, type FindWordsMove, type FindWordsResponse } from '@/hooks/useFindWords'
-import { useFindWordsAtMove } from '@/hooks/useFindWordsAtMove'
-import InstructionalModePanel, { moveKey as instructionalMoveKey } from '@/components/InstructionalModePanel'
+import { useFindWords } from '@/hooks/useFindWords'
+import InstructionalModePanel from '@/components/InstructionalModePanel'
 import MobileGameHeader from '@/components/MobileGameHeader'
 import MobileDrawer from '@/components/MobileDrawer'
-import { BookOpen } from 'lucide-react'
-import { BOARD_SIZE } from '@/lib/gameConstants'
-
-function useMobileLayout() {
-  const [mobile, setMobile] = useState(false)
-  useEffect(() => {
-    const mq = window.matchMedia('(max-width: 1023px)')
-    setMobile(mq.matches)
-    const handler = (e: MediaQueryListEvent) => setMobile(e.matches)
-    mq.addEventListener('change', handler)
-    return () => mq.removeEventListener('change', handler)
-  }, [])
-  return mobile
-}
-
-/** Width-only cell size. On mobile phones the screen width is always
- *  the binding constraint, and `window.innerWidth` is reliable across
- *  every mobile browser. No viewport-height tricks needed. */
-function useMobileCellSize(isMobile: boolean) {
-  const [cellSize, setCellSize] = useState(0)
-  useEffect(() => {
-    if (!isMobile) { setCellSize(0); return }
-    const update = () => {
-      const vw = window.innerWidth
-      const availW = vw - 16 // 8px padding each side
-      // Board outer frame adds ~8px total (padding + border) on mobile
-      const cs = Math.floor((availW - 8) / BOARD_SIZE)
-      setCellSize(Math.max(16, Math.min(cs, 30)))
-    }
-    update()
-    window.addEventListener('resize', update)
-    return () => window.removeEventListener('resize', update)
-  }, [isMobile])
-  return cellSize
-}
+import { useMobileLayout, useMobileCellSize } from '@/hooks/useMobileLayout'
+import { useMoveMutations } from '@/hooks/useMoveMutations'
+import { useReviewAnalysis } from '@/hooks/useReviewAnalysis'
+import { useBoardInteractions } from '@/hooks/useBoardInteractions'
 
 interface GamePageProps {
   gameId: string
@@ -89,8 +55,6 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   const [showLabels, setShowLabels] = useState(false)
   const [isExchangeMode, setIsExchangeMode] = useState(false)
   const [exchangeSelection, setExchangeSelection] = useState<Set<string>>(new Set())
-  const [submitting, setSubmitting] = useState(false)
-  const [blankTileTarget, setBlankTileTarget] = useState<{ row: number; col: number; tile: Tile } | null>(null)
   const [showHistory, setShowHistory] = useState(false)
   const [rackOrder, setRackOrder] = useState<string[] | null>(null)
 
@@ -248,63 +212,15 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
     reviewRack,
   } = useReviewMode(moveHistory, board)
 
-  // #11 review-mode instructional panel — fetch alternatives at the
-  // currently viewed move. Always enabled for finished games.
-  const reviewWordsQuery = useFindWordsAtMove({
-    gameId,
-    moveIndex: reviewMoveIndex,
-    enabled: reviewMode && game?.status === 'finished',
+  // #11 review-mode analysis (extracted to useReviewAnalysis)
+  const {
+    reviewWordsQuery, reviewPanelData, reviewPlayedKey,
+    reviewBoardBefore, reviewStagedKey, reviewStagedMove,
+    reviewPreviewTiles, stageReviewMove,
+  } = useReviewAnalysis({
+    gameId, reviewMode, reviewMoveIndex,
+    gameStatus: game?.status, moveHistory,
   })
-  // Transform the review response into the shape InstructionalModePanel expects.
-  const reviewPanelData = useMemo((): FindWordsResponse | undefined => {
-    if (!reviewWordsQuery.data) return undefined
-    return {
-      total_moves_found: reviewWordsQuery.data.total_alternatives,
-      filtered_count: reviewWordsQuery.data.showing,
-      showing: reviewWordsQuery.data.showing,
-      sort_by: 'score',
-      moves: reviewWordsQuery.data.alternatives,
-    }
-  }, [reviewWordsQuery.data])
-  // Key of the actually-played move so the panel can mark it.
-  const reviewPlayedKey = useMemo(() => {
-    const played = reviewWordsQuery.data?.played
-    if (!played?.tiles?.length) return null
-    return played.tiles.map(t => `${t.cell}:${t.letter}${t.is_blank ? '*' : ''}`).join('|')
-  }, [reviewWordsQuery.data?.played])
-  // Board state BEFORE the current review move (for alternative preview).
-  const reviewBoardBefore = useMemo(() => {
-    if (reviewMoveIndex <= 0) return createEmptyBoard()
-    return moveHistory[reviewMoveIndex - 1]?.board_snapshot ?? createEmptyBoard()
-  }, [reviewMoveIndex, moveHistory])
-  // When user clicks an alternative in review panel, stage it for preview.
-  const [reviewStagedKey, setReviewStagedKey] = useState<string | null>(null)
-  const reviewStagedMove = useMemo(() => {
-    if (!reviewStagedKey || !reviewPanelData) return null
-    return reviewPanelData.moves.find(m => instructionalMoveKey(m) === reviewStagedKey) ?? null
-  }, [reviewStagedKey, reviewPanelData])
-  // Compute placed tiles for the review preview
-  const reviewPreviewTiles = useMemo((): Map<string, Tile> => {
-    if (!reviewStagedMove) return new Map()
-    const map = new Map<string, Tile>()
-    for (const t of reviewStagedMove.tiles) {
-      const m = t.cell.toUpperCase().match(/^([A-O])(\d{1,2})$/)
-      if (!m) continue
-      const col = m[1].charCodeAt(0) - 65
-      const row = parseInt(m[2]) - 1
-      map.set(`${row},${col}`, {
-        letter: t.letter, value: t.value, isBlank: t.is_blank,
-        id: `review-${t.cell}`,
-      })
-    }
-    return map
-  }, [reviewStagedMove])
-  // Clear staged alternative when stepping to a different move.
-  useEffect(() => { setReviewStagedKey(null) }, [reviewMoveIndex])
-  const stageReviewMove = useCallback((move: FindWordsMove) => {
-    const key = instructionalMoveKey(move)
-    setReviewStagedKey(prev => prev === key ? null : key)
-  }, [])
 
   // Live turn timer
   const turnElapsed = useTurnTimer(game?.updated_at, isActive, game?.current_turn)
@@ -347,776 +263,42 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game?.current_turn, game?.status, game?.updated_at, moveCount])
 
-  const handleSquareClick = useCallback((row: number, col: number) => {
-    // If there's already a committed tile, ignore
-    if (board[row]?.[col]?.tile) return
-
-    // If clicking the same square, toggle direction
-    if (selectedSquare?.row === row && selectedSquare?.col === col) {
-      setDirection(d => d === 'across' ? 'down' : 'across')
-      return
-    }
-
-    setSelectedSquare({ row, col })
-  }, [selectedSquare, board])
-
-  const placeTileOnBoard = useCallback((row: number, col: number, tile: Tile) => {
-    if (board[row]?.[col]?.tile) return // already has committed tile
-    if (placedTiles.has(`${row},${col}`)) return // already placed this turn
-
-    // If blank tile, prompt for letter
-    if (tile.isBlank) {
-      setBlankTileTarget({ row, col, tile })
-      return
-    }
-
-    setPlacedTiles(prev => {
-      const next = new Map(prev)
-      next.set(`${row},${col}`, tile)
-      return next
-    })
-    setStagedFindWordsKey(null)
-    if (!hidePlayHint) dismissPlayHint()
-  }, [board, placedTiles, hidePlayHint, dismissPlayHint])
-
-  // #10 click-to-stage from the instructional panel. Builds a fresh placedTiles
-  // Map atomically by walking the move's tiles and pulling matching tiles out
-  // of the live rack. The staged map flows through the same recall / submit
-  // path as drag-dropped tiles — no parallel staging system. Cell notation is
-  // `A1`-style: column letter (A-O) then row number (1-15).
-  const stageMoveFromFindWords = useCallback((move: FindWordsMove) => {
-    if (!isMyTurn || !isActive) return
-    const key = instructionalMoveKey(move)
-
-    // Click the same row twice to clear.
-    if (stagedFindWordsKey === key) {
-      setPlacedTiles(new Map())
-      setSelectedSquare(null)
-      setStagedFindWordsKey(null)
-      return
-    }
-
-    // Walk the rack consuming tiles by id so we don't double-use a duplicate.
-    const rackPool = [...fullRack]
-    const next = new Map<string, Tile>()
-    for (const t of move.tiles) {
-      const cellMatch = t.cell.toUpperCase().match(/^([A-O])(\d{1,2})$/)
-      if (!cellMatch) {
-        toast.error(`Couldn't stage move (bad cell ${t.cell})`)
-        return
-      }
-      const col = cellMatch[1].charCodeAt(0) - 65
-      const row = parseInt(cellMatch[2]) - 1
-      // Skip squares that are already committed; the engine wouldn't have put
-      // a tile there, but a stale refetch could disagree with the live board.
-      if (board[row]?.[col]?.tile) {
-        toast.error("That play conflicts with the current board — refreshing")
-        return
-      }
-
-      let pickIdx: number
-      if (t.is_blank) {
-        // Blank: take any blank from the rack and overwrite its letter/value.
-        pickIdx = rackPool.findIndex(r => r.isBlank)
-      } else {
-        // Normal tile: prefer a matching non-blank, but accept a blank as
-        // fallback (the engine treats blanks as wildcards too).
-        pickIdx = rackPool.findIndex(r => !r.isBlank && r.letter === t.letter)
-        if (pickIdx === -1) pickIdx = rackPool.findIndex(r => r.isBlank)
-      }
-      if (pickIdx === -1) {
-        toast.error(`Couldn't stage move — rack changed`)
-        return
-      }
-      const rackTile = rackPool.splice(pickIdx, 1)[0]
-      const placed: Tile = t.is_blank
-        ? { ...rackTile, letter: t.letter.toUpperCase(), value: 0 }
-        : rackTile
-      next.set(`${row},${col}`, placed)
-    }
-
-    setPlacedTiles(next)
-    setSelectedSquare(null)
-    setStagedFindWordsKey(key)
-  }, [isMyTurn, isActive, fullRack, board, stagedFindWordsKey])
-
-  const handleBlankLetterChoice = useCallback((letter: string) => {
-    if (!blankTileTarget) return
-    const { row, col, tile } = blankTileTarget
-    const blankAsLetter: Tile = { ...tile, letter: letter.toUpperCase(), value: 0 }
-    setPlacedTiles(prev => {
-      const next = new Map(prev)
-      next.set(`${row},${col}`, blankAsLetter)
-      return next
-    })
-    setBlankTileTarget(null)
-  }, [blankTileTarget])
-
-  const handleDrop = useCallback((row: number, col: number, tile: Tile, source?: { row: number; col: number }) => {
-    // Reject drops onto locked (committed) tiles. Live tiles are always
-    // movable until the move is committed.
-    if (board[row]?.[col]?.tile) return
-    // No-op: dropped back on the same square it came from.
-    if (source && source.row === row && source.col === col) return
-
-    if (isSpectatingApi) {
-      // Blank tile from rack → prompt for letter assignment.
-      if (tile.isBlank && !source && !tile.letter) {
-        setSuggestionBlankTarget({ row, col, tile })
-        return
-      }
-      // Atomic move: remove from source (if any) and place at destination
-      // in a single state update. If the destination already had a live
-      // tile, it's overwritten — that tile drops out of the suggestion
-      // map and reappears in the rack via the filter.
-      setSuggestionTiles(prev => {
-        const next = new Map(prev)
-        if (source) next.delete(`${source.row},${source.col}`)
-        next.set(`${row},${col}`, tile)
-        return next
-      })
-      return
-    }
-
-    if (!isMyTurn || !isActive) return
-
-    // Blank tile from rack → prompt for letter assignment.
-    if (tile.isBlank && !source && !tile.letter) {
-      setBlankTileTarget({ row, col, tile })
-      return
-    }
-
-    setPlacedTiles(prev => {
-      const next = new Map(prev)
-      if (source) next.delete(`${source.row},${source.col}`)
-      next.set(`${row},${col}`, tile)
-      return next
-    })
-    setStagedFindWordsKey(null)
-  }, [isMyTurn, isActive, isSpectatingApi, board, setSuggestionTiles, setSuggestionBlankTarget])
-
-  // Keyboard support: type letters to place tiles (works for both own turn and suggestion mode)
-  useEffect(() => {
-    const canType = (isMyTurn && isActive) || isSpectatingApi
-    if (!canType) return
-
-    const activeSquare = isSpectatingApi ? suggestionSquare : selectedSquare
-    const activeDirection = isSpectatingApi ? suggestionDirection : direction
-    const activeTiles = isSpectatingApi ? suggestionTiles : placedTiles
-    const activeRack = isSpectatingApi ? suggestionRack : rackTiles
-
-    const handleKeyDown = (e: KeyboardEvent) => {
-      // Blank tile letter selection (own turn)
-      if (!isSpectatingApi && blankTileTarget) {
-        if (/^[a-zA-Z]$/.test(e.key)) {
-          handleBlankLetterChoice(e.key)
-        } else if (e.key === 'Escape') {
-          setBlankTileTarget(null)
-        }
-        return
-      }
-      // Blank tile letter selection (suggestion mode)
-      if (isSpectatingApi && suggestionBlankTarget) {
-        if (/^[a-zA-Z]$/.test(e.key)) {
-          handleSuggestionBlankChoice(e.key)
-        } else if (e.key === 'Escape') {
-          setSuggestionBlankTarget(null)
-        }
-        return
-      }
-
-      if (e.key === 'ArrowDown' || e.key === 'ArrowRight') {
-        e.preventDefault()
-        if (isSpectatingApi) {
-          setSuggestionDirection(e.key === 'ArrowDown' ? 'down' : 'across')
-        } else {
-          setDirection(e.key === 'ArrowDown' ? 'down' : 'across')
-        }
-        return
-      }
-
-      if (e.key === 'Backspace') {
-        e.preventDefault()
-        const entries = Array.from(activeTiles.entries())
-        if (entries.length > 0) {
-          const lastKey = entries[entries.length - 1][0]
-          if (isSpectatingApi) {
-            setSuggestionTiles(prev => {
-              const next = new Map(prev)
-              next.delete(lastKey)
-              return next
-            })
-            const [r, c] = lastKey.split(',').map(Number)
-            setSuggestionSquare({ row: r, col: c })
-          } else {
-            setPlacedTiles(prev => {
-              const next = new Map(prev)
-              next.delete(lastKey)
-              return next
-            })
-            const [r, c] = lastKey.split(',').map(Number)
-            setSelectedSquare({ row: r, col: c })
-          }
-        }
-        return
-      }
-
-      if (e.key === 'Enter') {
-        e.preventDefault()
-        if (!isSpectatingApi && placedTiles.size > 0) handleSubmitMove()
-        return
-      }
-
-      if (e.key === 'Escape') {
-        e.preventDefault()
-        if (isSpectatingApi) {
-          setSuggestionTiles(new Map())
-          setSuggestionSquare(null)
-        } else {
-          handleRecall()
-        }
-        return
-      }
-
-      if (!activeSquare) return
-
-      const letter = e.key.toUpperCase()
-      if (!/^[A-Z]$/.test(letter)) return
-      e.preventDefault()
-
-      // Find a matching tile in the rack
-      const matchingTile = activeRack.find(t => t.letter === letter)
-      const tileToPlace = matchingTile || activeRack.find(t => t.isBlank)
-      if (!tileToPlace) return
-
-      const key = `${activeSquare.row},${activeSquare.col}`
-      if (board[activeSquare.row]?.[activeSquare.col]?.tile) return
-      if (activeTiles.has(key)) return
-
-      if (isSpectatingApi) {
-        const placed = tileToPlace.isBlank ? { ...tileToPlace, letter, value: 0 } : tileToPlace
-        setSuggestionTiles(prev => {
-          const next = new Map(prev)
-          next.set(key, placed)
-          return next
-        })
-      } else {
-        if (tileToPlace.isBlank) {
-          const blankAsLetter: Tile = { ...tileToPlace, letter, value: 0 }
-          setPlacedTiles(prev => {
-            const next = new Map(prev)
-            next.set(key, blankAsLetter)
-            return next
-          })
-        } else {
-          placeTileOnBoard(activeSquare.row, activeSquare.col, tileToPlace)
-        }
-      }
-
-      // Advance cursor
-      let nextRow = activeSquare.row
-      let nextCol = activeSquare.col
-      do {
-        if (activeDirection === 'across') nextCol++
-        else nextRow++
-      } while (
-        nextRow < 15 && nextCol < 15 &&
-        (board[nextRow]?.[nextCol]?.tile || activeTiles.has(`${nextRow},${nextCol}`))
-      )
-      if (nextRow < 15 && nextCol < 15) {
-        if (isSpectatingApi) {
-          setSuggestionSquare({ row: nextRow, col: nextCol })
-        } else {
-          setSelectedSquare({ row: nextRow, col: nextCol })
-        }
-      }
-    }
-
-    window.addEventListener('keydown', handleKeyDown)
-    return () => window.removeEventListener('keydown', handleKeyDown)
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [isMyTurn, isActive, isSpectatingApi, selectedSquare, suggestionSquare, direction, suggestionDirection, rackTiles, suggestionRack, placedTiles, suggestionTiles, board, blankTileTarget])
-
-  const handleRecall = () => {
-    setPlacedTiles(new Map())
-    setSelectedSquare(null)
-    setStagedFindWordsKey(null)
-  }
-
-  // Clear the instructional highlight on any committed move (the staged play
-  // was either submitted or invalidated by the new board state).
-  useEffect(() => {
-    setStagedFindWordsKey(null)
-  }, [moveCount])
-
-  const handlePickupTile = useCallback((row: number, col: number, insertIndex?: number) => {
-    const key = `${row},${col}`
-    if (isSpectatingApi && suggestionTiles.has(key)) {
-      setSuggestionTiles(prev => {
-        const next = new Map(prev)
-        next.delete(key)
-        return next
-      })
-      return
-    }
-    const returningTile = placedTiles.get(key)
-    if (!returningTile) return
-    setPlacedTiles(prev => {
-      const next = new Map(prev)
-      next.delete(key)
-      return next
-    })
-    setStagedFindWordsKey(null)
-    // When the caller requested a specific rack insertion position (e.g. a
-    // board → rack drop with a visible drop indicator), update rackOrder
-    // so the returning tile lands exactly where the user pointed.
-    if (insertIndex !== undefined) {
-      const baseIds = rackTiles.map(t => t.id)
-      const at = Math.max(0, Math.min(insertIndex, baseIds.length))
-      baseIds.splice(at, 0, returningTile.id)
-      setRackOrder(baseIds)
-    }
-  }, [placedTiles, isSpectatingApi, suggestionTiles, rackTiles])
-
-  const handleSubmitMove = async () => {
-    if (!game || !isMyTurn || placedTiles.size === 0) return
-    setSubmitting(true)
-
-    try {
-      const placed: PlacedTile[] = Array.from(placedTiles.entries()).map(([key, tile]) => {
-        const [row, col] = key.split(',').map(Number)
-        return { row, col, tile }
-      })
-
-      const result = validateAndScoreMove(board, placed, isFirstMove)
-      if (!result.valid) {
-        toast.error(result.error || 'Invalid move')
-        setSubmitting(false)
-        return
-      }
-
-      // Validate words against dictionary when playing against computer
-      if (game.has_computer && result.words.length > 0) {
-        try {
-          const wordStrings = result.words.map(w => w.word)
-          const { data: valData, error: valErr } = await supabase.functions.invoke('validate-word', {
-            body: { words: wordStrings },
-          })
-          if (valErr) throw valErr
-          const invalid = wordStrings.filter(w => !valData.results[w])
-          if (invalid.length > 0) {
-            toast.error(`Not in dictionary: ${invalid.join(', ')}`)
-            setSubmitting(false)
-            return
-          }
-        } catch {
-          // If validation service is down, allow the move rather than blocking play
-          console.warn('Word validation service unavailable, allowing move')
-        }
-      }
-
-      // Update board
-      const newBoard = board.map(row => row.map(cell => ({ ...cell })))
-      for (const pt of placed) {
-        newBoard[pt.row][pt.col] = {
-          tile: pt.tile,
-          bonus: newBoard[pt.row][pt.col].bonus,
-          isNew: false,
-        }
-      }
-
-      // Draw new tiles
-      const tileBag = (game.tile_bag ?? []) as Tile[]
-      const { drawn, remaining } = drawTiles(tileBag, placed.length)
-      const newRack = [...rackTiles, ...drawn]
-
-      // Advance turn
-      const turnOrder = game.turn_order as string[]
-      const nextIndex = (game.turn_index + 1) % turnOrder.length
-      const nextPlayer = turnOrder[nextIndex]
-
-      // Build move history entry
-      const moveHistoryEntry = {
-        player_id: userId,
-        player_name: myPlayer?.profiles?.display_name ?? 'Player',
-        type: 'play',
-        tiles: placed,
-        words: result.words,
-        score: result.totalScore,
-        rack_before: fullRack,
-        rack_snapshot: fullRack.map(t => ({ letter: t.letter, value: t.value, isBlank: t.isBlank })),
-        board_snapshot: newBoard,
-        timestamp: new Date().toISOString(),
-      }
-      const updatedHistory = [...(game.move_history ?? []), moveHistoryEntry]
-
-      // Update game state
-      const { error: gameErr } = await supabase
-        .from('games')
-        .update({
-          board: newBoard,
-          tile_bag: remaining,
-          current_turn: nextPlayer,
-          turn_index: nextIndex,
-          consecutive_passes: 0,
-          last_move: {
-            player_id: userId,
-            type: 'play',
-            tiles: placed,
-            words: result.words,
-            score: result.totalScore,
-          },
-          move_history: updatedHistory,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', gameId)
-      if (gameErr) throw gameErr
-
-      // Update player score and rack
-      const myNewScore = (myPlayer?.score ?? 0) + result.totalScore
-      const { error: playerErr } = await supabase
-        .from('game_players')
-        .update({
-          score: myNewScore,
-          rack: newRack,
-        })
-        .eq('game_id', gameId)
-        .eq('player_id', userId)
-      if (playerErr) throw playerErr
-
-      // Check if game is over: player emptied rack and bag is empty
-      const gameOver = newRack.length === 0 && remaining.length === 0
-      if (gameOver) {
-        // End-game scoring: deduct remaining tile values from other players, add sum to this player
-        let bonusFromOthers = 0
-
-        // Human opponents
-        const otherHumans = players.filter(p => p.player_id !== userId)
-        for (const op of otherHumans) {
-          const opRack = (op.rack ?? []) as Tile[]
-          const rackValue = opRack.reduce((sum, t) => sum + t.value, 0)
-          bonusFromOthers += rackValue
-          await supabase.from('game_players').update({
-            score: Math.max(0, op.score - rackValue),
-          }).eq('game_id', gameId).eq('player_id', op.player_id)
-        }
-
-        // Computer/API players — update the computer_players JSON on the game row
-        const adjustedComputerPlayers = computerPlayers.map(cp => {
-          const cpRack = (cp.rack ?? []) as Tile[]
-          const rackValue = cpRack.reduce((sum, t) => sum + t.value, 0)
-          bonusFromOthers += rackValue
-          return { ...cp, score: Math.max(0, cp.score - rackValue) }
-        })
-
-        const finalScore = myNewScore + bonusFromOthers
-        await supabase.from('game_players').update({ score: finalScore })
-          .eq('game_id', gameId).eq('player_id', userId)
-
-        // Find winner (highest score) — include both human and computer/API players
-        const allScores: { id: string; score: number }[] = [
-          { id: userId, score: finalScore },
-          ...otherHumans.map(op => {
-            const opRack = (op.rack ?? []) as Tile[]
-            const rackValue = opRack.reduce((sum, t) => sum + t.value, 0)
-            return { id: op.player_id, score: Math.max(0, op.score - rackValue) }
-          }),
-          ...adjustedComputerPlayers.map(cp => ({ id: cp.id, score: cp.score })),
-        ]
-        const winner = allScores.reduce((best, p) => p.score > best.score ? p : best)
-
-        await supabase.from('games').update({
-          status: 'finished',
-          winner: winner.id,
-          computer_players: adjustedComputerPlayers,
-          updated_at: new Date().toISOString(),
-        }).eq('id', gameId)
-      }
-
-      // Record move
-      await supabase.from('game_moves').insert({
-        game_id: gameId,
-        player_id: userId,
-        move_type: 'play',
-        tiles_placed: placed,
-        words_formed: result.words.map(w => w.word),
-        score: result.totalScore,
-      })
-
-      if (gameOver) {
-        toast.success(`Game over! You played out — ${result.words.map(w => w.word).join(', ')} for ${result.totalScore} points!`)
-      } else {
-        toast.success(`${result.words.map(w => w.word).join(', ')} \u2014 ${result.totalScore} points!`)
-      }
-      setPlacedTiles(new Map())
-      setSelectedSquare(null)
-      queryClient.invalidateQueries({ queryKey: ['game', gameId] })
-      queryClient.invalidateQueries({ queryKey: ['game_moves', gameId] })
-    } catch (err) {
-      toast.error('Failed to submit move')
-      console.error(err)
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const handlePass = async () => {
-    if (!game || !isMyTurn) return
-
-    if (isExchangeMode && exchangeSelection.size > 0) {
-      // Exchange tiles
-      setSubmitting(true)
-      try {
-        const tileBag = (game.tile_bag ?? []) as Tile[]
-        if (tileBag.length < exchangeSelection.size) {
-          toast.error('Not enough tiles in the bag to exchange')
-          setSubmitting(false)
-          return
-        }
-
-        const tilesToExchange = fullRack.filter(t => exchangeSelection.has(t.id))
-        const remainingRack = fullRack.filter(t => !exchangeSelection.has(t.id))
-        const { drawn, remaining } = drawTiles(tileBag, tilesToExchange.length)
-        const newBag = [...remaining, ...tilesToExchange]
-        // Shuffle the returned tiles back in
-        for (let i = newBag.length - 1; i > 0; i--) {
-          const j = Math.floor(Math.random() * (i + 1));
-          [newBag[i], newBag[j]] = [newBag[j], newBag[i]]
-        }
-
-        const turnOrder = game.turn_order as string[]
-        const nextIndex = (game.turn_index + 1) % turnOrder.length
-
-        const exchangeHistoryEntry = {
-          player_id: userId,
-          player_name: myPlayer?.profiles?.display_name ?? 'Player',
-          type: 'exchange',
-          rack_before: fullRack,
-          board_snapshot: board,
-          timestamp: new Date().toISOString(),
-        }
-
-        await supabase.from('games').update({
-          tile_bag: newBag,
-          current_turn: turnOrder[nextIndex],
-          turn_index: nextIndex,
-          consecutive_passes: game.consecutive_passes + 1,
-          move_history: [...(game.move_history ?? []), exchangeHistoryEntry],
-          updated_at: new Date().toISOString(),
-        }).eq('id', gameId)
-
-        await supabase.from('game_players').update({
-          rack: [...remainingRack, ...drawn],
-        }).eq('game_id', gameId).eq('player_id', userId)
-
-        await supabase.from('game_moves').insert({
-          game_id: gameId,
-          player_id: userId,
-          move_type: 'exchange',
-          score: 0,
-        })
-
-        toast.success(`Exchanged ${tilesToExchange.length} tile(s)`)
-        setExchangeSelection(new Set())
-        setIsExchangeMode(false)
-        queryClient.invalidateQueries({ queryKey: ['game', gameId] })
-      } catch {
-        toast.error('Failed to exchange tiles')
-      } finally {
-        setSubmitting(false)
-      }
-      return
-    }
-
-    // Simple pass
-    setSubmitting(true)
-    try {
-      const turnOrder = game.turn_order as string[]
-      const nextIndex = (game.turn_index + 1) % turnOrder.length
-      const newConsecutivePasses = game.consecutive_passes + 1
-
-      // Check if game should end (all players passed consecutively)
-      const isGameOver = newConsecutivePasses >= turnOrder.length * 2
-
-      const passHistoryEntry = {
-        player_id: userId,
-        player_name: myPlayer?.profiles?.display_name ?? 'Player',
-        type: 'pass',
-        rack_before: fullRack,
-        rack_snapshot: fullRack.map(t => ({ letter: t.letter, value: t.value, isBlank: t.isBlank })),
-        board_snapshot: board,
-        timestamp: new Date().toISOString(),
-      }
-
-      const updates: Record<string, unknown> = {
-        current_turn: turnOrder[nextIndex],
-        turn_index: nextIndex,
-        consecutive_passes: newConsecutivePasses,
-        move_history: [...(game.move_history ?? []), passHistoryEntry],
-        updated_at: new Date().toISOString(),
-      }
-
-      if (isGameOver) {
-        updates.status = 'finished'
-        // Determine winner by score — include both human and computer/API players
-        const allPlayers = game.game_players ?? []
-        const allScores: { id: string; score: number }[] = [
-          ...allPlayers.map(p => ({ id: p.player_id, score: p.score })),
-          ...computerPlayers.map(cp => ({ id: cp.id, score: cp.score })),
-        ]
-        const winner = allScores.reduce((best, p) => p.score > best.score ? p : best, allScores[0])
-        updates.winner = winner.id
-      }
-
-      await supabase.from('games').update(updates).eq('id', gameId)
-
-      await supabase.from('game_moves').insert({
-        game_id: gameId,
-        player_id: userId,
-        move_type: 'pass',
-        score: 0,
-      })
-
-      if (isGameOver) {
-        toast.info('Game over! All players passed.')
-      } else {
-        toast.info('Turn passed')
-      }
-      queryClient.invalidateQueries({ queryKey: ['game', gameId] })
-    } catch {
-      toast.error('Failed to pass')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const handleChallenge = async () => {
-    if (!game) return
-    const lastMove = game.last_move as { player_id: string; words: { word: string }[]; score: number; tiles: PlacedTile[] } | null
-    if (!lastMove || lastMove.player_id === userId) {
-      toast.error('Nothing to challenge — you can only challenge the previous player\'s move')
-      return
-    }
-
-    setSubmitting(true)
-    try {
-      const wordsToCheck = lastMove.words.map(w => typeof w === 'string' ? w : w.word)
-      const { data, error } = await supabase.functions.invoke('validate-word', {
-        body: { words: wordsToCheck },
-      })
-
-      if (error) throw error
-
-      const results = data.results as Record<string, boolean>
-      const invalidWords = Object.entries(results).filter(([, valid]) => !valid).map(([word]) => word)
-
-      if (invalidWords.length > 0) {
-        // Challenge succeeds — reverse the move
-        // Remove tiles from board, restore previous state
-        const newBoard = board.map(row => row.map(cell => ({ ...cell })))
-        for (const pt of lastMove.tiles) {
-          newBoard[pt.row][pt.col] = {
-            tile: null,
-            bonus: newBoard[pt.row][pt.col].bonus,
-            isNew: false,
-          }
-        }
-
-        // Deduct score from challenged player
-        const challengedPlayer = game.game_players?.find(p => p.player_id === lastMove.player_id)
-        if (challengedPlayer) {
-          await supabase.from('game_players').update({
-            score: Math.max(0, challengedPlayer.score - lastMove.score),
-          }).eq('game_id', gameId).eq('player_id', lastMove.player_id)
-        }
-
-        await supabase.from('games').update({
-          board: newBoard,
-          updated_at: new Date().toISOString(),
-        }).eq('id', gameId)
-
-        await supabase.from('game_moves').insert({
-          game_id: gameId,
-          player_id: userId,
-          move_type: 'challenge_success',
-          words_formed: invalidWords,
-          score: 0,
-        })
-
-        toast.success(`Challenge successful! "${invalidWords.join(', ')}" ${invalidWords.length === 1 ? 'is' : 'are'} not valid. Move reversed!`)
-      } else {
-        // Challenge fails — challenger loses their turn
-        const turnOrder = game.turn_order as string[]
-        const nextIndex = (game.turn_index + 1) % turnOrder.length
-
-        await supabase.from('games').update({
-          current_turn: turnOrder[nextIndex],
-          turn_index: nextIndex,
-          updated_at: new Date().toISOString(),
-        }).eq('id', gameId)
-
-        await supabase.from('game_moves').insert({
-          game_id: gameId,
-          player_id: userId,
-          move_type: 'challenge_fail',
-          words_formed: wordsToCheck,
-          score: 0,
-        })
-
-        toast.error(`Challenge failed! All words are valid. You lose your turn.`)
-      }
-
-      queryClient.invalidateQueries({ queryKey: ['game', gameId] })
-      queryClient.invalidateQueries({ queryKey: ['game_moves', gameId] })
-    } catch {
-      toast.error('Failed to validate challenge')
-    } finally {
-      setSubmitting(false)
-    }
-  }
-
-  const toggleExchangeMode = () => {
-    setIsExchangeMode(!isExchangeMode)
-    setExchangeSelection(new Set())
-    setPlacedTiles(new Map())
-    setSelectedSquare(null)
-  }
-
-  const handleRackTileClick = (tile: Tile) => {
-    if (isExchangeMode) {
-      setExchangeSelection(prev => {
-        const next = new Set(prev)
-        if (next.has(tile.id)) next.delete(tile.id)
-        else next.add(tile.id)
-        return next
-      })
-      return
-    }
-
-    // If spectating, delegate to suggestion handler
-    if (isSpectatingApi) {
-      handleSuggestionTileClick(tile)
-      return
-    }
-
-    // If a square is selected, place the tile there
-    if (selectedSquare && isMyTurn) {
-      placeTileOnBoard(selectedSquare.row, selectedSquare.col, tile)
-      // Advance cursor
-      let nextRow = selectedSquare.row
-      let nextCol = selectedSquare.col
-      do {
-        if (direction === 'across') nextCol++
-        else nextRow++
-      } while (
-        nextRow < 15 && nextCol < 15 &&
-        (board[nextRow]?.[nextCol]?.tile || placedTiles.has(`${nextRow},${nextCol}`))
-      )
-      if (nextRow < 15 && nextCol < 15) {
-        setSelectedSquare({ row: nextRow, col: nextCol })
-      }
-    }
-  }
+  // Move mutations (extracted to useMoveMutations)
+  const {
+    submitting,
+    handleSubmitMove,
+    handlePass,
+    handleChallenge,
+    toggleExchangeMode,
+  } = useMoveMutations({
+    gameId, userId, game, board, isFirstMove, isMyTurn,
+    fullRack, rackTiles, computerPlayers, placedTiles,
+    setPlacedTiles, setSelectedSquare, setStagedFindWordsKey,
+    isExchangeMode, setIsExchangeMode, exchangeSelection, setExchangeSelection,
+  })
+
+  // Board interactions (extracted to useBoardInteractions)
+  const {
+    blankTileTarget,
+    handleSquareClick,
+    stageMoveFromFindWords,
+    handleBlankLetterChoice,
+    handleDrop,
+    handleRecall,
+    handlePickupTile,
+    handleRackTileClick,
+  } = useBoardInteractions({
+    board, isMyTurn, isActive, isSpectatingApi, moveCount, fullRack, rackTiles,
+    placedTiles, setPlacedTiles, selectedSquare, setSelectedSquare,
+    direction, setDirection, stagedFindWordsKey, setStagedFindWordsKey,
+    hidePlayHint, dismissPlayHint, isExchangeMode, setExchangeSelection,
+    rackOrder, setRackOrder,
+    suggestionSquare, setSuggestionSquare, suggestionDirection,
+    setSuggestionDirection, suggestionTiles, setSuggestionTiles,
+    suggestionBlankTarget, setSuggestionBlankTarget,
+    handleSuggestionTileClick,
+    handleSuggestionBlankChoice, suggestionRack, handleSubmitMove,
+  })
 
   if (isLoading) {
     return (
@@ -1351,109 +533,42 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
 
         {/* Board + Rack (on desktop rack is inside this column; on mobile it's a fixed bottom pane) */}
         <div className={cn('flex flex-col items-center', isMobile ? 'gap-2 w-full' : 'gap-4')}>
-          {/* Game status */}
-          {game.status === 'waiting' && (
-            <div className="flex flex-col items-center gap-3 bg-amber-900/20 px-6 py-4 rounded-lg">
-              <div className="text-amber-400 text-sm">
-                {players.length}/4 players joined
-              </div>
-              {game.created_by === userId && players.length >= 2 ? (
-                <Button
-                  onClick={async () => {
-                    try {
-                      await startGame.mutateAsync(gameId)
-                      toast.success('Game started!')
-                      queryClient.invalidateQueries({ queryKey: ['game', gameId] })
-                    } catch {
-                      toast.error('Failed to start game')
-                    }
-                  }}
-                  disabled={startGame.isPending}
-                  className="bg-green-700 hover:bg-green-600 text-white font-semibold px-8 py-5 text-lg"
-                >
-                  <Play className="h-5 w-5 mr-2" />
-                  {startGame.isPending ? 'Starting...' : 'Start Game!'}
-                </Button>
-              ) : game.created_by === userId ? (
-                <div className="text-amber-400 text-xs">Need at least 2 players to start</div>
-              ) : (
-                <div className="text-amber-400 text-xs">Waiting for the game creator to start...</div>
-              )}
-            </div>
-          )}
-          {game.status === 'finished' && !reviewMode && (() => {
-            // Determine actual winner by highest score
-            const allPlayerScores = [
-              ...players.map(p => ({ name: p.profiles.display_name, score: p.score })),
-              ...computerPlayers.map(cp => ({ name: cp.name, score: cp.score })),
-            ]
-            const actualWinner = allPlayerScores.reduce((best, p) => p.score > best.score ? p : best, allPlayerScores[0])
-            const isTie = allPlayerScores.filter(p => p.score === actualWinner?.score).length > 1
-            return (
-            <div className="flex flex-col items-center gap-2">
-              <div className="px-8 py-3 rounded-lg text-center border border-amber-600/40" style={{ background: 'linear-gradient(135deg, #5c3a1e 0%, #4a2e15 100%)', boxShadow: '0 0 0 2px #6b4226, 0 4px 16px rgba(0,0,0,0.3)' }}>
-                <div className="text-xl font-bold text-amber-300" style={{ fontFamily: "'Playfair Display', serif" }}>Game Over!</div>
-                <div className="text-sm mt-1 text-amber-200/80">
-                  {isTie ? 'Tie!' : `Winner: ${actualWinner?.name ?? 'Unknown'}`}
-                </div>
-              </div>
-              <Button
-                onClick={() => {
-                  setReviewMode(true)
-                  setReviewMoveIndex(moveHistory.length - 1)
-                }}
-                className="gap-1.5 bg-amber-900/60 hover:bg-amber-800/70 text-amber-200 border border-amber-700/40"
-                size="sm"
-              >
-                <History className="h-4 w-4" />
-                Review Game
-              </Button>
-            </div>
-            )
-          })()}
-          {isActive && !isMyTurn && !isComputerTurn && !isApiTurn && (
-            <div className={cn('text-amber-300 font-medium rounded-lg bg-amber-900/20', isMobile ? 'text-xs px-3 py-1' : 'text-sm px-4 py-2')}>
-              Waiting for {currentTurnPlayer?.profiles.display_name} to play...
-            </div>
-          )}
-          {isActive && isComputerTurn && currentComputerPlayer && (
-            <div className={cn('text-amber-300 font-medium animate-pulse rounded-lg bg-amber-900/20', isMobile ? 'text-xs px-3 py-1' : 'text-sm px-4 py-2')}>
-              {currentComputerPlayer.name} is thinking...
-            </div>
-          )}
-          {isActive && isApiTurn && currentApiPlayer && (
-            <div className={cn('text-purple-300 font-medium animate-pulse rounded-lg bg-purple-900/15', isMobile ? 'text-xs px-3 py-1' : 'text-sm px-4 py-2')}>
-              Waiting for {currentApiPlayer.name} to play...
-              {!isMobile && isSpectatingApi && <span className="text-amber-400/70 text-xs block mt-1 animate-none">You can suggest a move while you wait</span>}
-            </div>
-          )}
-          {findWordsEnabled && !hideInstructionalBanner && (
-            <div className="flex items-center gap-1 rounded-lg bg-sky-900/30 border border-sky-700/40 overflow-hidden">
-              <button
-                type="button"
-                onClick={() => setShowInstructional(v => !v)}
-                className={cn('flex items-center gap-2 text-sky-200 font-medium hover:bg-sky-900/40 transition-colors', isMobile ? 'text-[11px] px-2 py-1' : 'text-xs px-3 py-1.5')}
-                title="Toggle the word list. Hide it to find your own best play, then show it to check your work."
-              >
-                <BookOpen className="h-3.5 w-3.5 shrink-0" />
-                <span>
-                  {isMobile
-                    ? (showInstructional ? 'Word list open' : 'Show word list')
-                    : <>Instructional mode — {showInstructional ? 'word list open (click to hide)' : 'click to show the word list'}</>
-                  }
-                </span>
-              </button>
-              <button
-                type="button"
-                onClick={() => setHideInstructionalBanner(true)}
-                className="text-sky-300/70 hover:text-sky-100 hover:bg-sky-900/50 px-1.5 py-1.5 transition-colors"
-                aria-label="Dismiss instructional mode banner"
-                title="Hide this banner (the toggle stays in the Scoreboard)"
-              >
-                <X className="h-3.5 w-3.5" />
-              </button>
-            </div>
-          )}
+          <GameStatusBanners
+            gameStatus={game.status}
+            players={players}
+            computerPlayers={computerPlayers}
+            isActive={isActive}
+            isMyTurn={isMyTurn}
+            isComputerTurn={isComputerTurn}
+            isApiTurn={isApiTurn}
+            isSpectatingApi={isSpectatingApi}
+            reviewMode={reviewMode}
+            isMobile={isMobile}
+            currentTurnPlayer={currentTurnPlayer}
+            currentComputerPlayer={currentComputerPlayer}
+            currentApiPlayer={currentApiPlayer}
+            onStartReview={() => {
+              setReviewMode(true)
+              setReviewMoveIndex(moveHistory.length - 1)
+            }}
+            isCreator={game.created_by === userId}
+            canStart={players.length >= 2}
+            startPending={startGame.isPending}
+            onStart={async () => {
+              try {
+                await startGame.mutateAsync(gameId)
+                toast.success('Game started!')
+                queryClient.invalidateQueries({ queryKey: ['game', gameId] })
+              } catch {
+                toast.error('Failed to start game')
+              }
+            }}
+            findWordsEnabled={findWordsEnabled}
+            showInstructional={showInstructional}
+            setShowInstructional={setShowInstructional}
+            hideInstructionalBanner={hideInstructionalBanner}
+            setHideInstructionalBanner={setHideInstructionalBanner}
+          />
           {/* Blank tile chooser */}
           {blankTileTarget && <BlankTileDialog onChoose={handleBlankLetterChoice} />}
           {suggestionBlankTarget && <BlankTileDialog onChoose={handleSuggestionBlankChoice} />}

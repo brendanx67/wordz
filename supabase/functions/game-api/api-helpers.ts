@@ -1,5 +1,6 @@
 import { createClient } from "jsr:@supabase/supabase-js@2";
 import type { Tile } from "./_shared/gameConstants.ts";
+import type { GeneratedMove } from "./_shared/moveGenerator.ts";
 import type { TrieNode } from "./_shared/trie.ts";
 import { buildTrie } from "./_shared/trie.ts";
 
@@ -87,6 +88,40 @@ export function normalizeTile(
 
 export function cellNotation(row: number, col: number): string {
   return `${String.fromCharCode(65 + col)}${row + 1}`;
+}
+
+/** Format tiles from a move entry (row/col + Tile) into the API shape. */
+export function formatTiles(
+  tiles: Array<{ row: number; col: number; tile: Tile }>,
+): Array<{ cell: string; letter: string; value: number; is_blank: boolean }> {
+  return tiles.map((t) => ({
+    cell: cellNotation(t.row, t.col),
+    letter: t.tile.letter,
+    value: t.tile.value,
+    is_blank: t.tile.isBlank,
+  }));
+}
+
+/** Format a GeneratedMove into the API response shape. Optionally computes
+ *  `rack_leave` when a rack is provided for leave calculation. */
+export function formatMoveResult(
+  move: GeneratedMove,
+  rackForLeave?: Tile[],
+) {
+  const result: Record<string, unknown> = {
+    tiles: formatTiles(move.tiles),
+    words: move.words.map((w) => ({ word: w.word, score: w.score })),
+    total_score: move.totalScore,
+    tiles_used: move.tiles.length,
+    is_bingo: move.tiles.length === 7,
+  };
+  if (rackForLeave) {
+    result.rack_leave = rackForLeave
+      .filter((rt: Tile) => !move.tiles.some((mt) => mt.tile.id === rt.id))
+      .map((rt: Tile) => rt.letter)
+      .join("");
+  }
+  return result;
 }
 
 // ─── AUTH ────────────────────────────────────────────────────────────────────
