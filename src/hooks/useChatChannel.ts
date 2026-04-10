@@ -24,6 +24,7 @@ export interface ChatChannel {
   description: string | null
   visibility: 'public' | 'private' | 'direct'
   last_read_at: string | null
+  message_count: number
 }
 
 export interface ChatMessage {

@@ -404,6 +404,13 @@ export type Database = {
       }
     }
     Functions: {
+      chat_message_counts: {
+        Args: { channel_ids: string[] }
+        Returns: {
+          channel_id: string
+          cnt: number
+        }[]
+      }
       find_shared_active_game: {
         Args: { user_a: string; user_b: string }
         Returns: string

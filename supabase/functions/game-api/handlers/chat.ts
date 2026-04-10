@@ -160,6 +160,22 @@ export async function handleListChannels(req: Request): Promise<Response> {
     }
   }
 
+  // Fetch message counts for every channel in a single query so the frontend
+  // can hide channels with no content.
+  const allChannelIds = [
+    ...(publicChannels ?? []).map((c) => c.id),
+    ...privateChannels.map((c) => c.id),
+  ];
+  const messageCounts = new Map<string, number>();
+  if (allChannelIds.length > 0) {
+    const { data: countRows } = await supabase.rpc("chat_message_counts", {
+      channel_ids: allChannelIds,
+    });
+    for (const row of (countRows ?? []) as { channel_id: string; cnt: number }[]) {
+      messageCounts.set(row.channel_id, row.cnt);
+    }
+  }
+
   const channels = [...(publicChannels ?? []), ...privateChannels].map((c) => ({
     id: c.id,
     name: c.name,
@@ -170,6 +186,7 @@ export async function handleListChannels(req: Request): Promise<Response> {
     description: c.description,
     visibility: c.visibility,
     last_read_at: lastReadByChannel.get(c.id) ?? null,
+    message_count: messageCounts.get(c.id) ?? 0,
   }));
 
   return jsonOk({ channels });

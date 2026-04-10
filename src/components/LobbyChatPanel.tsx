@@ -1,4 +1,5 @@
 import { useState, useMemo, useEffect } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import {
   Tooltip,
@@ -8,7 +9,8 @@ import {
 } from '@/components/ui/tooltip'
 import { MessageSquare, ChevronDown, ChevronUp, ExternalLink } from 'lucide-react'
 import { useChatChannels, type ChatChannel } from '@/hooks/useChatChannel'
-import { useMyGames, resolvePlayerName, type ComputerPlayer } from '@/hooks/useGames'
+import { resolvePlayerName, type ComputerPlayer } from '@/hooks/useGames'
+import { supabase } from '@/lib/supabase'
 import ChatChannelView from './ChatChannelView'
 
 interface LobbyChatPanelProps {
@@ -24,12 +26,10 @@ function channelSortKey(c: ChatChannel): number {
   return 3
 }
 
-// Subset of GameRow that we need to render game-channel labels and tooltips.
-// Comes from useMyGames, which only fetches active/waiting games — finished
-// games fall back to the short-id label.
 interface GameInfo {
-  title: string // "Word Player 1 vs Computer 1 (Easy)"
+  title: string // "Alice vs Computer 1 (Easy)"
   startedAt: string // localized date-time
+  startedAtIso: string // ISO timestamp for formatting
   status: string
 }
 
@@ -60,32 +60,60 @@ function buildGameInfo(game: {
   return {
     title,
     startedAt: new Date(game.created_at).toLocaleString(),
+    startedAtIso: game.created_at,
     status: game.status,
   }
+}
+
+/** Fetch game info for specific game IDs — works for any status (active,
+ *  finished, waiting). Only enabled when there are IDs to fetch. */
+function useGameInfoByIds(gameIds: string[]) {
+  return useQuery({
+    queryKey: ['games', 'chat-info', ...gameIds.sort()],
+    enabled: gameIds.length > 0,
+    queryFn: async () => {
+      const { data } = await supabase
+        .from('games')
+        .select('id, status, created_at, computer_players, game_players(player_id, profiles(display_name))')
+        .in('id', gameIds)
+      const m = new Map<string, GameInfo>()
+      for (const g of data ?? []) m.set(g.id, buildGameInfo(g))
+      return m
+    },
+    staleTime: 60_000,
+  })
 }
 
 export default function LobbyChatPanel({ userId, onOpenGame }: LobbyChatPanelProps) {
   const [expanded, setExpanded] = useState(false)
   const { data: channels, isLoading } = useChatChannels()
-  const { data: myGames } = useMyGames(userId)
   const [selectedName, setSelectedName] = useState<string>('suggestions')
 
-  // Map game id → enriched info so we can show real titles + tooltips for
-  // each game-* channel instead of just the short hash.
-  const gameInfoById = useMemo(() => {
-    const m = new Map<string, GameInfo>()
-    for (const g of myGames ?? []) m.set(g.id, buildGameInfo(g))
-    return m
-  }, [myGames])
+  // Extract game IDs from game-* channel names so we can fetch info for all
+  // of them (including finished games, which useMyGames doesn't cover).
+  const gameChannelIds = useMemo(() => {
+    if (!channels) return []
+    return channels
+      .filter(c => c.name.startsWith('game-'))
+      .map(c => c.name.slice('game-'.length))
+  }, [channels])
+
+  const { data: gameInfoById } = useGameInfoByIds(gameChannelIds)
 
   const sortedChannels = useMemo(() => {
     if (!channels) return []
-    return [...channels].sort((a, b) => {
-      const ka = channelSortKey(a)
-      const kb = channelSortKey(b)
-      if (ka !== kb) return ka - kb
-      return a.display_name.localeCompare(b.display_name)
-    })
+    return [...channels]
+      // Hide game channels that have zero messages (stale/abandoned games)
+      .filter(c => {
+        if (!c.name.startsWith('game-')) return true
+        return c.message_count > 0
+      })
+      .sort((a, b) => {
+        const ka = channelSortKey(a)
+        const kb = channelSortKey(b)
+        if (ka !== kb) return ka - kb
+        return a.display_name.localeCompare(b.display_name)
+      })
   }, [channels])
 
   // If the selected channel disappears (e.g. on initial load before the
@@ -99,12 +127,8 @@ export default function LobbyChatPanel({ userId, onOpenGame }: LobbyChatPanelPro
 
   const totalUnread = useMemo(() => {
     if (!channels) return 0
-    // We don't have per-message counts at the channel-list level; the most
-    // honest signal we have is "channels with last_read_at older than the
-    // most recent message". The per-channel hook computes the precise count
-    // when you open it. As a header indicator we show the number of channels
-    // with unread activity, which is good enough for a lobby badge.
-    return channels.filter((c) => c.last_read_at === null).length
+    // Count channels that have messages but haven't been read yet.
+    return channels.filter((c) => c.last_read_at === null && c.message_count > 0).length
   }, [channels])
 
   return (
@@ -282,18 +306,21 @@ function channelPrefix(c: ChatChannel): string {
 
 function gameInfoForChannel(
   c: ChatChannel,
-  byId: Map<string, GameInfo>
+  byId: Map<string, GameInfo> | undefined
 ): GameInfo | null {
-  if (!c.name.startsWith('game-')) return null
+  if (!c.name.startsWith('game-') || !byId) return null
   const id = c.name.slice('game-'.length)
   return byId.get(id) ?? null
 }
 
 function formatChannelLabel(c: ChatChannel, gameInfo: GameInfo | null): string {
   if (c.name.startsWith('game-')) {
-    if (gameInfo) return gameInfo.title
-    // Fall back to a short hash for games we don't have details for (e.g.
-    // finished games whose channels still exist but aren't in useMyGames).
+    if (gameInfo) {
+      // Show a compact label: player names + short date
+      const date = new Date(gameInfo.startedAtIso)
+      const short = date.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })
+      return `${gameInfo.title} · ${short}`
+    }
     const id = c.name.slice('game-'.length)
     return `Game ${id.slice(0, 4)}`
   }
