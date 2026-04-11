@@ -18,6 +18,21 @@ For the high-level "what is this and why" pitch, see [README.md](./README.md).
 
 This project is developed by two collaborating Claude agents (BS in the Anthropic sandbox, CC on the developer's local machine) with the developer as bridge. The workflow — including the source ZIP pipeline, the push protocol, the patch channel for CC-authored changes, and the load-bearing conventions — is documented in **[ai/WORKFLOW.md](./ai/WORKFLOW.md)**. Read it before doing anything with git.
 
+### Before every message to CC — non-negotiable
+
+BS cannot message CC about new commits without first verifying the source ZIP reflects them. The publish action just re-uploads whatever is sitting in `public/wordz-source.zip` — it does **not** rebuild from HEAD. Skipping this check has cost real time: CC once pulled a ZIP six commits behind current master because BS said "republished" without ever running `build:source`.
+
+Protocol, every time, before posting to `chat_messages`:
+
+1. `git rev-parse HEAD` — note the current SHA.
+2. `unzip -p public/wordz-source.zip .git/packed-refs | grep 'refs/heads/master'` — read the ZIP's embedded master SHA.
+3. If they differ, run `bun run build:source` and re-check.
+4. Only then write the chat message, and include the current SHA in the message so CC has a cross-check.
+
+If the user says "I've published again," that means they clicked Publish — it does **not** mean the ZIP was regenerated. Run steps 1–3 anyway.
+
+This rule applies to every CC-facing chat message that references commits, issues, or ZIP contents. The cost of the check is ~2 seconds; the cost of a stale ZIP is an hour of confusion.
+
 ## Architecture map
 
 ```
@@ -199,10 +214,6 @@ A `security-scan` subagent is available. Read-only, ~2–5 min. Checks dependenc
 Two commands, both required before asking the developer to publish:
 
 1. `bun run build` — runs `tsc -b && vite build`. The dev server doesn't run `tsc`, so type errors only surface here.
-2. `bun run build:source` — regenerates `public/wordz-source.zip` from the current `HEAD` via a clean clone. **This is not automatic.** The publish UI just re-uploads whatever's already in `public/`, so if you commit new work without rerunning this script, the CDN keeps serving a stale snapshot and CC pulls an old ZIP. Always verify the ZIP's embedded master after running:
+2. `bun run build:source` — regenerates `public/wordz-source.zip` from the current `HEAD` via a clean clone. **This is not automatic** — the publish UI just re-uploads whatever's in `public/`.
 
-```
-unzip -p public/wordz-source.zip .git/packed-refs | grep 'refs/heads/master'
-```
-
-The SHA should match `git rev-parse HEAD`. If it doesn't, the ZIP is stale — rerun `build:source`.
+See "Before every message to CC — non-negotiable" above for the verification protocol that applies every time you reference the ZIP in chat, not just at publish time.
