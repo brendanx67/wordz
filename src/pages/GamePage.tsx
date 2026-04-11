@@ -441,7 +441,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
 
       <main
         className={cn(
-          'container mx-auto px-2 py-4 flex flex-col lg:flex-row gap-4 items-start justify-center',
+          'mx-auto max-w-screen-2xl px-2 py-4 flex flex-col lg:flex-row gap-4 items-start justify-center',
           isMobile && 'px-2 py-2 gap-2 items-center'
         )}
       >
@@ -716,12 +716,11 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
           )}
         </div>
 
-        {/* Per-game chat — desktop only (mobile uses drawer) */}
-        {!isMobile && (
-          <div className="w-full lg:w-72 shrink-0">
-            <GameChatSidebar gameId={gameId} userId={userId} gameStatus={game.status} />
-          </div>
-        )}
+        {/* Per-game chat — desktop only (mobile uses drawer). The sidebar
+            sizing classes live on the Card itself so when the component
+            returns null (finished game with no messages) the slot collapses
+            entirely instead of leaving a 288px-wide gap. */}
+        {!isMobile && <GameChatSidebar gameId={gameId} userId={userId} gameStatus={game.status} />}
       </main>
 
       {/* Resign confirmation dialog */}

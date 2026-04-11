@@ -34,7 +34,7 @@ export default function GameChatSidebar({ gameId, userId, gameStatus }: GameChat
   if (gameStatus === 'finished' && messages.length === 0) return null
 
   return (
-    <Card className="border-amber-900/30 bg-amber-950/30">
+    <Card className="border-amber-900/30 bg-amber-950/30 w-full lg:w-72 shrink-0">
       <CardHeader
         className="cursor-pointer select-none py-3"
         onClick={() => setExpanded((e) => !e)}

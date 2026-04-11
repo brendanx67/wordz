@@ -186,11 +186,17 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
           </div>
         )}
 
-        {/* Board grid */}
+        {/* Board grid — fixed-width columns so the grid never compresses
+            below natural cell size. With `minmax(0, 1fr)` the grid would
+            shrink under flex pressure and cells (which have explicit width)
+            would overflow into each other. */}
         <div
-          className="grid flex-1"
+          className={cn(
+            'grid',
+            !cellSize && 'grid-cols-[repeat(15,30px)] sm:grid-cols-[repeat(15,35px)] md:grid-cols-[repeat(15,40px)]'
+          )}
           style={{
-            gridTemplateColumns: `repeat(${BOARD_SIZE}, minmax(0, 1fr))`,
+            ...(cellSize ? { gridTemplateColumns: `repeat(${BOARD_SIZE}, ${cellSize}px)` } : {}),
             gap: '1.5px',
             background: '#0d3d2d',
             borderRadius: '4px',
