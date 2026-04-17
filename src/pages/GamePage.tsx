@@ -572,16 +572,16 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                   you can find it again to turn them back off. Not a primary
                   action — mostly useful when discussing a position with an
                   LLM. */}
-              <div className="group absolute top-0 right-0 z-10 h-10 w-16">
+              <div className="group absolute top-0 right-0 z-10 h-10 w-16 pointer-events-none">
                 <button
                   onClick={() => setShowLabels(l => !l)}
                   className={cn(
-                    'absolute top-1 right-1 flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium backdrop-blur-sm',
+                    'absolute top-1 right-1 flex items-center gap-1 px-1.5 py-0.5 rounded text-[11px] font-medium backdrop-blur-sm pointer-events-auto',
                     'transition-opacity duration-200',
                     'focus:outline-none focus-visible:ring-1 focus-visible:ring-amber-400',
                     showLabels
                       ? 'bg-amber-700/70 text-amber-100 opacity-100 hover:bg-amber-700/90'
-                      : 'bg-amber-950/70 text-amber-200 opacity-0 group-hover:opacity-90 focus-visible:opacity-100 hover:bg-amber-900/80'
+                      : 'bg-amber-950/70 text-amber-200 opacity-0 group-hover:opacity-90 focus-visible:opacity-100 hover:bg-amber-900/80 pointer-events-none'
                   )}
                   title="Toggle coordinate labels (A-O, 1-15)"
                   aria-label="Toggle coordinate labels"

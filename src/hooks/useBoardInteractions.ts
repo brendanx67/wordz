@@ -356,6 +356,7 @@ export function useBoardInteractions({
       next.delete(key)
       return next
     })
+    setSelectedSquare({ row, col })
     setStagedFindWordsKey(null)
     if (insertIndex !== undefined) {
       const baseIds = rackTiles.map(t => t.id)
