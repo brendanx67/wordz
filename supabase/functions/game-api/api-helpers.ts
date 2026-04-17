@@ -51,14 +51,23 @@ export function getServiceClient() {
 
 // ─── DICTIONARY CACHE ────────────────────────────────────────────────────────
 let wordListCache: string | null = null;
+const DICT_URL =
+  "https://raw.githubusercontent.com/cviebrock/wordlists/master/TWL06.txt";
 
 export async function getWordList(): Promise<string> {
   if (wordListCache) return wordListCache;
-  const res = await fetch(
-    "https://raw.githubusercontent.com/cviebrock/wordlists/master/TWL06.txt"
-  );
-  wordListCache = await res.text();
-  return wordListCache;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const res = await fetch(DICT_URL);
+    if (res.ok) {
+      const text = await res.text();
+      if (text.length > 10000) {
+        wordListCache = text;
+        return text;
+      }
+    }
+    if (attempt < 2) await new Promise((r) => setTimeout(r, 500 * (attempt + 1)));
+  }
+  throw new Error("Failed to load dictionary after 3 attempts");
 }
 
 export async function getTrie(): Promise<TrieNode> {

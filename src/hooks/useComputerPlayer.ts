@@ -30,12 +30,7 @@ export function useComputerPlayer(gameId: string) {
       })
 
       if (error) {
-        console.error('Computer turn error:', error)
-        const detail = typeof error === 'object' && error !== null && 'message' in error
-          ? `: ${(error as { message: string }).message}`
-          : ''
-        toast.error(`Computer player encountered an error${detail}`)
-        // Clear dedupe key on failure so a retry (e.g. from the watchdog) is allowed
+        console.warn('Computer turn error (watchdog will retry):', error)
         if (turnKey) triggeredKey.current = null
         return
       }
