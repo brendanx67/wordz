@@ -441,6 +441,18 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame, 
 
         {/* API & MCP Setup */}
         <ApiSetupSection userId={userId} />
+
+        <div className="text-center text-xs text-amber-500/50 pt-2 pb-4">
+          Built with Claude —{' '}
+          <a
+            href="https://raw.githack.com/brendanx67/wordz/master/callgraph/callgraph-latest.html"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="text-amber-400/60 hover:text-amber-300 underline"
+          >
+            watch how this project grew from scratch
+          </a>
+        </div>
       </main>
 
       {/* Resign / Cancel confirmation dialog */}
