@@ -14,7 +14,7 @@ export default defineConfig({
   retries: 0,
   reporter: 'list',
   use: {
-    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'https://app-91d3764568581a338bf3.vercel.app',
+    baseURL: process.env.PLAYWRIGHT_BASE_URL || 'https://wordz-five.vercel.app',
     screenshot: 'only-on-failure',
     trace: 'on-first-retry',
   },

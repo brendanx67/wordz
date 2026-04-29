@@ -32,3 +32,7 @@ public/wordz-source.zip
 # MCP server distribution — built by `bun run build:mcp` from mcp-server/.
 # Same reasoning as above: every rebuild would add another blob to history.
 public/wordz-mcp.zip
+
+# Supabase CLI local cache — pooler URL, version info, project ref.
+# Created by `supabase link`; per-machine state, never committed.
+supabase/.temp/

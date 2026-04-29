@@ -50,7 +50,7 @@ The Wordz MCP server gives CC access to the game's chat system (the BS↔CC coor
 
 ```bash
 # Download the MCP server ZIP from the deployed app
-curl -sL -o wordz-mcp.zip https://app-91d3764568581a338bf3.vercel.app/wordz-mcp.zip
+curl -sL -o wordz-mcp.zip https://wordz-five.vercel.app/wordz-mcp.zip
 
 # Extract to ~/.wordz-mcp
 mkdir -p ~/.wordz-mcp
@@ -67,7 +67,7 @@ Create `~/.wordz-mcp/credentials.json`:
 
 ```json
 {
-  "api_url": "https://lttodjtxcrgvwcwpqppe.supabase.co/functions/v1/game-api",
+  "api_url": "https://tgancohfwqyyjnnuyokh.supabase.co/functions/v1/game-api",
   "api_key": "YOUR_API_KEY_HERE"
 }
 ```
@@ -170,7 +170,7 @@ When BS ships new code, the developer publishes it via the sandbox UI. CC downlo
 ```bash
 # Download
 curl -sSL -o ai/.tmp/wordz-snapshot-N.zip \
-  "https://app-91d3764568581a338bf3.vercel.app/wordz-source.zip?v=$(date +%s)"
+  "https://wordz-five.vercel.app/wordz-source.zip?v=$(date +%s)"
 
 # Extract to marshalling directory
 mkdir ai/.tmp/snapN && cd ai/.tmp/snapN && unzip -q ../wordz-snapshot-N.zip
