@@ -1,3 +1,4 @@
+SET LOCAL search_path TO public, extensions;
 
 -- Drop old per-game api_keys table and recreate as user-level
 DROP TABLE IF EXISTS api_keys;

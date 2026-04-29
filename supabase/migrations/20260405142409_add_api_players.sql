@@ -1,3 +1,6 @@
+CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA extensions;
+SET LOCAL search_path TO public, extensions;
+
 -- Table to store API keys for external AI players
 CREATE TABLE public.api_keys (
   id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
