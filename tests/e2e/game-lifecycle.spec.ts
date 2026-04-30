@@ -175,10 +175,11 @@ test.describe('Game lifecycle', () => {
 
     // ─── 8. Check MCP instructions can be expanded ──────────────────
     await test.step('verify MCP section', async () => {
-      // Scroll down to find the source code / download section
+      // Scroll down to find the "Connect an AI (API & MCP)" card
       await page.evaluate(() => window.scrollTo(0, document.body.scrollHeight));
       await page.waitForTimeout(500);
-      // Look for download link for source zip
+      // The card collapses by default; click its header to reveal the download link
+      await page.getByText(/connect an ai/i).first().click();
       const downloadLink = page.getByRole('link', { name: /download|source/i })
         .or(page.getByText(/wordz-source/i))
         .or(page.getByText(/wordz-mcp/i));

@@ -17,9 +17,11 @@ export async function signIn(page: Page) {
 
   await page.goto('/');
 
-  // Fill the login form
-  await page.getByLabel(/email/i).fill(email);
-  await page.getByLabel(/password/i).fill(password);
+  // Fill the login form. AuthPage's <Label> is a sibling of <Input>, not
+  // associated via htmlFor, so getByLabel can't find the input — match
+  // by placeholder instead (same approach as game-lifecycle.spec.ts).
+  await page.getByPlaceholder('you@example.com').fill(email);
+  await page.getByPlaceholder('••••••••').fill(password);
   await page.getByRole('button', { name: /sign in/i }).click();
 
   // Wait for the lobby to load (indicates successful auth)
