@@ -1,0 +1,6 @@
+project_id = "wordz"
+
+# game-api authenticates via x-api-key (see api-helpers.ts).
+# MCP clients don't send a Supabase JWT, so the gateway must not require one.
+[functions.game-api]
+verify_jwt = false
