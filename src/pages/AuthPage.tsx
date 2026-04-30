@@ -42,8 +42,9 @@ export default function AuthPage({ onAuth }: AuthPageProps) {
           <form onSubmit={handleSubmit} className="space-y-4">
             {isSignUp && (
               <div className="space-y-2">
-                <Label className="text-amber-200/80">Display Name</Label>
+                <Label htmlFor="auth-display-name" className="text-amber-200/80">Display Name</Label>
                 <Input
+                  id="auth-display-name"
                   value={displayName}
                   onChange={(e) => setDisplayName(e.target.value)}
                   placeholder="Your name"
@@ -53,8 +54,9 @@ export default function AuthPage({ onAuth }: AuthPageProps) {
               </div>
             )}
             <div className="space-y-2">
-              <Label className="text-amber-200/80">Email</Label>
+              <Label htmlFor="auth-email" className="text-amber-200/80">Email</Label>
               <Input
+                id="auth-email"
                 type="email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
@@ -64,8 +66,9 @@ export default function AuthPage({ onAuth }: AuthPageProps) {
               />
             </div>
             <div className="space-y-2">
-              <Label className="text-amber-200/80">Password</Label>
+              <Label htmlFor="auth-password" className="text-amber-200/80">Password</Label>
               <Input
+                id="auth-password"
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
