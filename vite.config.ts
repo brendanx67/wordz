@@ -1,14 +1,9 @@
 import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
-import bakuInspectorPlugin from './baku-inspector-plugin.mjs'
 import path from 'path'
 
 export default defineConfig({
-  plugins: [react(), bakuInspectorPlugin()],
-  // node_modules is a symlink into /opt/baku-templates — keep Vite's dep
-  // cache (default: node_modules/.vite) co-located with the project instead
-  // of writing through the symlink into the template tree.
-  cacheDir: './.vite',
+  plugins: [react()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

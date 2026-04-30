@@ -24,13 +24,9 @@ playwright-report/
 .env.test
 !.env.test.example
 
-# Source snapshot — regenerated from a fresh clone before each publish
-# (see "Source code" section in src/pages/LobbyPage.tsx). Tracking this
-# in git would embed every previous snapshot in .git history forever.
-public/wordz-source.zip
-
-# MCP server distribution — built by `bun run build:mcp` from mcp-server/.
-# Same reasoning as above: every rebuild would add another blob to history.
+# MCP server distribution — built by `bun run build:mcp` from mcp-server/,
+# chained into `bun run build` so each Vercel deploy ships a fresh ZIP.
+# Tracking it in git would embed every snapshot's blob into .git forever.
 public/wordz-mcp.zip
 
 # Supabase CLI local cache — pooler URL, version info, project ref.

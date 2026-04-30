@@ -111,7 +111,7 @@ mcp-server/                       # Stdio MCP server, one tool per file
 - **Data fetching:** Always TanStack Query, always wrapped in a custom hook in `src/hooks/`. Never put Supabase calls directly in component bodies.
 - **TypeScript:** Strict mode. `noUnusedLocals` and `noUnusedParameters` are on — prefix unused params with `_`.
 - **Backend:** Every Supabase table has RLS enabled with explicit policies. Schema changes go through `supabase migration` files, not ad-hoc SQL.
-- **Don't hand-edit:** `src/lib/database.types.ts` (generated), `src/components/ui/*` (shadcn), `baku-inspector-plugin.{mjs,d.mts}` (sandbox tooling).
+- **Don't hand-edit:** `src/lib/database.types.ts` (generated), `src/components/ui/*` (shadcn).
 
 ## Local dev commands
 
@@ -121,7 +121,6 @@ mcp-server/                       # Stdio MCP server, one tool per file
 | `bun run dev` | Vite dev server on port 3000 |
 | `bun run build` | `bun run build:mcp && tsc -b && vite build` — **always run before committing**. Vercel runs the same command on every push to `master`, so the MCP ZIP ships fresh with each deploy. |
 | `bun run build:mcp` | Rebuild `public/wordz-mcp.zip` from `mcp-server/`. Already chained into `bun run build`; only invoke directly if you want to inspect the ZIP without a full frontend build. |
-| `bun run build:source` | Vestigial — produced `public/wordz-source.zip` for the BS↔CC courier protocol, which no longer exists. The script and the lobby download link still work but should be removed in a follow-up. |
 
 **Run `bun run build` before committing.** The dev server doesn't run `tsc`, so type errors only surface here. CI also runs this — if it fails locally, it'll fail in CI.
 
@@ -156,4 +155,4 @@ Don't make them bigger.
 - Inline Supabase queries inside components. Wrap them in a hook.
 - Edit `src/lib/database.types.ts` by hand — regenerate it from the schema.
 - Install alternative bundlers, CSS frameworks, or component libraries.
-- Commit `public/wordz-source.zip` or `public/wordz-mcp.zip` to git. These are build artifacts listed in `.gitignore`. Committing them causes recursive bloat. `bun run build` chains `build:mcp` so Vercel deploys always ship a fresh MCP ZIP without anything entering git.
+- Commit `public/wordz-mcp.zip` to git. It's a build artifact listed in `.gitignore`. Committing it causes recursive bloat. `bun run build` chains `build:mcp` so Vercel deploys always ship a fresh MCP ZIP without anything entering git.

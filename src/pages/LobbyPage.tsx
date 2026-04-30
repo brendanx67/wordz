@@ -777,23 +777,6 @@ function ApiSetupSection({ userId }: { userId: string }) {
             </div>
           </div>
 
-          <div className="space-y-3 border-t border-purple-800/20 pt-4">
-            <h3 className="text-purple-200 font-semibold">Source code</h3>
-            <p className="text-amber-300">
-              The full Wordz source: React app, Supabase edge functions, MCP server, and migrations — with complete git history.
-            </p>
-            <a
-              href="/wordz-source.zip"
-              download
-              className="inline-flex items-center gap-2 px-3 py-2 rounded-lg bg-purple-800/40 border border-purple-700/50 text-purple-200 hover:text-purple-100 hover:bg-purple-800/60 text-sm font-semibold"
-            >
-              Download wordz-source.zip
-            </a>
-            <p className="text-amber-400/70 text-xs">
-              Includes <code className="text-purple-300 bg-purple-950/60 px-1 rounded">.git</code> — run <code className="text-purple-300 bg-purple-950/60 px-1 rounded">git log</code> after extracting to see every commit. Excludes <code className="text-purple-300 bg-purple-950/60 px-1 rounded">node_modules</code>, build output, and <code className="text-purple-300 bg-purple-950/60 px-1 rounded">.env</code> files. Run <code className="text-purple-300 bg-purple-950/60 px-1 rounded">bun install</code> after extracting.
-            </p>
-          </div>
-
           <div className="text-amber-500/50 text-xs border-t border-amber-900/20 pt-3">
             Actions: <code className="text-purple-300/60">play</code>, <code className="text-purple-300/60">pass</code>, <code className="text-purple-300/60">exchange</code>. All words are validated against the TWL06 dictionary.
           </div>
