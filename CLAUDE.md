@@ -14,24 +14,9 @@ A Postgres database (Supabase-managed) holds games, players, moves, and the trie
 
 For the high-level "what is this and why" pitch, see [README.md](./README.md).
 
-## Multi-agent workflow
+## Workflow
 
-This project is developed by two collaborating Claude agents (BS in the Anthropic sandbox, CC on the developer's local machine) with the developer as bridge. The workflow — including the source ZIP pipeline, the push protocol, the patch channel for CC-authored changes, and the load-bearing conventions — is documented in **[ai/WORKFLOW.md](./ai/WORKFLOW.md)**. Read it before doing anything with git.
-
-### Before every message to CC — non-negotiable
-
-BS cannot message CC about new commits without first verifying the source ZIP reflects them. The publish action just re-uploads whatever is sitting in `public/wordz-source.zip` — it does **not** rebuild from HEAD. Skipping this check has cost real time: CC once pulled a ZIP six commits behind current master because BS said "republished" without ever running `build:source`.
-
-Protocol, every time, before posting to `chat_messages`:
-
-1. `git rev-parse HEAD` — note the current SHA.
-2. `unzip -p public/wordz-source.zip .git/packed-refs | grep 'refs/heads/master'` — read the ZIP's embedded master SHA.
-3. If they differ, run `bun run build:source` and re-check.
-4. Only then write the chat message, and include the current SHA in the message so CC has a cross-check.
-
-If the user says "I've published again," that means they clicked Publish — it does **not** mean the ZIP was regenerated. Run steps 1–3 anyway.
-
-This rule applies to every CC-facing chat message that references commits, issues, or ZIP contents. The cost of the check is ~2 seconds; the cost of a stale ZIP is an hour of confusion.
+CC is the sole code author, working from the persistent local clone at `C:\proj\wordz`. Pushes to `master` trigger a Vercel deploy of the frontend; schema and Edge Function deploys are manual via `supabase db push` and `supabase functions deploy`. See **[ai/WORKFLOW.md](./ai/WORKFLOW.md)** for the full protocol and **[ai/SETUP.md](./ai/SETUP.md)** for one-time machine setup.
 
 ## Architecture map
 
@@ -134,9 +119,9 @@ mcp-server/                       # Stdio MCP server, one tool per file
 |---------|---|
 | `bun install` | Install dependencies |
 | `bun run dev` | Vite dev server on port 3000 |
-| `bun run build` | `tsc -b && vite build` — **always run before committing** |
-| `bun run build:mcp` | Rebuild `public/wordz-mcp.zip` from `mcp-server/` (run when MCP server source changes before publishing) |
-| `bun run build:source` | Rebuild `public/wordz-source.zip` — a flat, gitignore-respecting snapshot of `HEAD` via `git archive`. **Always use this script — never hand-roll the zip**, since the structure has to stay consistent (flat, no wrapper folder) for downstream consumers. |
+| `bun run build` | `bun run build:mcp && tsc -b && vite build` — **always run before committing**. Vercel runs the same command on every push to `master`, so the MCP ZIP ships fresh with each deploy. |
+| `bun run build:mcp` | Rebuild `public/wordz-mcp.zip` from `mcp-server/`. Already chained into `bun run build`; only invoke directly if you want to inspect the ZIP without a full frontend build. |
+| `bun run build:source` | Vestigial — produced `public/wordz-source.zip` for the BS↔CC courier protocol, which no longer exists. The script and the lobby download link still work but should be removed in a follow-up. |
 
 **Run `bun run build` before committing.** The dev server doesn't run `tsc`, so type errors only surface here. CI also runs this — if it fails locally, it'll fail in CI.
 
@@ -171,49 +156,4 @@ Don't make them bigger.
 - Inline Supabase queries inside components. Wrap them in a hook.
 - Edit `src/lib/database.types.ts` by hand — regenerate it from the schema.
 - Install alternative bundlers, CSS frameworks, or component libraries.
-- Commit `public/wordz-source.zip` or `public/wordz-mcp.zip` to git. These are build artifacts listed in `.gitignore`. Committing them causes recursive bloat — each snapshot's `.git/` contains every prior snapshot's ZIP. The `build:source` script generates them at publish time; they must stay untracked.
-
----
-
-## Anthropic dev environment only
-
-**The rest of this file applies only to Claude sessions running inside the Anthropic web sandbox at `/home/claude/project`.** None of it applies to local clones. If you're reading this in `~/proj/wordz` or on a CI runner, skip it.
-
-### Dev server
-
-Vite runs under supervisor on port 3000 and auto-restarts. Logs at `/tmp/vite-dev.log`. After every file change, `cat /tmp/vite-dev.log` and fix any errors before proceeding.
-
-| Command | What it does |
-|---|---|
-| `cat /tmp/vite-dev.log` | View dev server output |
-| `supervisorctl -s http://127.0.0.1:9199 status` | Check dev server status |
-| `supervisorctl -s http://127.0.0.1:9199 restart vite-dev-server` | Restart dev server |
-
-**Never force-kill processes on port 3000** (`fuser`, `lsof`, `kill -9`). Env-manager has a TCP connection to port 3000 as the preview proxy and `fuser`/`lsof` match client connections, not just listeners. Killing env-manager permanently breaks the preview. Use **only** `supervisorctl restart vite-dev-server`.
-
-### Browser validation tools
-
-Two tiers:
-
-**`mcp__browser__*`** — drives the user's live preview iframe. Sequence: `take_control` → `screenshot` / `eval_js` / `get_console_logs` → `release_control`. Use `highlight(el)` before interacting so the user sees where. Only works while the user's browser tab is open.
-
-**`mcp__playwright__*`** — headless chromium in the container. Use when Tier 1 fails. Navigate to `http://localhost:3000`.
-
-### Sandbox-only MCP tools
-
-- `mcp__supabase__provision_database` — must be the first Supabase call in a fresh project. Creates the project, writes `.env`. Don't call other `mcp__supabase__*` tools or `request_secret` until this finishes.
-- `mcp__supabase__migrate` / `query` / `deploy_function` / `get_function_logs` — schema changes, ad-hoc SQL, function deploys, log inspection.
-- `mcp__secrets__request_secret` — third-party API keys. Stored in Edge Function secrets, accessible via `Deno.env.get()` only. Never put `VITE_*` or `SUPABASE_*` names through this.
-
-### Security scan agent
-
-A `security-scan` subagent is available. Read-only, ~2–5 min. Checks dependency CVEs, hardcoded secrets, missing RLS, XSS sinks, unauthenticated Edge Functions. **Run only on explicit request.** The publish UI sends exactly `"Run the security-scan agent to audit my project before I deploy."` — when you see that, invoke `Agent` with `subagent_type: security-scan` and no preamble. The agent ends its report with a fenced ```` ```json ```` block containing `"_marker": "baku-security-scan-result"` — relay that JSON verbatim so the UI can parse it.
-
-### Pre-publish
-
-Two commands, both required before asking the developer to publish:
-
-1. `bun run build` — runs `tsc -b && vite build`. The dev server doesn't run `tsc`, so type errors only surface here.
-2. `bun run build:source` — regenerates `public/wordz-source.zip` from the current `HEAD` via a clean clone. **This is not automatic** — the publish UI just re-uploads whatever's in `public/`.
-
-See "Before every message to CC — non-negotiable" above for the verification protocol that applies every time you reference the ZIP in chat, not just at publish time.
+- Commit `public/wordz-source.zip` or `public/wordz-mcp.zip` to git. These are build artifacts listed in `.gitignore`. Committing them causes recursive bloat. `bun run build` chains `build:mcp` so Vercel deploys always ship a fresh MCP ZIP without anything entering git.
