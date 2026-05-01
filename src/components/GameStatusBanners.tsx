@@ -18,6 +18,7 @@ interface GameStatusBannersProps {
   gameStatus: string
   players: Player[]
   computerPlayers: ComputerPlayer[]
+  userId: string
   isActive: boolean
   isMyTurn: boolean
   isComputerTurn: boolean
@@ -44,7 +45,7 @@ interface GameStatusBannersProps {
 }
 
 export default function GameStatusBanners({
-  gameStatus, players, computerPlayers, isActive, isMyTurn,
+  gameStatus, players, computerPlayers, userId, isActive, isMyTurn,
   isComputerTurn, isApiTurn, isSpectatingApi, reviewMode, isMobile,
   currentTurnPlayer, currentComputerPlayer, currentApiPlayer,
   onStartReview, isCreator, canStart, startPending, onStart,
@@ -76,19 +77,38 @@ export default function GameStatusBanners({
       )}
 
       {gameStatus === 'finished' && !reviewMode && (() => {
-        const allPlayerScores = [
-          ...players.map(p => ({ name: p.profiles.display_name, score: p.score })),
-          ...computerPlayers.map(cp => ({ name: resolvePlayerName(cp, players), score: cp.score })),
+        const isMine = (id: string) => id === userId ||
+          computerPlayers.some(cp => cp.id === id && cp.id.startsWith('api-') && cp.owner_id === userId)
+        const entries = [
+          ...players.map(p => ({ id: p.player_id, name: p.profiles.display_name, score: p.score, mine: p.player_id === userId })),
+          ...computerPlayers.map(cp => ({ id: cp.id, name: resolvePlayerName(cp, players), score: cp.score, mine: isMine(cp.id) })),
         ]
-        const actualWinner = allPlayerScores.reduce((best, p) => p.score > best.score ? p : best, allPlayerScores[0])
-        const isTie = allPlayerScores.filter(p => p.score === actualWinner?.score).length > 1
+        const topScore = entries.reduce((m, e) => e.score > m ? e.score : m, -Infinity)
+        const topEntries = entries.filter(e => e.score === topScore)
+        const isTie = topEntries.length > 1
+        const seated = entries.some(e => e.mine)
+        const youAtTop = topEntries.some(e => e.mine)
+        const winnerName = topEntries[0]?.name ?? 'Unknown'
+
+        // Title: personalized + colored when seated, generic amber otherwise.
+        let titleText = 'Game Over!'
+        let titleClass = 'text-amber-300'
+        if (seated) {
+          if (youAtTop && !isTie) { titleText = 'You won!'; titleClass = 'text-green-400' }
+          else if (youAtTop && isTie) { titleText = 'You tied!'; titleClass = 'text-amber-300' }
+          else { titleText = 'You lost'; titleClass = 'text-red-400' }
+        }
+
+        // Subtitle: "Winner: name" or "Tied: name1, name2"
+        const subtitle = isTie
+          ? `Tied: ${topEntries.map(e => e.name).join(', ')}`
+          : `Winner: ${winnerName}`
+
         return (
           <div className="flex flex-col items-center gap-2">
             <div className="px-8 py-3 rounded-lg text-center border border-amber-600/40" style={{ background: 'linear-gradient(135deg, #5c3a1e 0%, #4a2e15 100%)', boxShadow: '0 0 0 2px #6b4226, 0 4px 16px rgba(0,0,0,0.3)' }}>
-              <div className="text-xl font-bold text-amber-300" style={{ fontFamily: "'Playfair Display', serif" }}>Game Over!</div>
-              <div className="text-sm mt-1 text-amber-200/80">
-                {isTie ? 'Tie!' : `Winner: ${actualWinner?.name ?? 'Unknown'}`}
-              </div>
+              <div className={cn('text-xl font-bold', titleClass)} style={{ fontFamily: "'Playfair Display', serif" }}>{titleText}</div>
+              <div className="text-sm mt-1 text-amber-200/80">{subtitle}</div>
             </div>
             <Button
               onClick={onStartReview}

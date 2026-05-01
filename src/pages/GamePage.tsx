@@ -523,6 +523,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
             gameStatus={game.status}
             players={players}
             computerPlayers={computerPlayers}
+            userId={userId}
             isActive={isActive}
             isMyTurn={isMyTurn}
             isComputerTurn={isComputerTurn}
