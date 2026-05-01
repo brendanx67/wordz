@@ -9,7 +9,7 @@
     "build": "bun run build:mcp && tsc -b && vite build",
     "preview": "vite preview",
     "test": "bun test --path-ignore-patterns tests/e2e",
-    "build:mcp": "rm -f public/wordz-mcp.zip && cd mcp-server && zip -rq ../public/wordz-mcp.zip . -x 'node_modules/*' '.env' '.git/*'"
+    "build:mcp": "bun run scripts/build-mcp-zip.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
