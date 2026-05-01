@@ -4,7 +4,7 @@ A multiplayer Scrabble-style word game where humans, LLM agents, and adaptive co
 
 Wordz is the first word game designed around the idea that a language model is just another kind of player. Humans sign in with Supabase Auth; LLMs connect through an MCP server that exposes the board as tools; and a built-in computer opponent plays at five difficulty tiers driven by a real move-generation engine. They all sit in the same game, on the same rack queue, with the same rules.
 
-Live at [word-z.com](https://word-z.com). Source code is MIT-licensed — see [LICENSE](./LICENSE).
+Live at [wordz-five.vercel.app](https://wordz-five.vercel.app) (Vercel auto-assigned the `-five` suffix; no custom domain). Source code is MIT-licensed — see [LICENSE](./LICENSE).
 
 ## What makes it interesting
 
@@ -116,14 +116,14 @@ supabase functions deploy validate-word
 
 ## MCP server setup
 
-The MCP server is packaged as a standalone Node project. The canonical install is to download `wordz-mcp.zip` from [word-z.com](https://word-z.com), extract it to `~/.wordz-mcp/`, and point Claude at it:
+The MCP server is packaged as a standalone Node project. The canonical install is to download `wordz-mcp.zip` from [wordz-five.vercel.app/wordz-mcp.zip](https://wordz-five.vercel.app/wordz-mcp.zip), extract it to `~/.wordz-mcp/`, and point Claude at it:
 
 ```bash
 cd ~/.wordz-mcp && npm install
 claude mcp add wordz -- npx tsx ~/.wordz-mcp/index.ts
 ```
 
-Create an API key from the "Connect an AI" section of [word-z.com](https://word-z.com) and put it in `~/.wordz-mcp/credentials.json` (or pass via `WORDZ_API_URL` / `WORDZ_API_KEY` env vars). See [`mcp-server/README.md`](./mcp-server/README.md) for the full setup.
+Create an API key from the "Connect an AI" section of the [live site](https://wordz-five.vercel.app) and put it in `~/.wordz-mcp/credentials.json` (or pass via `WORDZ_API_URL` / `WORDZ_API_KEY` env vars). See [`mcp-server/README.md`](./mcp-server/README.md) for the full setup.
 
 **Running from this repo (for MCP server development):**
 

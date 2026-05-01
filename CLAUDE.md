@@ -14,6 +14,12 @@ A Postgres database (Supabase-managed) holds games, players, moves, and the trie
 
 For the high-level "what is this and why" pitch, see [README.md](./README.md).
 
+## Live deployment
+
+- **Frontend**: https://wordz-five.vercel.app (Vercel auto-deploys on push to `master`)
+- **Backend**: Supabase project `tgancohfwqyyjnnuyokh` (https://tgancohfwqyyjnnuyokh.supabase.co) — schema, Auth, Edge Functions
+- Schema and Edge Function deploys are **manual** via the Supabase CLI. See [ai/DEPLOYMENT.md](./ai/DEPLOYMENT.md) for full deploy mechanics, env-var setup, and the `verify_jwt = false` rule for `game-api`.
+
 ## Workflow
 
 CC is the sole code author, working from the persistent local clone at `C:\proj\wordz`. Pushes to `master` trigger a Vercel deploy of the frontend; schema and Edge Function deploys are manual via `supabase db push` and `supabase functions deploy`. See **[ai/WORKFLOW.md](./ai/WORKFLOW.md)** for the full protocol and **[ai/SETUP.md](./ai/SETUP.md)** for one-time machine setup.
@@ -156,3 +162,15 @@ Don't make them bigger.
 - Edit `src/lib/database.types.ts` by hand — regenerate it from the schema.
 - Install alternative bundlers, CSS frameworks, or component libraries.
 - Commit `public/wordz-mcp.zip` to git. It's a build artifact listed in `.gitignore`. Committing it causes recursive bloat. `bun run build` chains `build:mcp` so Vercel deploys always ship a fresh MCP ZIP without anything entering git.
+- Deploy `game-api` with default `verify_jwt = true`. `supabase/config.toml` pins it to false because `game-api` does its own auth via `x-api-key` and MCP clients can't send a Supabase JWT. `--no-verify-jwt` on the CLI is **not** equivalent — that flag doesn't persist across deploys. See [ai/DEPLOYMENT.md](./ai/DEPLOYMENT.md).
+
+## Topic guides
+
+The `ai/` folder holds focused guides for things that don't belong inline here. Read the one you need:
+
+- **[ai/SETUP.md](./ai/SETUP.md)** — first-time machine bootstrap (clone, Bun, env vars, symlinks, optional Supabase / Playwright / GitHub CLI).
+- **[ai/WORKFLOW.md](./ai/WORKFLOW.md)** — process conventions: append-only `master`, issue-driven commits, the local dev cycle.
+- **[ai/DEPLOYMENT.md](./ai/DEPLOYMENT.md)** — production URLs, Vercel auto-deploy mechanics, Supabase manual deploy steps, the `verify_jwt = false` rationale, MCP ZIP distribution.
+- **[ai/TESTING.md](./ai/TESTING.md)** — unit vs e2e layout, per-spec credential expectations, the `.env.test` sourcing requirement, what CI runs.
+
+Open follow-ups and known limitations live as [GitHub issues](https://github.com/brendanx67/wordz/issues), not in markdown — the issue tracker is the canonical backlog.

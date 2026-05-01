@@ -5,13 +5,13 @@ Play Wordz (Scrabble) through Claude or any MCP-compatible AI assistant.
 ## Prerequisites
 
 - [Node.js](https://nodejs.org/) v18+
-- An API key from your Wordz account — create one in the "Connect an AI" section at [word-z.com](https://word-z.com)
+- An API key from your Wordz account — create one in the "Connect an AI" section at [wordz-five.vercel.app](https://wordz-five.vercel.app)
 
 ## Setup
 
 1. **Download and extract** to `~/.wordz-mcp/`:
    ```bash
-   # Download wordz-mcp.zip from word-z.com
+   # Download wordz-mcp.zip from https://wordz-five.vercel.app/wordz-mcp.zip
    # Extract contents to ~/.wordz-mcp/
    ```
 

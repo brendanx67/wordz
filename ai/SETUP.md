@@ -170,100 +170,38 @@ bun add -d @playwright/test
 npx playwright install chromium
 ```
 
-For the auth-required tests, copy the credentials template and fill in a test account's email/password:
+For the auth-required tests, copy the credentials template:
 
 ```powershell
 copy .env.test.example .env.test
 ```
 
-Edit `.env.test` with credentials for an account that already exists on the deployed site. The `game-lifecycle` test creates and deletes its own account; the `auth` and `mobile-layout` tests sign into the account in `.env.test`.
+Each spec has different credential expectations:
 
-Run:
+| Spec | Needs `.env.test`? | Notes |
+|---|---|---|
+| `smoke.spec.ts` | no | No auth at all. |
+| `game-lifecycle.spec.ts` | no | Self-provisions a disposable account, deletes it at end. |
+| `auth.spec.ts` | **yes** | Signs in as `TEST_USER_EMAIL`. **Account must already exist on the live site.** |
+| `mobile-layout.spec.ts` | **yes** | Same. |
 
-```powershell
-# Headless smoke (auth-free)
-npx playwright test tests/e2e/smoke.spec.ts --project=desktop
+For the auth-required specs, sign up once at https://wordz-five.vercel.app with whatever credentials you put in `.env.test` — that's a one-time step. `playwright.config.ts` does not auto-load `.env.test`, so source it into your shell first:
 
-# Full desktop suite (requires .env.test sourced into shell)
-$env:TEST_USER_EMAIL = "your-email"
-$env:TEST_USER_PASSWORD = "your-password"
-npx playwright test --project=desktop
-
-# Full suite, watching the browser
+```bash
+# Bash / Git Bash
+set -a; source .env.test; set +a
 npx playwright test --project=desktop --headed
 ```
 
-`playwright.config.ts` does not auto-load `.env.test`; export the vars in your shell (or use `set -a; source .env.test; set +a` in Git Bash). This is a known gap — see follow-up issues.
+For more detail (run modes, CI behavior, selector conventions), see [TESTING.md](./TESTING.md).
 
 ---
 
 ## Tier 3: AI integration (optional)
 
-Required only if you want to use Claude (or any MCP-compatible AI client) as an API player in Wordz games.
+If you want to use Claude (or any MCP-compatible AI client) as an API player in Wordz games, the canonical install path is documented in [`mcp-server/README.md`](../mcp-server/README.md) — sign in at the live site, create an API key from the "Connect an AI" panel, download `wordz-mcp.zip` from the same panel, extract to `~/.wordz-mcp/`, install deps with `npm install`, drop credentials into `~/.wordz-mcp/credentials.json`, and register with `claude mcp add wordz`.
 
-### 3.1 Create an API key
-
-Sign in at https://wordz-five.vercel.app, expand the "Connect an AI (API & MCP)" panel in the lobby, and create a named API key. Copy it immediately — it isn't shown again.
-
-### 3.2 Install the MCP server
-
-From the same lobby panel, click **Download the MCP server** (`wordz-mcp.zip`), extract to `~/.wordz-mcp/`, and install its dependencies:
-
-```powershell
-mkdir $HOME\.wordz-mcp
-cd $HOME\.wordz-mcp
-Expand-Archive -Path "$HOME\Downloads\wordz-mcp.zip" -DestinationPath . -Force
-npm install
-```
-
-### 3.3 Configure credentials
-
-Create `~/.wordz-mcp/credentials.json`:
-
-```json
-{
-  "api_url": "https://tgancohfwqyyjnnuyokh.supabase.co/functions/v1/game-api",
-  "api_key": "<the key you copied in 3.1>"
-}
-```
-
-### 3.4 Register with Claude Code
-
-```powershell
-claude mcp add wordz --scope user --command npx --args tsx,$HOME/.wordz-mcp/index.ts
-```
-
-Or hand-edit `~/.claude.json`:
-
-```json
-{
-  "mcpServers": {
-    "wordz": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["tsx", "C:/Users/YOUR_USERNAME/.wordz-mcp/index.ts"]
-    }
-  }
-}
-```
-
-Restart Claude Code, then verify:
-
-```powershell
-claude mcp list
-# should show: wordz · ✔ connected
-```
-
-### 3.5 Useful MCP tools
-
-| Tool | Purpose |
-|---|---|
-| `mcp__wordz__list_games` | List active/waiting games |
-| `mcp__wordz__get_game_state` | Inspect a game's current state |
-| `mcp__wordz__find_words` | Run the move generator from a rack |
-| `mcp__wordz__play_word` | Commit a move as the API player |
-| `mcp__wordz__post_chat_message` | Post to a channel (e.g. suggestions) |
-| `mcp__wordz__list_chat_channels` | Discover channels you have access to |
+The full tool reference (12 tools, REST endpoints, cell notation, suggestion mode) lives there too.
 
 ---
 
