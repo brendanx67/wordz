@@ -76,7 +76,8 @@ export default function GameBoard({ board, selectedSquare, onSquareClick, onDrop
       previewMap.set(`${pt.row},${pt.col}`, pt)
     }
   }
-  // Build highlight tile lookup (for review mode - gold ring around newly placed tiles)
+  // Build highlight tile lookup. Used by review mode (per-step navigation) and
+  // by the live last-move flash on the game page.
   const highlightSet = new Set<string>()
   if (highlightTiles) {
     for (const ht of highlightTiles) {

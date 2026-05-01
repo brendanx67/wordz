@@ -34,6 +34,7 @@ import { useMobileLayout, useMobileCellSize } from '@/hooks/useMobileLayout'
 import { useMoveMutations } from '@/hooks/useMoveMutations'
 import { useReviewAnalysis } from '@/hooks/useReviewAnalysis'
 import { useBoardInteractions } from '@/hooks/useBoardInteractions'
+import { useLastMoveHighlight } from '@/hooks/useLastMoveHighlight'
 
 interface GamePageProps {
   gameId: string
@@ -223,6 +224,11 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
     gameId, reviewMode, reviewMoveIndex,
     gameStatus: game?.status, moveHistory,
   })
+
+  // Flash gold on the tiles of the most recent committed play during live
+  // gameplay. Suppressed in review mode, where useReviewMode drives the
+  // highlight per navigation step.
+  const recentMoveHighlight = useLastMoveHighlight(moveHistory)
 
   // Live turn timer
   const turnElapsed = useTurnTimer(game?.updated_at, isActive, game?.current_turn)
@@ -599,7 +605,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
                 onPickupTile={reviewMode ? () => {} : handlePickupTile}
                 placedTiles={reviewMode ? reviewPreviewTiles : isSpectatingApi ? suggestionTiles : placedTiles}
                 previewTiles={reviewMode ? undefined : previewedTiles}
-                highlightTiles={reviewMode && !reviewStagedMove ? reviewHighlightTiles : undefined}
+                highlightTiles={reviewMode ? (reviewStagedMove ? undefined : reviewHighlightTiles) : recentMoveHighlight}
                 direction={isSpectatingApi ? suggestionDirection : direction}
                 showLabels={showLabels}
                 cellSize={isMobile ? mobileCellSize : undefined}
