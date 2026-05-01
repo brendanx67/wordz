@@ -205,15 +205,17 @@ The full tool reference (12 tools, REST endpoints, cell notation, suggestion mod
 
 ---
 
-## Working directory: `ai/.tmp`
+## Working directory: `C:\proj\ai\.tmp\` (cross-project)
 
-All temporary and working files go in `C:\proj\ai\.tmp\`:
+All temporary and working files go in **`C:\proj\ai\.tmp\`** — the sibling `ai/` repo's `.tmp/`, **not** a folder inside `wordz/`. This is the developer's cross-project scratch space; using one canonical location keeps in-flight artifacts findable from any session and avoids creating an empty `wordz/ai/.tmp/` that would need to be gitignored.
 
-- **Issue drafts**: `ai/.tmp/issue-N-body.md` — written to disk, filed via `gh issue create --body-file`
-- **Verification comments**: `ai/.tmp/issue-N-close-comment.md` — posted via `gh issue comment --body-file`
+Prefix wordz-related files with `wordz-` (e.g. `wordz-issue-21-body.md`) so they're easy to find among artifacts from other projects:
+
+- **Issue drafts**: `C:\proj\ai\.tmp\wordz-issue-N-body.md` — filed via `gh issue create --body-file <path>`
+- **Verification comments**: `C:\proj\ai\.tmp\wordz-issue-N-close-comment.md` — posted via `gh issue comment N --body-file <path>`
 - **Reports**: LOC audits, field reports, diagnostic dumps
 
-This directory is gitignored. Don't use `ai/tmp` (no leading dot) or any other location.
+**Don't** use `wordz/ai/.tmp/`, `ai/tmp` (no leading dot), or any other location.
 
 ## Quick reference
 

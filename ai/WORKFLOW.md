@@ -54,7 +54,7 @@ GitHub is the authoritative archive. Vercel auto-deploys the frontend on every p
 
 4. **Chat is for coordination, issues are for content.** Design discussions, multi-paragraph analysis, decisions — those go in issue comments. Chat is for short signals and AI↔human game communication.
 
-5. **Verification comments use `--body-file`.** Write to `ai/.tmp/issue-N-close-comment.md`, then `gh issue comment N --body-file`. Inline `--body` strings get mangled by shell escaping on Windows.
+5. **Verification comments use `--body-file`.** Write to `C:\proj\ai\.tmp\wordz-issue-N-close-comment.md` (the cross-project scratch dir — see "Working directory" below), then `gh issue comment N --body-file <path>`. Inline `--body` strings get mangled by shell escaping on Windows.
 
 6. **Run `bun run build` before committing.** The dev server doesn't run `tsc`, so type errors only surface here. CI runs the same command.
 
@@ -82,9 +82,13 @@ Schema or Edge Function changes add a manual deploy step:
 
 The Supabase CLI's auth and link state is per-machine and is set up once via `supabase login` and `supabase link` (see SETUP.md).
 
-## Working directory: `ai/.tmp`
+## Working directory: `C:\proj\ai\.tmp\` (cross-project)
 
-Temporary working files (issue drafts, verification comments, diagnostic dumps, downloaded reports) go in `C:\proj\ai\.tmp\`. This directory is gitignored. Don't put anything in `ai/tmp` (no leading dot) or `/tmp` — `ai/.tmp` is the convention.
+Temporary working files (issue drafts, verification comments, diagnostic dumps, downloaded reports) go in **`C:\proj\ai\.tmp\`** — that's the sibling `ai/` repo's `.tmp/`, not a folder inside `wordz/`. It's the cross-project scratch space the developer uses for everything; sharing one location keeps all in-flight artifacts findable from any session.
+
+**Do not** create `C:\proj\wordz\ai\.tmp\` — that path doesn't exist and shouldn't. If a tool or skill writes there by default, redirect it to `C:\proj\ai\.tmp\`. Likewise avoid `ai/tmp` (no leading dot) or `/tmp`.
+
+Prefix wordz-related files with `wordz-` (e.g. `wordz-issue-21-body.md`) so they're easy to spot among artifacts from other projects.
 
 ## History
 

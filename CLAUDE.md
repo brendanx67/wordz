@@ -163,6 +163,7 @@ Don't make them bigger.
 - Install alternative bundlers, CSS frameworks, or component libraries.
 - Commit `public/wordz-mcp.zip` to git. It's a build artifact listed in `.gitignore`. Committing it causes recursive bloat. `bun run build` chains `build:mcp` so Vercel deploys always ship a fresh MCP ZIP without anything entering git.
 - Deploy `game-api` with default `verify_jwt = true`. `supabase/config.toml` pins it to false because `game-api` does its own auth via `x-api-key` and MCP clients can't send a Supabase JWT. `--no-verify-jwt` on the CLI is **not** equivalent — that flag doesn't persist across deploys. See [ai/DEPLOYMENT.md](./ai/DEPLOYMENT.md).
+- Create a `wordz/ai/.tmp/` folder. Scratch artifacts (issue drafts, verification comments, diagnostic dumps) go in **`C:\proj\ai\.tmp\`** — the sibling `ai/` repo's scratch dir, used cross-project. Prefix wordz files with `wordz-`. See [ai/WORKFLOW.md](./ai/WORKFLOW.md).
 
 ## Topic guides
 
