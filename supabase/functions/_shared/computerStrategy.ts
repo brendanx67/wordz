@@ -100,10 +100,13 @@ export const PRESETS = [
 ] as const
 
 /** Short label shown in the scoreboard, lobby, and history.
- *  Presets get their familiar names; off-preset values become "C{strength}". */
+ *  Presets get their familiar names; off-preset values use a single-letter
+ *  family prefix — "P##" for percentile, "C##" for dynamic (Competitive). */
 export function computerLabel(strategy: Strategy, strength: number): string {
   const preset = PRESETS.find(p => p.strategy === strategy && p.strength === strength)
-  return preset ? preset.name : `C${strength}`
+  if (preset) return preset.name
+  const prefix = strategy === 'percentile' ? 'P' : 'C'
+  return `${prefix}${strength}`
 }
 
 /** Longer description for the get-game API response (LLM clients consume it). */

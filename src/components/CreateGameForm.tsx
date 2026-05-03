@@ -267,7 +267,7 @@ export default function CreateGameForm({ onCreateGame, onCancel, isPending }: Cr
                           max={100}
                           step={1}
                           value={[strength]}
-                          onValueChange={(v) => setComputerStrength(i, v[0])}
+                          onValueChange={(v) => setComputerStrength(i, Math.round(v[0]))}
                           className="flex-1"
                         />
                         <span className="text-[11px] text-amber-200 font-mono tabular-nums w-12 text-right">

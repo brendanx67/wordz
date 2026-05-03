@@ -111,11 +111,13 @@ describe('computerLabel', () => {
     expect(computerLabel('dynamic', 100)).toBe('Competitive')
   })
 
-  test('off-preset values become C##', () => {
-    expect(computerLabel('percentile', 75)).toBe('C75')
-    expect(computerLabel('percentile', 90)).toBe('C90')
+  test('off-preset values use family prefix (P=percentile, C=competitive)', () => {
+    expect(computerLabel('percentile', 75)).toBe('P75')
+    expect(computerLabel('percentile', 90)).toBe('P90')
+    expect(computerLabel('percentile', 98)).toBe('P98')
     expect(computerLabel('dynamic', 80)).toBe('C80')
     expect(computerLabel('dynamic', 60)).toBe('C60')
+    expect(computerLabel('dynamic', 90)).toBe('C90')
   })
 
   test('PRESETS covers all four named options', () => {
