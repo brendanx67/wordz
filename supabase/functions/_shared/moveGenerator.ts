@@ -289,23 +289,3 @@ function recordMove(board: BoardCell[][], trie: TrieNode, tilesPlaced: { row:num
   moves.push({ tiles: tilesPlaced, words: result.words, totalScore: result.totalScore })
 }
 
-export type Difficulty = 'easy' | 'medium' | 'hard'
-
-export function selectMove(moves: GeneratedMove[], difficulty: Difficulty): GeneratedMove | null {
-  if (!moves.length) return null
-  const sorted = [...moves].sort((a, b) => b.totalScore - a.totalScore)
-  if (difficulty === 'hard') return sorted[0]
-  if (difficulty === 'medium') {
-    const top = Math.max(3, Math.ceil(sorted.length * 0.3))
-    const cands = sorted.slice(0, top)
-    const weights = cands.map((_, i) => top - i)
-    const total = weights.reduce((a, b) => a + b, 0)
-    let r = Math.random() * total
-    for (let i = 0; i < cands.length; i++) { r -= weights[i]; if (r <= 0) return cands[i] }
-    return cands[0]
-  }
-  // easy
-  const start = Math.max(0, Math.floor(sorted.length * 0.4))
-  const cands = sorted.slice(start)
-  return cands.length ? cands[Math.floor(Math.random() * cands.length)] : sorted[sorted.length - 1]
-}

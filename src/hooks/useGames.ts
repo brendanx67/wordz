@@ -3,11 +3,17 @@ import { supabase } from '@/lib/supabase'
 import { createTileBag, drawTiles, createEmptyBoard, RACK_SIZE } from '@/lib/gameConstants'
 import type { Tile, BoardCell } from '@/lib/gameConstants'
 import type { GameConfig } from '@/components/CreateGameForm'
+import { computerLabel, type Strategy } from '@/lib/_shared/computerStrategy'
 
 export interface ComputerPlayer {
   id: string
   name: string
-  difficulty: 'easy' | 'medium' | 'hard' | 'competitive'
+  // strategy + strength replace the old `difficulty` enum. See
+  // _shared/computerStrategy.ts for the algorithms and PRESETS list.
+  // Optional only because API players (api-*) share this shape and don't use
+  // them; built-in computer-* players always have both set.
+  strategy?: 'percentile' | 'dynamic'
+  strength?: number
   rack: Tile[]
   score: number
   owner_id?: string
@@ -131,7 +137,7 @@ export function useCreateConfiguredGame() {
   return useMutation({
     mutationFn: async ({ userId, config, displayName }: { userId: string; config: GameConfig; displayName: string }) => {
       const activePlayers = config.players.filter(s => s.type !== 'none')
-      const computerSlots = activePlayers.filter(s => s.type.startsWith('computer-'))
+      const computerSlots = activePlayers.filter(s => s.type === 'computer')
       const apiSlots = activePlayers.filter(s => s.type === 'api-player')
       const hasMe = activePlayers.some(s => s.type === 'me')
       const hasHuman = activePlayers.some(s => s.type === 'human')
@@ -139,15 +145,19 @@ export function useCreateConfiguredGame() {
       // Build the bag and draw tiles for all players
       let bag = createTileBag()
 
-      // Create computer players
+      // Create computer players. The slot carries strategy + strength
+      // (defaulted by the form), and the displayed name uses the preset
+      // label or "C##" for a custom strength.
       const computerPlayers: ComputerPlayer[] = computerSlots.map((slot, i) => {
-        const diff = slot.type.replace('computer-', '') as 'easy' | 'medium' | 'hard' | 'competitive'
+        const strategy = (slot.computerStrategy ?? 'percentile') as Strategy
+        const strength = slot.computerStrength ?? 100
         const { drawn, remaining } = drawTiles(bag, RACK_SIZE)
         bag = remaining
         return {
           id: `computer-${i + 1}`,
-          name: `Computer ${i + 1} (${diff.charAt(0).toUpperCase() + diff.slice(1)})`,
-          difficulty: diff,
+          name: `Computer ${i + 1} (${computerLabel(strategy, strength)})`,
+          strategy,
+          strength,
           rack: drawn,
           score: 0,
         }
@@ -194,7 +204,7 @@ export function useCreateConfiguredGame() {
           turnOrder.push(userId)
         } else if (slot.type === 'human') {
           turnOrder.push('__human_pending__')
-        } else if (slot.type.startsWith('computer-')) {
+        } else if (slot.type === 'computer') {
           turnOrder.push(computerPlayers[cpuIdx].id)
           cpuIdx++
         } else if (slot.type === 'api-player') {
@@ -244,9 +254,12 @@ export function useCreateConfiguredGame() {
           computer_players: allNonHumanPlayers,
           computer_delay: config.computerDelay,
           pending_human_find_words: pendingHumanFindWords,
-          // Legacy single-computer fields (for backward compat)
-          computer_difficulty: computerPlayers[0]?.difficulty ?? null,
-          computer_rack: computerPlayers[0]?.rack ?? [],
+          // Legacy single-computer columns kept around (nullable). They were
+          // already replaced by the per-player computer_players JSONB array
+          // and only the legacy "computer-player" code path read them; that
+          // code path is gone now too.
+          computer_difficulty: null,
+          computer_rack: [],
           computer_score: 0,
         })
         .select('id')

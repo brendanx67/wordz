@@ -1,7 +1,6 @@
 import { describe, test, expect } from "bun:test";
 import {
   generateAllMoves,
-  selectMove,
   type GeneratedMove,
 } from "./moveGenerator.ts";
 import {
@@ -253,34 +252,6 @@ describe("generateAllMoves", () => {
     expect(uniqueKeys.size).toBe(moveKeys.length);
   });
 
-// ─── selectMove ──────────────────────────────────────────────────────────────
-
-describe("selectMove", () => {
-  const mockMoves: GeneratedMove[] = [10, 20, 30, 40, 50].map((s, i) => ({
-    tiles: [],
-    words: [{ word: `W${i}`, score: s }],
-    totalScore: s,
-  }));
-
-  test("null handling, hard mode picks the max-score move, easy mode stays in the lower portion", () => {
-    // Empty input returns null for every difficulty.
-    expect(selectMove([], "hard")).toBeNull();
-    expect(selectMove([], "medium")).toBeNull();
-    expect(selectMove([], "easy")).toBeNull();
-
-    // Hard mode is deterministic: top of the sorted list.
-    const hard = selectMove(mockMoves, "hard");
-    expect(hard).not.toBeNull();
-    expect(hard!.totalScore).toBe(50);
-
-    // Easy mode samples from sorted.slice(floor(len * 0.4)) = indices 2..4
-    // of [50,40,30,20,10] → possible scores {30, 20, 10}.
-    // Sample many times to confirm the result is never a top-tier score.
-    const easyPossible = new Set([30, 20, 10]);
-    for (let i = 0; i < 60; i++) {
-      const picked = selectMove(mockMoves, "easy");
-      expect(picked).not.toBeNull();
-      expect(easyPossible.has(picked!.totalScore)).toBe(true);
-    }
-  });
-});
+// Move-selection logic now lives in computerStrategy.ts (see
+// computerStrategy.test.ts). Difficulty choices are decoupled from move
+// generation, so the move-generator tests above stay focused on legality.

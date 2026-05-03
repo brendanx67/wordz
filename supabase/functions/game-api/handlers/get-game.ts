@@ -1,5 +1,6 @@
 import type { Tile, BoardCell } from "../_shared/gameConstants.ts";
 import { BOARD_SIZE } from "../_shared/gameConstants.ts";
+import { computerDescription } from "../_shared/computerStrategy.ts";
 import type { ApiPlayer } from "../api-helpers.ts";
 import {
   authenticateApiKey,
@@ -54,7 +55,7 @@ export async function handleGetGame(req: Request): Promise<Response> {
     description: "Human player",
   }));
 
-  const aiPlayers = allPlayers.map((p: ApiPlayer & { difficulty?: string; strategyLevel?: string; owner_id?: string }) => {
+  const aiPlayers = allPlayers.map((p: ApiPlayer & { strategy?: "percentile" | "dynamic"; strength?: number; strategyLevel?: string; owner_id?: string }) => {
     const isComputer = p.id.startsWith("computer-");
     const isApi = p.id.startsWith("api-");
     return {
@@ -66,18 +67,12 @@ export async function handleGetGame(req: Request): Promise<Response> {
       name: p.name,
       score: p.score,
       type: isComputer ? "computer" as const : isApi ? "api" as const : "unknown" as const,
-      description: isComputer
-        ? (p.difficulty === "competitive"
-          ? `Adaptive algorithm (competitive) — targets the top opponent's score each turn, playing conservatively when ahead and aggressively when behind`
-          : p.difficulty === "hard"
-            ? `Brute-force algorithm (hard) — exhaustively searches all legal moves and always plays the highest-scoring one`
-            : p.difficulty === "medium"
-              ? `Algorithm (medium) — picks a good but not always optimal move from the top candidates`
-              : `Algorithm (easy) — plays simple, lower-scoring moves`)
+      description: isComputer && p.strategy && typeof p.strength === "number"
+        ? computerDescription(p.strategy, p.strength)
         : isApi
           ? `LLM/AI player via API (strategy level: ${p.strategyLevel ?? "unknown"})`
           : "Unknown player type",
-      ...(isComputer && p.difficulty ? { difficulty: p.difficulty } : {}),
+      ...(isComputer && p.strategy ? { strategy: p.strategy, strength: p.strength } : {}),
       ...(isApi && p.strategyLevel ? { strategy_level: p.strategyLevel } : {}),
     };
   });

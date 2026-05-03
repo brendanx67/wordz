@@ -4,16 +4,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
+import { Slider } from '@/components/ui/slider'
 import { Bot, User, Play, X, Sparkles, Search, BookOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { computerLabel, PRESETS, type Strategy } from '@/lib/_shared/computerStrategy'
 
 export type PlayerSlotType =
   | 'me'
   | 'human'
-  | 'computer-easy'
-  | 'computer-medium'
-  | 'computer-hard'
-  | 'computer-competitive'
+  | 'computer'
   | 'api-player'
   | 'none'
 
@@ -24,6 +23,11 @@ export interface PlayerSlot {
   label: string
   apiPlayerName?: string
   strategyLevel?: StrategyLevel
+  // Computer slot strategy + strength. Defaulted to (percentile, 100) when
+  // a slot first becomes 'computer'; the form lets the user pick a preset
+  // (Easy/Medium/Hard/Competitive) or dial the slider for a custom value.
+  computerStrategy?: Strategy
+  computerStrength?: number
   // Instructional mode for human seats (#10). For "me" the value applies to the
   // creator's own game_players row at insert time; for "human" slots it gets
   // queued in games.pending_human_find_words and consumed when a joiner takes
@@ -50,21 +54,22 @@ const DEFAULT_SLOTS: PlayerSlot[] = [
   { type: 'none', label: 'None' },
 ]
 
-function getSlotLabel(type: PlayerSlotType): string {
+function getSlotLabel(type: PlayerSlotType, slot?: PlayerSlot): string {
   switch (type) {
     case 'me': return 'Me'
     case 'human': return 'Human Player'
-    case 'computer-easy': return 'Computer (Easy)'
-    case 'computer-medium': return 'Computer (Medium)'
-    case 'computer-hard': return 'Computer (Hard)'
-    case 'computer-competitive': return 'Computer (Competitive)'
+    case 'computer': {
+      const strategy = slot?.computerStrategy ?? 'percentile'
+      const strength = slot?.computerStrength ?? 100
+      return `Computer (${computerLabel(strategy, strength)})`
+    }
     case 'api-player': return 'API Player (LLM)'
     case 'none': return 'None'
   }
 }
 
 function getSlotIcon(type: PlayerSlotType) {
-  if (type.startsWith('computer-')) return <Bot className="h-4 w-4 text-emerald-400" />
+  if (type === 'computer') return <Bot className="h-4 w-4 text-emerald-400" />
   if (type === 'api-player') return <Sparkles className="h-4 w-4 text-purple-400" />
   if (type === 'me' || type === 'human') return <User className="h-4 w-4 text-amber-400" />
   return null
@@ -75,7 +80,7 @@ export default function CreateGameForm({ onCreateGame, onCancel, isPending }: Cr
   const [computerDelay, setComputerDelay] = useState(0)
   const [wordFinderEnabled, setWordFinderEnabled] = useState(false)
 
-  const hasComputer = slots.some(s => s.type.startsWith('computer-'))
+  const hasComputer = slots.some(s => s.type === 'computer')
   const hasApiPlayer = slots.some(s => s.type === 'api-player')
   const activePlayers = slots.filter(s => s.type !== 'none')
   const isValid = activePlayers.length >= 2
@@ -83,15 +88,38 @@ export default function CreateGameForm({ onCreateGame, onCancel, isPending }: Cr
   const updateSlot = (index: number, type: PlayerSlotType) => {
     setSlots(prev => {
       const next = [...prev]
+      const isComputer = type === 'computer'
+      const carryStrategy = isComputer ? (prev[index].computerStrategy ?? 'percentile') : undefined
+      const carryStrength = isComputer ? (prev[index].computerStrength ?? 100) : undefined
       next[index] = {
         type,
-        label: getSlotLabel(type),
+        label: getSlotLabel(type, { ...prev[index], type, computerStrategy: carryStrategy, computerStrength: carryStrength }),
         apiPlayerName: type === 'api-player' ? (prev[index].apiPlayerName || 'Claude') : undefined,
         strategyLevel: type === 'api-player' ? (prev[index].strategyLevel || 'master') : undefined,
+        computerStrategy: carryStrategy,
+        computerStrength: carryStrength,
         // Carry over the instructional flag if it was set on a human seat;
         // dropped automatically when the slot is no longer me/human.
         findWordsEnabled: (type === 'me' || type === 'human') ? prev[index].findWordsEnabled : undefined,
       }
+      return next
+    })
+  }
+
+  const setComputerPreset = (index: number, strategy: Strategy, strength: number) => {
+    setSlots(prev => {
+      const next = [...prev]
+      const updated = { ...next[index], computerStrategy: strategy, computerStrength: strength }
+      next[index] = { ...updated, label: getSlotLabel('computer', updated) }
+      return next
+    })
+  }
+
+  const setComputerStrength = (index: number, strength: number) => {
+    setSlots(prev => {
+      const next = [...prev]
+      const updated = { ...next[index], computerStrength: strength }
+      next[index] = { ...updated, label: getSlotLabel('computer', updated) }
       return next
     })
   }
@@ -133,10 +161,7 @@ export default function CreateGameForm({ onCreateGame, onCancel, isPending }: Cr
     }
 
     options.push(
-      { value: 'computer-easy', label: 'Computer (Easy)' },
-      { value: 'computer-medium', label: 'Computer (Medium)' },
-      { value: 'computer-hard', label: 'Computer (Hard)' },
-      { value: 'computer-competitive', label: 'Computer (Competitive)' },
+      { value: 'computer', label: 'Computer' },
       { value: 'api-player', label: 'API Player (LLM)' },
     )
 
@@ -206,6 +231,57 @@ export default function CreateGameForm({ onCreateGame, onCancel, isPending }: Cr
                     </span>
                   </button>
                 )}
+                {slot.type === 'computer' && (() => {
+                  const strategy = slot.computerStrategy ?? 'percentile'
+                  const strength = slot.computerStrength ?? 100
+                  const sliderMin = strategy === 'percentile' ? 0 : 50
+                  const label = computerLabel(strategy, strength)
+                  return (
+                    <div className="space-y-2 px-2.5 py-2 rounded-md bg-emerald-950/20 border border-emerald-800/30">
+                      <div className="flex flex-wrap gap-1">
+                        {PRESETS.map(p => {
+                          const active = p.strategy === strategy && p.strength === strength
+                          return (
+                            <button
+                              key={p.name}
+                              type="button"
+                              onClick={() => setComputerPreset(i, p.strategy, p.strength)}
+                              className={cn(
+                                'px-2 py-0.5 rounded text-[11px] font-semibold border transition-colors',
+                                active
+                                  ? 'bg-emerald-700/70 border-emerald-400 text-white'
+                                  : 'bg-amber-950/40 border-amber-800/40 text-amber-300/80 hover:text-amber-100 hover:border-emerald-600/50'
+                              )}
+                              title={p.strategy === 'percentile'
+                                ? `Percentile mode at ${p.strength}`
+                                : 'Dynamic mode (catches up to the leader)'}
+                            >
+                              {p.name}
+                            </button>
+                          )
+                        })}
+                      </div>
+                      <div className="flex items-center gap-2">
+                        <Slider
+                          min={sliderMin}
+                          max={100}
+                          step={1}
+                          value={[strength]}
+                          onValueChange={(v) => setComputerStrength(i, v[0])}
+                          className="flex-1"
+                        />
+                        <span className="text-[11px] text-amber-200 font-mono tabular-nums w-12 text-right">
+                          {label}
+                        </span>
+                      </div>
+                      <p className="text-[10px] text-amber-400/80 leading-tight">
+                        {strategy === 'percentile'
+                          ? <>Plays the move at the <strong>{strength}th percentile</strong> of all legal moves, ranked by score.</>
+                          : <>Targets the leader&apos;s score each turn. At <strong>100</strong> it perfectly matches; lower values let you pull ahead by ~{100 - strength}% of an average move per turn.</>}
+                      </p>
+                    </div>
+                  )
+                })()}
                 {slot.type === 'api-player' && (
                   <>
                     <Input

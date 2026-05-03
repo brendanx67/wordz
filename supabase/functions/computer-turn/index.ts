@@ -5,6 +5,12 @@ import type { TrieNode } from "./_shared/trie.ts";
 import { buildTrie } from "./_shared/trie.ts";
 import type { GeneratedMove } from "./_shared/moveGenerator.ts";
 import { generateAllMoves } from "./_shared/moveGenerator.ts";
+import {
+  countPlaysByPlayer,
+  selectDynamic,
+  selectPercentile,
+} from "./_shared/computerStrategy.ts";
+import type { Strategy } from "./_shared/computerStrategy.ts";
 
 // ─── CORS ──────────────────────────────────────────────────────────────────────
 const cors = {
@@ -12,66 +18,35 @@ const cors = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
-
-type Difficulty = "easy" | "medium" | "hard" | "competitive";
-
-interface ScoreContext {
-  myScore: number;
-  otherScores: number[]; // scores of all other players
-  moveNumber: number; // how many moves have been played
+interface PlayerScoreInfo {
+  id: string;
+  score: number;
 }
 
-function selectMove(moves: GeneratedMove[], difficulty: Difficulty, scoreCtx?: ScoreContext): GeneratedMove | null {
+function pickMove(
+  moves: GeneratedMove[],
+  strategy: Strategy,
+  strength: number,
+  cpuId: string,
+  cpuScore: number,
+  others: PlayerScoreInfo[],
+  moveHistory: { player_id: string; type: string }[],
+): GeneratedMove | null {
   if (!moves.length) return null;
-  const sorted = [...moves].sort((a, b) => b.totalScore - a.totalScore);
-  if (difficulty === "hard") return sorted[0];
-  if (difficulty === "competitive" && scoreCtx) return selectCompetitiveMove(moves, scoreCtx);
-  if (difficulty === "medium") {
-    const top = Math.max(3, Math.ceil(sorted.length * 0.3));
-    const cands = sorted.slice(0, top);
-    const weights = cands.map((_, i) => top - i);
-    const total = weights.reduce((a, b) => a + b, 0);
-    let r = Math.random() * total;
-    for (let i = 0; i < cands.length; i++) { r -= weights[i]; if (r <= 0) return cands[i]; }
-    return cands[0];
+  if (strategy === "percentile") return selectPercentile(moves, strength);
+
+  // Dynamic: identify the leading opponent and how many plays they've made.
+  let leader: PlayerScoreInfo = { id: "", score: 0 };
+  for (const o of others) {
+    if (o.id === cpuId) continue;
+    if (o.score > leader.score) leader = o;
   }
-  // easy
-  const start = Math.max(0, Math.floor(sorted.length * 0.4));
-  const cands = sorted.slice(start);
-  return cands.length ? cands[Math.floor(Math.random() * cands.length)] : sorted[sorted.length - 1];
-}
-
-function selectCompetitiveMove(moves: GeneratedMove[], ctx: ScoreContext): GeneratedMove {
-  const bestOpponentScore = Math.max(...ctx.otherScores, 0);
-  const gap = bestOpponentScore - ctx.myScore; // positive = we're behind, negative = we're ahead
-
-  // Estimate what the best opponent might score next turn (use their average)
-  const avgMoveScore = ctx.moveNumber > 0
-    ? bestOpponentScore / Math.max(1, Math.ceil(ctx.moveNumber / 2))
-    : 20;
-
-  // Target: the score that would put us roughly even with the leader
-  // after they play another average move
-  const targetMoveScore = gap + avgMoveScore;
-
-  // Find the move whose score is closest to the target
-  // But always play at least a reasonable word (floor at ~60% of median available)
-  const scores = moves.map(m => m.totalScore);
-  const medianScore = scores.sort((a, b) => a - b)[Math.floor(scores.length / 2)] || 0;
-  const floor = Math.max(4, Math.floor(medianScore * 0.3));
-  const effectiveTarget = Math.max(floor, targetMoveScore);
-
-  let bestMove = moves[0];
-  let bestDist = Infinity;
-  for (const move of moves) {
-    const dist = Math.abs(move.totalScore - effectiveTarget);
-    if (dist < bestDist) {
-      bestDist = dist;
-      bestMove = move;
-    }
-  }
-
-  return bestMove;
+  const playCounts = countPlaysByPlayer(moveHistory);
+  return selectDynamic(moves, strength, {
+    myScore: cpuScore,
+    leaderScore: leader.score,
+    leaderMoveCount: playCounts[leader.id] ?? 0,
+  });
 }
 
 // ─── DICTIONARY CACHE ──────────────────────────────────────────────────────────
@@ -99,7 +74,11 @@ async function getWordList(): Promise<string> {
 interface ComputerPlayer {
   id: string;
   name: string;
-  difficulty: Difficulty;
+  // strategy + strength replace the old `difficulty` enum. Easy/Medium/Hard
+  // map to (percentile, 50/80/100); Competitive maps to (dynamic, 100); the
+  // slider in the create-game form lets the user pick anything in between.
+  strategy: Strategy;
+  strength: number;
   rack: Tile[];
   score: number;
 }
@@ -187,18 +166,7 @@ Deno.serve(async (req) => {
 
     // Find the computer player in the computer_players array
     const computerPlayers = (game.computer_players || []) as ComputerPlayer[];
-    let cpuPlayer = computerPlayers.find(cp => cp.id === currentTurn);
-
-    // Fallback for legacy single-computer games
-    if (!cpuPlayer && currentTurn === "computer-player") {
-      cpuPlayer = {
-        id: "computer-player",
-        name: `Computer (${game.computer_difficulty || "medium"})`,
-        difficulty: (game.computer_difficulty || "medium") as Difficulty,
-        rack: game.computer_rack as Tile[],
-        score: game.computer_score as number,
-      };
-    }
+    const cpuPlayer = computerPlayers.find(cp => cp.id === currentTurn);
 
     if (!cpuPlayer) {
       return new Response(JSON.stringify({ error: "Computer player not found" }), {
@@ -217,24 +185,26 @@ Deno.serve(async (req) => {
     // Generate and select a move
     const moves = generateAllMoves(board, cpuPlayer.rack, trie);
 
-    // Build score context for competitive mode
-    let scoreCtx: ScoreContext | undefined;
-    if (cpuPlayer.difficulty === "competitive") {
+    // For dynamic strategy, look up every other player's id+score plus the
+    // play-by-play history so the strategy can compute the leader's per-turn
+    // average accurately.
+    let others: PlayerScoreInfo[] = [];
+    let moveHistoryForSelect: { player_id: string; type: string }[] = [];
+    if (cpuPlayer.strategy === "dynamic") {
       const { data: humanPlayers } = await supabase
-        .from("game_players").select("score").eq("game_id", game_id);
-      const otherCpuScores = computerPlayers
-        .filter(cp => cp.id !== cpuPlayer.id)
-        .map(cp => cp.score);
-      const humanScores = (humanPlayers || []).map((p: { score: number }) => p.score);
-      const moveHistory = (game.move_history || []) as unknown[];
-      scoreCtx = {
-        myScore: cpuPlayer.score,
-        otherScores: [...humanScores, ...otherCpuScores],
-        moveNumber: moveHistory.length,
-      };
+        .from("game_players").select("player_id, score").eq("game_id", game_id);
+      others = [
+        ...(humanPlayers || []).map((p: { player_id: string; score: number }) =>
+          ({ id: p.player_id, score: p.score })),
+        ...computerPlayers.map(cp => ({ id: cp.id, score: cp.score })),
+      ];
+      moveHistoryForSelect = (game.move_history || []) as { player_id: string; type: string }[];
     }
 
-    const selected = selectMove(moves, cpuPlayer.difficulty, scoreCtx);
+    const selected = pickMove(
+      moves, cpuPlayer.strategy, cpuPlayer.strength,
+      cpuPlayer.id, cpuPlayer.score, others, moveHistoryForSelect,
+    );
 
     if (!selected) {
       // No valid moves — pass

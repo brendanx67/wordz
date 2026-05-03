@@ -31,7 +31,8 @@ export interface GameState {
     score: number;
     type?: string;
     description?: string;
-    difficulty?: string;
+    strategy?: string;
+    strength?: number;
     strategy_level?: string;
   }[];
   recent_moves: { player: string; type: string; words: string[]; score: number }[];

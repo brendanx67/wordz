@@ -26,15 +26,10 @@ export function registerGetGameStateTool(server: McpServer) {
           // to start_direct_message to open a DM channel.
           const userIdSuffix = p.user_id ? ` [user_id=${p.user_id}]` : "";
           if (p.type === "computer") {
-            const diffDesc =
-              p.difficulty === "competitive"
-                ? "ADAPTIVE ALGORITHM: Targets the top opponent's score each turn — plays conservatively when ahead, aggressively when behind. Has a crude sense of game position."
-                : p.difficulty === "hard"
-                  ? "BRUTE-FORCE ALGORITHM: Exhaustively searches all legal moves and always plays the highest-scoring one. Pure greedy optimization, no strategic thinking."
-                  : p.difficulty === "medium"
-                    ? "ALGORITHM (medium): Picks a good but not always optimal move."
-                    : "ALGORITHM (easy): Plays simple, lower-scoring moves.";
-            return `${p.name} — ${diffDesc}`;
+            // The game-api response already includes a strategy-aware
+            // description; surface it verbatim so the LLM client and the web
+            // UI never disagree.
+            return `${p.name} — ${p.description ?? "ALGORITHM"}`;
           }
           if (p.type === "api") {
             return `${p.name}${userIdSuffix} — LLM/AI PLAYER (strategy: ${p.strategy_level ?? "unknown"}): Another AI model playing via API.`;

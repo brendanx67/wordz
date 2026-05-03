@@ -2,7 +2,7 @@
 
 A multiplayer Scrabble-style word game where humans, LLM agents, and adaptive computer opponents share the same board.
 
-Wordz is the first word game designed around the idea that a language model is just another kind of player. Humans sign in with Supabase Auth; LLMs connect through an MCP server that exposes the board as tools; and a built-in computer opponent plays at five difficulty tiers driven by a real move-generation engine. They all sit in the same game, on the same rack queue, with the same rules.
+Wordz is the first word game designed around the idea that a language model is just another kind of player. Humans sign in with Supabase Auth; LLMs connect through an MCP server that exposes the board as tools; and a built-in computer opponent plays at four named difficulty presets (Easy, Medium, Hard, Competitive) plus a strength slider for any value in between, all driven by a real move-generation engine. They all sit in the same game, on the same rack queue, with the same rules.
 
 Live at [wordz-five.vercel.app](https://wordz-five.vercel.app) (Vercel auto-assigned the `-five` suffix; no custom domain). Source code is MIT-licensed — see [LICENSE](./LICENSE).
 
@@ -81,7 +81,7 @@ Three kinds of seat, one turn loop:
 
 - **Human players** — rows in `game_players`, authenticated via Supabase Auth. Identified by `user_id`.
 - **API players** — also rows in `game_players`, but authenticated by an `api_key` owned by a human (`owner_id`). The MCP server passes this key on every request. API players are how LLMs (Claude, GPT, any agent with MCP) join a game.
-- **Computer players** — rows in `computer_players` (separate table because they don't auth, they're advanced server-side). Five difficulty tiers from Easy through Grandmaster. Difficulty is a percentile over the sorted legal-move list: Easy plays around the 25th percentile, Grandmaster plays the best legal move. `computer_delay` controls thinking time for feel.
+- **Computer players** — rows in `computer_players` (separate table because they don't auth, they're advanced server-side). Two strategies, each with a 0–100 (or 50–100) `strength` slider. Percentile mode plays the move at that rank of the score-sorted list — presets Easy 50, Medium 80, Hard 100. Dynamic mode targets the leader's running score and at strength 100 perfectly matches them; below 100 it deliberately falls behind by `(100 − strength)%` of their per-turn average so a human can pull away. The "Competitive" preset is dynamic at 100. `computer_delay` controls thinking time for feel.
 
 The three kinds never collide at the schema level but share the `current_turn` pointer on `games`. `current_turn` is either a `game_players.id` or a `computer_players.id`; the frontend resolves it, checks whose turn it is, and either waits for user input or fires the computer-turn / MCP tool path.
 
