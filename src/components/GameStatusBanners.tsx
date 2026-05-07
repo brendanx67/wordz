@@ -54,10 +54,12 @@ export default function GameStatusBanners({
 }: GameStatusBannersProps) {
   return (
     <>
-      {gameStatus === 'waiting' && (
+      {gameStatus === 'waiting' && (() => {
+        const seated = players.length + computerPlayers.length
+        return (
         <div className="flex flex-col items-center gap-3 bg-amber-900/20 px-6 py-4 rounded-lg">
           <div className="text-amber-400 text-sm">
-            {players.length}/4 players joined
+            {seated} {seated === 1 ? 'player' : 'players'} seated
           </div>
           {isCreator && canStart ? (
             <Button
@@ -74,7 +76,8 @@ export default function GameStatusBanners({
             <div className="text-amber-400 text-xs">Waiting for the game creator to start...</div>
           )}
         </div>
-      )}
+        )
+      })()}
 
       {gameStatus === 'finished' && !reviewMode && (() => {
         const isMine = (id: string) => id === userId ||

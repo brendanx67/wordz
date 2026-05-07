@@ -545,7 +545,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
               setReviewMoveIndex(moveHistory.length - 1)
             }}
             isCreator={game.created_by === userId}
-            canStart={players.length >= 2}
+            canStart={players.length + computerPlayers.length >= 2}
             startPending={startGame.isPending}
             onStart={async () => {
               try {

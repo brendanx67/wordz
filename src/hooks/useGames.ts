@@ -358,13 +358,26 @@ export function useJoinGame() {
         })
       if (playerErr) throw playerErr
 
+      // If this join filled the last pending human seat, auto-start the
+      // game — same behavior as the create flow, which sets status='active'
+      // immediately when there are no humans to wait for. Without this,
+      // games with one human-placeholder + one computer get stuck in the
+      // 'waiting' lobby with a misleading "1/N players joined" banner and
+      // a Start button that's gated on a humans-only count.
+      const updates: Record<string, unknown> = {
+        tile_bag: remaining,
+        turn_order: newTurnOrder,
+        pending_human_find_words: remainingQueue,
+      }
+      if (remainingQueue.length === 0) {
+        const firstIdx = Math.floor(Math.random() * newTurnOrder.length)
+        updates.status = 'active'
+        updates.current_turn = newTurnOrder[firstIdx]
+        updates.turn_index = firstIdx
+      }
       const { error: updateErr } = await supabase
         .from('games')
-        .update({
-          tile_bag: remaining,
-          turn_order: newTurnOrder,
-          pending_human_find_words: remainingQueue,
-        })
+        .update(updates)
         .eq('id', gameId)
       if (updateErr) throw updateErr
 
