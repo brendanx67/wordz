@@ -75,8 +75,9 @@ interface ComputerPlayer {
   id: string;
   name: string;
   // strategy + strength replace the old `difficulty` enum. Easy/Medium/Hard
-  // map to (percentile, 50/80/100); Competitive maps to (dynamic, 100); the
-  // slider in the create-game form lets the user pick anything in between.
+  // map to (percentile, 75/80/100); Competitive maps to (dynamic, 100); the
+  // slider in the create-game form lets the user pick anything in 75-100
+  // (percentile) or 91-100 (dynamic). Older rows may carry sub-floor values.
   strategy: Strategy;
   strength: number;
   rack: Tile[];
