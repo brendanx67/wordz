@@ -59,6 +59,27 @@ export function useBoardInteractions({
 }: UseBoardInteractionsArgs) {
   const [blankTileTarget, setBlankTileTarget] = useState<{ row: number; col: number; tile: Tile } | null>(null)
 
+  // If the blank we're prompting for is no longer at its target square in
+  // placedTiles (recalled, picked up to rack, dragged elsewhere, or replaced),
+  // close the letter-chooser dialog. Without this the chooser stays up after
+  // the user has moved on.
+  useEffect(() => {
+    if (!blankTileTarget) return
+    const placed = placedTiles.get(`${blankTileTarget.row},${blankTileTarget.col}`)
+    if (!placed || placed.id !== blankTileTarget.tile.id) {
+      setBlankTileTarget(null)
+    }
+  }, [blankTileTarget, placedTiles])
+
+  // Same for the suggestion-mode chooser when spectating an API player.
+  useEffect(() => {
+    if (!suggestionBlankTarget) return
+    const placed = suggestionTiles.get(`${suggestionBlankTarget.row},${suggestionBlankTarget.col}`)
+    if (!placed || placed.id !== suggestionBlankTarget.tile.id) {
+      setSuggestionBlankTarget(null)
+    }
+  }, [suggestionBlankTarget, suggestionTiles, setSuggestionBlankTarget])
+
   const handleSquareClick = useCallback((row: number, col: number) => {
     if (board[row]?.[col]?.tile) return
     if (selectedSquare?.row === row && selectedSquare?.col === col) {
@@ -71,15 +92,18 @@ export function useBoardInteractions({
   const placeTileOnBoard = useCallback((row: number, col: number, tile: Tile) => {
     if (board[row]?.[col]?.tile) return
     if (placedTiles.has(`${row},${col}`)) return
-    if (tile.isBlank) {
-      setBlankTileTarget({ row, col, tile })
-      return
-    }
+    // Blanks: place on the board AND open the letter chooser. The chooser
+    // can't be modal (must allow undo / pickup), so the on-board placement
+    // is what gives the user something to grab. Picking it back up before
+    // assigning a letter auto-dismisses the chooser via the effect below.
     setPlacedTiles(prev => {
       const next = new Map(prev)
       next.set(`${row},${col}`, tile)
       return next
     })
+    if (tile.isBlank && !tile.letter) {
+      setBlankTileTarget({ row, col, tile })
+    }
     setStagedFindWordsKey(null)
     if (!hidePlayHint) dismissPlayHint()
   }, [board, placedTiles, hidePlayHint, dismissPlayHint, setPlacedTiles, setStagedFindWordsKey])
@@ -150,25 +174,20 @@ export function useBoardInteractions({
     if (source && source.row === row && source.col === col) return
 
     if (isSpectatingApi) {
-      if (tile.isBlank && !source && !tile.letter) {
-        setSuggestionBlankTarget({ row, col, tile })
-        return
-      }
       setSuggestionTiles(prev => {
         const next = new Map(prev)
         if (source) next.delete(`${source.row},${source.col}`)
         next.set(`${row},${col}`, tile)
         return next
       })
+      if (tile.isBlank && !source && !tile.letter) {
+        // Same on-board-then-prompt pattern as the regular path.
+        setSuggestionBlankTarget({ row, col, tile })
+      }
       return
     }
 
     if (!isMyTurn || !isActive) return
-
-    if (tile.isBlank && !source && !tile.letter) {
-      setBlankTileTarget({ row, col, tile })
-      return
-    }
 
     setPlacedTiles(prev => {
       const next = new Map(prev)
@@ -176,6 +195,11 @@ export function useBoardInteractions({
       next.set(`${row},${col}`, tile)
       return next
     })
+    if (tile.isBlank && !source && !tile.letter) {
+      // Place the blank visually and open the chooser. Picking the blank
+      // back up before assigning a letter auto-dismisses via the effect.
+      setBlankTileTarget({ row, col, tile })
+    }
     setStagedFindWordsKey(null)
   }, [isMyTurn, isActive, isSpectatingApi, board, setSuggestionTiles, setSuggestionBlankTarget, setPlacedTiles, setStagedFindWordsKey])
 
