@@ -1,6 +1,7 @@
 import { describe, test, expect } from "bun:test";
 import {
   applyEndgameScoring,
+  buildEndgameHistoryEntries,
   type EndgameInput,
 } from "./endgame.ts";
 
@@ -151,5 +152,95 @@ describe("applyEndgameScoring", () => {
 
     expect(computers[0]).toEqual(cpuBefore);
     expect(humans[0]).toEqual(humanBefore);
+  });
+
+  test("penalties array carries per-player rack snapshot for history use", () => {
+    const input: EndgameInput = {
+      outPlayerId: "human-1",
+      outPlayerScoreBeforeBonus: 100,
+      computers: [
+        {
+          id: "cpu-1",
+          score: 80,
+          rack: [
+            { letter: "Q", value: 10 },
+            { letter: "E", value: 1 },
+          ],
+        },
+      ],
+      humans: [
+        { id: "human-1", score: 100, rack: [] },
+        {
+          id: "human-2",
+          score: 50,
+          rack: [
+            { letter: "B", value: 3 },
+            { letter: "O", value: 1 },
+            { letter: "A", value: 1 },
+          ],
+        },
+      ],
+    };
+
+    const result = applyEndgameScoring(input);
+
+    expect(result.penalties).toHaveLength(2);
+    const cpuPen = result.penalties.find((p) => p.playerId === "cpu-1")!;
+    expect(cpuPen.rackValue).toBe(11);
+    expect(cpuPen.rackTiles.map((t) => t.letter)).toEqual(["Q", "E"]);
+    const h2Pen = result.penalties.find((p) => p.playerId === "human-2")!;
+    expect(h2Pen.rackValue).toBe(5);
+    expect(h2Pen.rackTiles.map((t) => t.letter)).toEqual(["B", "O", "A"]);
+    // Out-player is never in penalties.
+    expect(result.penalties.find((p) => p.playerId === "human-1")).toBeUndefined();
+    // Bonus matches: 11 + 5 = 16.
+    expect(result.totalBonusToOutPlayer).toBe(16);
+    expect(result.outPlayerNewScore).toBe(116);
+  });
+});
+
+describe("buildEndgameHistoryEntries", () => {
+  test("emits one penalty entry per non-empty opponent rack plus one bonus", () => {
+    const result = applyEndgameScoring({
+      outPlayerId: "h1",
+      outPlayerScoreBeforeBonus: 100,
+      computers: [{ id: "c1", score: 80, rack: [{ letter: "Q", value: 10 }] }],
+      humans: [
+        { id: "h1", score: 100, rack: [] },
+        { id: "h2", score: 50, rack: [{ letter: "A", value: 1 }] },
+      ],
+    });
+    const names: Record<string, string> = { h1: "Brendan", h2: "Bob", c1: "Computer 1" };
+
+    const entries = buildEndgameHistoryEntries(
+      result, "h1", (id) => names[id], "2026-05-10T00:00:00Z",
+    );
+
+    expect(entries).toHaveLength(3); // c1 penalty, h2 penalty, h1 bonus
+    expect(entries[0].type).toBe("endgame_penalty");
+    expect(entries[0].player_name).toBe("Computer 1");
+    expect(entries[0].score_adjustment).toBe(-10);
+    expect(entries[0].rack_tiles?.map((t) => t.letter)).toEqual(["Q"]);
+    expect(entries[1].type).toBe("endgame_penalty");
+    expect(entries[1].player_name).toBe("Bob");
+    expect(entries[1].score_adjustment).toBe(-1);
+    expect(entries[2].type).toBe("endgame_bonus");
+    expect(entries[2].player_name).toBe("Brendan");
+    expect(entries[2].score_adjustment).toBe(11);
+    expect(entries[2].rack_tiles).toBeUndefined();
+  });
+
+  test("skips zero-rack penalty entries; suppresses zero bonus", () => {
+    // All opponents already empty. Out-player gets no bonus, no penalty entries.
+    const result = applyEndgameScoring({
+      outPlayerId: "h1",
+      outPlayerScoreBeforeBonus: 100,
+      computers: [{ id: "c1", score: 80, rack: [] }],
+      humans: [{ id: "h1", score: 100, rack: [] }],
+    });
+    const entries = buildEndgameHistoryEntries(
+      result, "h1", () => "X", "2026-05-10T00:00:00Z",
+    );
+    expect(entries).toEqual([]);
   });
 });

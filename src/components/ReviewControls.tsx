@@ -99,6 +99,15 @@ export default function ReviewControls({
             )}
             {reviewCurrentMove.type === 'pass' && <span className="text-amber-400/80">passed</span>}
             {reviewCurrentMove.type === 'exchange' && <span className="text-amber-400/80">exchanged</span>}
+            {reviewCurrentMove.type === 'endgame_penalty' && reviewCurrentMove.rack_tiles && (
+              <span className="text-amber-300/90">
+                rack <span className="text-amber-100">{reviewCurrentMove.rack_tiles.map(t => t.isBlank ? '?' : t.letter).join(', ')}</span>
+                {' '}= <span className="text-red-400 font-bold">{reviewCurrentMove.score_adjustment}</span>
+              </span>
+            )}
+            {reviewCurrentMove.type === 'endgame_bonus' && (
+              <span className="text-emerald-400 font-semibold">out-bonus +{reviewCurrentMove.score_adjustment}</span>
+            )}
             {reviewTiming && reviewMoveIndex > 0 && reviewTiming.elapsed[reviewMoveIndex] > 0 && (
               <span className="text-amber-500/70 flex items-center gap-0.5">
                 <Clock className="h-2.5 w-2.5" />
@@ -189,6 +198,17 @@ export default function ReviewControls({
           )}
           {reviewCurrentMove.type === 'exchange' && (
             <div className="text-amber-400/80 text-sm mt-0.5">exchanged tiles</div>
+          )}
+          {reviewCurrentMove.type === 'endgame_penalty' && reviewCurrentMove.rack_tiles && (
+            <div className="text-amber-300/90 text-sm mt-0.5">
+              rack <span className="text-amber-100 font-semibold">{reviewCurrentMove.rack_tiles.map(t => t.isBlank ? '?' : t.letter).join(', ')}</span>
+              {' '}= <span className="text-red-400 font-bold">{reviewCurrentMove.score_adjustment}</span> pts
+            </div>
+          )}
+          {reviewCurrentMove.type === 'endgame_bonus' && (
+            <div className="text-emerald-400 text-sm mt-0.5 font-semibold">
+              out-bonus <span className="text-emerald-300 font-bold">+{reviewCurrentMove.score_adjustment}</span> pts
+            </div>
           )}
           {reviewTiming && reviewMoveIndex > 0 && reviewTiming.elapsed[reviewMoveIndex] > 0 && (
             <div className="text-amber-500/70 text-xs mt-1 flex items-center justify-center gap-1">

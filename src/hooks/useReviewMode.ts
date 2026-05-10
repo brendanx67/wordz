@@ -5,14 +5,19 @@ import { createEmptyBoard } from '@/lib/gameConstants'
 export interface MoveHistoryEntry {
   player_id: string
   player_name: string
-  type: 'play' | 'pass' | 'exchange'
+  type: 'play' | 'pass' | 'exchange' | 'endgame_penalty' | 'endgame_bonus'
   words?: { word: string; score: number }[]
   score?: number
-  board_snapshot: BoardCell[][]
+  // Endgame entries don't carry a board_snapshot — board is unchanged
+  // from the play that ended the game. Optional to accommodate them.
+  board_snapshot?: BoardCell[][]
   tiles?: { row: number; col: number; letter: string }[]
   timestamp: string
   rack_before?: { letter: string; value: number; isBlank: boolean; id?: string }[]
   rack_snapshot?: { letter: string; value: number; isBlank: boolean }[]
+  // Endgame fields (only on endgame_* types):
+  rack_tiles?: { letter: string; value: number; isBlank?: boolean }[]
+  score_adjustment?: number
 }
 
 export function useReviewMode(moveHistory: MoveHistoryEntry[], liveBoard: BoardCell[][]) {
@@ -22,8 +27,13 @@ export function useReviewMode(moveHistory: MoveHistoryEntry[], liveBoard: BoardC
   const reviewBoard = useMemo(() => {
     if (!reviewMode || !moveHistory.length) return liveBoard
     if (reviewMoveIndex < 0) return createEmptyBoard()
-    const entry = moveHistory[Math.min(reviewMoveIndex, moveHistory.length - 1)]
-    return entry.board_snapshot || liveBoard
+    // Endgame entries (penalty/bonus) inherit the previous play's snapshot —
+    // they don't change the board. Walk back to the most recent snapshot.
+    for (let i = Math.min(reviewMoveIndex, moveHistory.length - 1); i >= 0; i--) {
+      const snap = moveHistory[i].board_snapshot
+      if (snap) return snap
+    }
+    return liveBoard
   }, [reviewMode, reviewMoveIndex, moveHistory, liveBoard])
 
   const reviewHighlightTiles = useMemo(() => {
@@ -71,8 +81,17 @@ export function useReviewMode(moveHistory: MoveHistoryEntry[], liveBoard: BoardC
     const idx = Math.min(reviewMoveIndex, moveHistory.length - 1)
     for (let i = 0; i <= idx; i++) {
       const m = moveHistory[i]
+      // Plays add their move score; endgame_* entries add the signed
+      // score_adjustment (negative for penalties, positive for bonus).
+      // Mirroring the live score so the reviewer can step through and watch
+      // the same totals the players saw.
       if (m.score && m.score > 0) {
         scores[m.player_id] = (scores[m.player_id] ?? 0) + m.score
+      }
+      if (typeof m.score_adjustment === 'number') {
+        const before = scores[m.player_id] ?? 0
+        // Penalties floor at zero — same rule applyEndgameScoring uses.
+        scores[m.player_id] = Math.max(0, before + m.score_adjustment)
       }
     }
     return scores

@@ -516,7 +516,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
             </CardHeader>
             <CardContent className="px-4 pb-4">
               <GameHistoryViewer
-                moveHistory={(game.move_history ?? []) as { player_id: string; player_name: string; type: 'play' | 'pass' | 'exchange'; words?: { word: string; score: number }[]; score?: number; board_snapshot: BoardCell[][]; timestamp: string }[]}
+                moveHistory={(game.move_history ?? []) as MoveHistoryEntry[]}
                 emptyBoard={createEmptyBoard()}
               />
             </CardContent>

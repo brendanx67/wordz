@@ -1,6 +1,11 @@
 import type { Tile, BoardCell } from "../_shared/gameConstants.ts";
 import { getBonusType } from "../_shared/gameConstants.ts";
-import { applyEndgameScoring, type EndgamePlayer } from "../_shared/endgame.ts";
+import {
+  applyEndgameScoring,
+  buildEndgameHistoryEntries,
+  type EndgameHistoryEntry,
+  type EndgamePlayer,
+} from "../_shared/endgame.ts";
 import { isWord } from "../_shared/trie.ts";
 import type { ApiPlayer } from "../api-helpers.ts";
 import {
@@ -241,13 +246,22 @@ export async function handlePlayMove(req: Request): Promise<Response> {
   // lived inline with the DB calls, which made the asymmetry hard to audit and
   // impossible to unit-test. See supabase/functions/_shared/endgame.test.ts.
   let finalCp = updatedCp;
+  let endgameHistoryEntries: EndgameHistoryEntry[] = [];
   if (gameOver) {
+    // Fetch human players + their profile display names in one round-trip.
+    // Names feed the endgame history entries we append below.
     const { data: humansRaw } = await supabase
       .from("game_players")
-      .select("player_id, score, rack")
+      .select("player_id, score, rack, profiles(display_name)")
       .eq("game_id", auth.gameId);
+    type HumanRow = {
+      player_id: string;
+      score: number;
+      rack: Tile[] | null;
+      profiles: { display_name: string | null } | null;
+    };
     const humansBefore: EndgamePlayer[] = (
-      (humansRaw ?? []) as { player_id: string; score: number; rack: Tile[] | null }[]
+      (humansRaw ?? []) as HumanRow[]
     ).map((h) => ({
       id: h.player_id,
       score: h.score,
@@ -275,6 +289,21 @@ export async function handlePlayMove(req: Request): Promise<Response> {
     finalCp = updatedCp.map((p: ApiPlayer) =>
       scoreById.has(p.id) ? { ...p, score: scoreById.get(p.id)! } : p
     );
+
+    // Build move-history entries that show each opponent's rack penalty and
+    // the out-player's bonus. The frontend renders them as "Player: A,B,C = -X"
+    // and "Player: +Y" lines so the endgame math is visible in review.
+    const nameById = new Map<string, string>();
+    for (const cp of updatedCp) nameById.set(cp.id, cp.name ?? cp.id);
+    for (const h of (humansRaw ?? []) as HumanRow[]) {
+      nameById.set(h.player_id, h.profiles?.display_name ?? "Player");
+    }
+    endgameHistoryEntries = buildEndgameHistoryEntries(
+      endgame,
+      auth.playerId,
+      (id) => nameById.get(id) ?? id,
+      historyEntry.timestamp,
+    );
   }
 
   const updateData: Record<string, unknown> = {
@@ -293,7 +322,11 @@ export async function handlePlayMove(req: Request): Promise<Response> {
       words: result.words,
       score: result.totalScore,
     },
-    move_history: [...((game.move_history ?? []) as unknown[]), historyEntry],
+    move_history: [
+      ...((game.move_history ?? []) as unknown[]),
+      historyEntry,
+      ...endgameHistoryEntries,
+    ],
     updated_at: new Date().toISOString(),
   };
 

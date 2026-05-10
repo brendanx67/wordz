@@ -10,11 +10,20 @@ import type { BonusType } from '@/lib/gameConstants'
 interface MoveEntry {
   player_id: string
   player_name: string
-  type: 'play' | 'pass' | 'exchange'
+  type: 'play' | 'pass' | 'exchange' | 'endgame_penalty' | 'endgame_bonus'
   words?: { word: string; score: number }[]
   score?: number
-  board_snapshot: BoardCell[][]
+  // Endgame entries don't carry a board_snapshot — rendering reuses the
+  // last play's snapshot. Most consumers can rely on `?? emptyBoard`.
+  board_snapshot?: BoardCell[][]
   timestamp: string
+  // Endgame fields (only present for endgame_* types):
+  rack_tiles?: { letter: string; value: number; isBlank?: boolean }[]
+  score_adjustment?: number
+}
+
+function formatRackPenalty(rackTiles: { letter: string; isBlank?: boolean }[]): string {
+  return rackTiles.map(t => t.isBlank ? '?' : t.letter).join(', ')
 }
 
 interface GameHistoryViewerProps {
@@ -45,8 +54,14 @@ export default function GameHistoryViewer({ moveHistory, emptyBoard }: GameHisto
 
   const currentBoard = useMemo(() => {
     if (moveIndex < 0 || !moveHistory.length) return emptyBoard
-    const entry = moveHistory[Math.min(moveIndex, moveHistory.length - 1)]
-    return entry.board_snapshot || emptyBoard
+    // Endgame entries inherit the previous play's board snapshot — they
+    // don't change the board, only scores. Walk back to find the most
+    // recent entry that has a snapshot.
+    for (let i = Math.min(moveIndex, moveHistory.length - 1); i >= 0; i--) {
+      const snap = moveHistory[i].board_snapshot
+      if (snap) return snap
+    }
+    return emptyBoard
   }, [moveIndex, moveHistory, emptyBoard])
 
   const currentMove = moveIndex >= 0 && moveIndex < moveHistory.length
@@ -160,6 +175,12 @@ export default function GameHistoryViewer({ moveHistory, emptyBoard }: GameHisto
           )}
           {currentMove.type === 'pass' && <> passed</>}
           {currentMove.type === 'exchange' && <> exchanged tiles</>}
+          {currentMove.type === 'endgame_penalty' && currentMove.rack_tiles && (
+            <>: <span className="text-amber-100">{formatRackPenalty(currentMove.rack_tiles)}</span> = <span className="text-red-400 font-bold">{currentMove.score_adjustment}</span></>
+          )}
+          {currentMove.type === 'endgame_bonus' && (
+            <>: <span className="text-emerald-400 font-bold">+{currentMove.score_adjustment}</span> (out-bonus)</>
+          )}
           {timing && moveIndex > 0 && timing.elapsed[moveIndex] > 0 && (
             <div className="text-[10px] text-amber-400/70 mt-0.5">
               <Clock className="h-3 w-3 inline mr-0.5" />
@@ -206,6 +227,12 @@ export default function GameHistoryViewer({ moveHistory, emptyBoard }: GameHisto
                 )}
                 {move.type === 'pass' && <>: Pass</>}
                 {move.type === 'exchange' && <>: Exchange</>}
+                {move.type === 'endgame_penalty' && move.rack_tiles && (
+                  <>: {formatRackPenalty(move.rack_tiles)} = <span className="text-red-400">{move.score_adjustment}</span></>
+                )}
+                {move.type === 'endgame_bonus' && (
+                  <>: <span className="text-emerald-400">+{move.score_adjustment}</span></>
+                )}
                 {timing && i > 0 && timing.elapsed[i] > 0 && (
                   <span className="text-amber-500/60 ml-1">{formatDuration(timing.elapsed[i])}</span>
                 )}

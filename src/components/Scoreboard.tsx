@@ -181,6 +181,12 @@ export default function Scoreboard({
                 )}
                 {m.type === 'pass' && <> passed</>}
                 {m.type === 'exchange' && <> exchanged tiles</>}
+                {m.type === 'endgame_penalty' && m.rack_tiles && (
+                  <>: {m.rack_tiles.map(t => t.isBlank ? '?' : t.letter).join(', ')} = <span className="text-red-400">{m.score_adjustment}</span></>
+                )}
+                {m.type === 'endgame_bonus' && (
+                  <>: <span className="text-emerald-400">+{m.score_adjustment}</span> out-bonus</>
+                )}
               </div>
             ))}
           </div>

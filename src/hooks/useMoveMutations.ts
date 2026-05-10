@@ -2,6 +2,11 @@ import { useState, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useQueryClient } from '@tanstack/react-query'
 import { validateMove, scoreMove } from '@/lib/_shared/scoring.ts'
+import {
+  applyEndgameScoring,
+  buildEndgameHistoryEntries,
+  type EndgamePlayer,
+} from '@/lib/_shared/endgame.ts'
 import { drawTiles } from '@/lib/gameConstants'
 import type { Tile, BoardCell, PlacedTile } from '@/lib/gameConstants'
 import type { ComputerPlayer } from '@/hooks/useGames'
@@ -179,45 +184,58 @@ export function useMoveMutations({
 
       // Check if game is over: player emptied rack and bag is empty
       const gameOver = newRack.length === 0 && remaining.length === 0
+      // Captured at outer scope so the optimistic cache update can see them.
+      let endgameEntries: ReturnType<typeof buildEndgameHistoryEntries> = []
       if (gameOver) {
-        let bonusFromOthers = 0
-
-        const otherHumans = players.filter(p => p.player_id !== userId)
-        for (const op of otherHumans) {
-          const opRack = (op.rack ?? []) as Tile[]
-          const rackValue = opRack.reduce((sum, t) => sum + t.value, 0)
-          bonusFromOthers += rackValue
-          await supabase.from('game_players').update({
-            score: Math.max(0, op.score - rackValue),
-          }).eq('game_id', gameId).eq('player_id', op.player_id)
-        }
-
-        const adjustedComputerPlayers = computerPlayers.map(cp => {
-          const cpRack = (cp.rack ?? []) as Tile[]
-          const rackValue = cpRack.reduce((sum, t) => sum + t.value, 0)
-          bonusFromOthers += rackValue
-          return { ...cp, score: Math.max(0, cp.score - rackValue) }
+        // Delegate the math to the shared endgame module so all three call
+        // sites (this hook, computer-turn, and play-move) compute the same
+        // adjustments. The structured result also feeds the move-history
+        // entries we append below.
+        const endgame = applyEndgameScoring({
+          outPlayerId: userId,
+          outPlayerScoreBeforeBonus: myNewScore,
+          computers: computerPlayers.map(cp => ({
+            id: cp.id, score: cp.score, rack: (cp.rack ?? []) as EndgamePlayer['rack'],
+          })),
+          humans: players.map(p => ({
+            id: p.player_id, score: p.score, rack: (p.rack ?? []) as EndgamePlayer['rack'],
+          })),
         })
 
-        const finalScore = myNewScore + bonusFromOthers
-        await supabase.from('game_players').update({ score: finalScore })
-          .eq('game_id', gameId).eq('player_id', userId)
+        // Persist updated human scores (every non-out human + the out-player's
+        // bonus). The hook above already updated the out-player's pre-bonus
+        // score; the bonus update here overwrites that with the final score.
+        for (const h of endgame.humans) {
+          await supabase.from('game_players')
+            .update({ score: h.score })
+            .eq('game_id', gameId).eq('player_id', h.id)
+        }
 
-        const allScores: { id: string; score: number }[] = [
-          { id: userId, score: finalScore },
-          ...otherHumans.map(op => {
-            const opRack = (op.rack ?? []) as Tile[]
-            const rackValue = opRack.reduce((sum, t) => sum + t.value, 0)
-            return { id: op.player_id, score: Math.max(0, op.score - rackValue) }
-          }),
-          ...adjustedComputerPlayers.map(cp => ({ id: cp.id, score: cp.score })),
+        // Build endgame history entries with names from profiles and from the
+        // computer player objects.
+        const nameById = new Map<string, string>()
+        for (const cp of computerPlayers) nameById.set(cp.id, cp.name ?? cp.id)
+        for (const p of players) {
+          nameById.set(p.player_id, p.profiles?.display_name ?? 'Player')
+        }
+        endgameEntries = buildEndgameHistoryEntries(
+          endgame, userId, (id) => nameById.get(id) ?? id, moveHistoryEntry.timestamp,
+        )
+
+        const allScores = [
+          ...endgame.humans.map(h => ({ id: h.id, score: h.score })),
+          ...endgame.computers.map(c => ({ id: c.id, score: c.score })),
         ]
         const winner = allScores.reduce((best, p) => p.score > best.score ? p : best)
 
         await supabase.from('games').update({
           status: 'finished',
           winner: winner.id,
-          computer_players: adjustedComputerPlayers,
+          computer_players: endgame.computers.map(c => {
+            const original = computerPlayers.find(cp => cp.id === c.id)!
+            return { ...original, score: c.score }
+          }),
+          move_history: [...updatedHistory, ...endgameEntries],
           updated_at: new Date().toISOString(),
         }).eq('id', gameId)
       }
@@ -248,7 +266,7 @@ export function useMoveMutations({
           current_turn: nextPlayer,
           turn_index: nextIndex,
           consecutive_passes: 0,
-          move_history: updatedHistory,
+          move_history: [...updatedHistory, ...endgameEntries],
           game_players: (old.game_players as { player_id: string }[] | undefined)?.map(p =>
             p.player_id === userId ? { ...p, rack: newRack, score: (myPlayer?.score ?? 0) + result.totalScore } : p
           ),

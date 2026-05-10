@@ -10,6 +10,11 @@ import {
   selectDynamic,
   selectPercentile,
 } from "./_shared/computerStrategy.ts";
+import {
+  applyEndgameScoring,
+  buildEndgameHistoryEntries,
+  type EndgamePlayer,
+} from "./_shared/endgame.ts";
 import type { Strategy } from "./_shared/computerStrategy.ts";
 
 // ─── CORS ──────────────────────────────────────────────────────────────────────
@@ -318,38 +323,58 @@ Deno.serve(async (req) => {
     };
 
     if (gameOver) {
+      // Fetch humans + their display names so endgame history entries can
+      // attribute penalties by name. Single round-trip via the FK join.
       const { data: players } = await supabase
-        .from("game_players").select("player_id, score, rack").eq("game_id", game_id);
-      let bonus = 0;
-      for (const p of (players || [])) {
-        const rack = (p.rack || []) as Tile[];
-        const rackVal = rack.reduce((s: number, t: Tile) => s + t.value, 0);
-        bonus += rackVal;
-        await supabase.from("game_players").update({ score: Math.max(0, p.score - rackVal) })
-          .eq("game_id", game_id).eq("player_id", p.player_id);
+        .from("game_players")
+        .select("player_id, score, rack, profiles(display_name)")
+        .eq("game_id", game_id);
+      type HumanRow = {
+        player_id: string;
+        score: number;
+        rack: Tile[] | null;
+        profiles: { display_name: string | null } | null;
+      };
+
+      const endgame = applyEndgameScoring({
+        outPlayerId: cpuPlayer.id,
+        outPlayerScoreBeforeBonus: newScore,
+        computers: updatedCpuPlayers as unknown as EndgamePlayer[],
+        humans: ((players ?? []) as HumanRow[]).map((h) => ({
+          id: h.player_id,
+          score: h.score,
+          rack: (h.rack ?? []) as Tile[],
+        })),
+      });
+
+      // Persist updated human scores
+      for (const h of endgame.humans) {
+        await supabase.from("game_players").update({ score: h.score })
+          .eq("game_id", game_id).eq("player_id", h.id);
       }
-      // Also deduct from other computer players' racks
-      for (const otherCp of updatedCpuPlayers) {
-        if (otherCp.id !== cpuPlayer.id) {
-          const rackVal = otherCp.rack.reduce((s: number, t: Tile) => s + t.value, 0);
-          bonus += rackVal;
-          otherCp.score = Math.max(0, otherCp.score - rackVal);
-        }
-      }
-      newScore += bonus;
-      // Update the winning computer's score in the array
-      const finalCpuPlayers = updatedCpuPlayers.map(cp =>
-        cp.id === cpuPlayer!.id ? { ...cp, score: newScore } : cp
-      );
+
+      const finalCpuPlayers = updatedCpuPlayers.map(cp => {
+        const updated = endgame.computers.find(c => c.id === cp.id);
+        return updated ? { ...cp, score: updated.score } : cp;
+      });
       gameUpdates.computer_players = finalCpuPlayers;
       gameUpdates.status = "finished";
 
+      // Endgame history entries: per-opponent rack penalties + the bonus.
+      const nameById = new Map<string, string>();
+      for (const cp of updatedCpuPlayers) nameById.set(cp.id, cp.name ?? cp.id);
+      for (const h of (players ?? []) as HumanRow[]) {
+        nameById.set(h.player_id, h.profiles?.display_name ?? "Player");
+      }
+      const ts = new Date().toISOString();
+      const endgameEntries = buildEndgameHistoryEntries(
+        endgame, cpuPlayer.id, (id) => nameById.get(id) ?? id, ts,
+      );
+      gameUpdates.move_history = [...moveHistory, ...endgameEntries];
+
       const allScores = [
-        ...(players || []).map((p: { player_id: string; score: number; rack: Tile[] }) => {
-          const rv = ((p.rack || []) as Tile[]).reduce((s: number, t: Tile) => s + t.value, 0);
-          return { id: p.player_id, score: Math.max(0, p.score - rv) };
-        }),
-        ...finalCpuPlayers.map(cp => ({ id: cp.id, score: cp.score })),
+        ...endgame.humans.map(h => ({ id: h.id, score: h.score })),
+        ...endgame.computers.map(c => ({ id: c.id, score: c.score })),
       ];
       const winner = allScores.reduce((best, p) => p.score > best.score ? p : best);
       gameUpdates.winner = winner.id;
