@@ -105,15 +105,15 @@ describe('selectDynamic', () => {
 
 describe('computerLabel', () => {
   test('preset values map to familiar names', () => {
-    expect(computerLabel('percentile', 75)).toBe('Easy')
-    expect(computerLabel('percentile', 80)).toBe('Medium')
+    expect(computerLabel('percentile', 90)).toBe('Easy')
+    expect(computerLabel('percentile', 95)).toBe('Medium')
     expect(computerLabel('percentile', 100)).toBe('Hard')
     expect(computerLabel('dynamic', 100)).toBe('Competitive')
   })
 
   test('off-preset values use family prefix (P=percentile, C=competitive)', () => {
-    expect(computerLabel('percentile', 78)).toBe('P78')
-    expect(computerLabel('percentile', 90)).toBe('P90')
+    expect(computerLabel('percentile', 78)).toBe('P78') // legacy below the slider floor still labels
+    expect(computerLabel('percentile', 97)).toBe('P97')
     expect(computerLabel('percentile', 98)).toBe('P98')
     expect(computerLabel('dynamic', 80)).toBe('C80')
     expect(computerLabel('dynamic', 60)).toBe('C60')
@@ -128,9 +128,9 @@ describe('computerLabel', () => {
 describe('computerDescription', () => {
   test('returns family-aware sentences for presets and custom', () => {
     expect(computerDescription('percentile', 100)).toMatch(/Hard.*highest-scoring/)
-    expect(computerDescription('percentile', 80)).toMatch(/Medium.*80th percentile/)
-    expect(computerDescription('percentile', 75)).toMatch(/Easy.*75th percentile/)
-    expect(computerDescription('percentile', 90)).toMatch(/Custom.*90th percentile/)
+    expect(computerDescription('percentile', 95)).toMatch(/Medium.*95th percentile/)
+    expect(computerDescription('percentile', 90)).toMatch(/Easy.*90th percentile/)
+    expect(computerDescription('percentile', 97)).toMatch(/Custom.*97th percentile/)
     expect(computerDescription('dynamic', 100)).toMatch(/Competitive.*leading opponent/)
     expect(computerDescription('dynamic', 95)).toMatch(/Custom.*dynamic 95.*5% behind/)
   })
