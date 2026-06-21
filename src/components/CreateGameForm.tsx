@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Label } from '@/components/ui/label'
@@ -8,6 +8,7 @@ import { Slider } from '@/components/ui/slider'
 import { Bot, User, Play, X, Sparkles, Search, BookOpen } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { computerLabel, PRESETS, type Strategy } from '@/lib/_shared/computerStrategy'
+import { loadLastGameConfig } from '@/lib/lastGameConfig'
 
 export type PlayerSlotType =
   | 'me'
@@ -76,9 +77,12 @@ function getSlotIcon(type: PlayerSlotType) {
 }
 
 export default function CreateGameForm({ onCreateGame, onCancel, isPending }: CreateGameFormProps) {
-  const [slots, setSlots] = useState<PlayerSlot[]>(DEFAULT_SLOTS)
-  const [computerDelay, setComputerDelay] = useState(0)
-  const [wordFinderEnabled, setWordFinderEnabled] = useState(false)
+  // Suggest the configuration the user started last time, falling back to the
+  // built-in defaults the first time around or if the stored value is stale.
+  const lastConfig = useMemo(loadLastGameConfig, [])
+  const [slots, setSlots] = useState<PlayerSlot[]>(lastConfig?.players ?? DEFAULT_SLOTS)
+  const [computerDelay, setComputerDelay] = useState(lastConfig?.computerDelay ?? 0)
+  const [wordFinderEnabled, setWordFinderEnabled] = useState(lastConfig?.wordFinderEnabled ?? false)
 
   const hasComputer = slots.some(s => s.type === 'computer')
   const hasApiPlayer = slots.some(s => s.type === 'api-player')

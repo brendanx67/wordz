@@ -6,6 +6,7 @@ import LobbyPage from '@/pages/LobbyPage'
 import GamePage from '@/pages/GamePage'
 import AccountPage from '@/pages/AccountPage'
 import OverviewPage from '@/pages/OverviewPage'
+import StatsPage from '@/pages/StatsPage'
 import AnalysisPage from '@/pages/AnalysisPage'
 import { supabase } from '@/lib/supabase'
 
@@ -14,6 +15,7 @@ function App() {
   const [currentGameId, setCurrentGameId] = useState<string | null>(null)
   const [showAccount, setShowAccount] = useState(false)
   const [showOverview, setShowOverview] = useState(false)
+  const [showStats, setShowStats] = useState(false)
   const [showAnalysis, setShowAnalysis] = useState(false)
   const [displayName, setDisplayName] = useState('')
 
@@ -70,10 +72,22 @@ function App() {
     )
   }
 
+  if (showStats) {
+    return (
+      <>
+        <StatsPage onBack={() => setShowStats(false)} />
+        <Toaster />
+      </>
+    )
+  }
+
   if (showOverview) {
     return (
       <>
-        <OverviewPage onBack={() => setShowOverview(false)} />
+        <OverviewPage
+          onBack={() => setShowOverview(false)}
+          onOpenStats={() => { setShowOverview(false); setShowStats(true) }}
+        />
         <Toaster />
       </>
     )
@@ -117,6 +131,7 @@ function App() {
         onOpenGame={setCurrentGameId}
         onOpenAccount={() => setShowAccount(true)}
         onOpenOverview={() => setShowOverview(true)}
+        onOpenStats={() => setShowStats(true)}
         onOpenAnalysis={() => setShowAnalysis(true)}
       />
       <Toaster />

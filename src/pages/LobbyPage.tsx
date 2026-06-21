@@ -6,12 +6,13 @@ import { useOpenGames, useMyGames, useCreateConfiguredGame, useJoinGame, useStar
 import type { ComputerPlayer } from '@/hooks/useGames'
 import { useGameHistory } from '@/hooks/useGameHistory'
 import { useState, useCallback } from 'react'
-import { LogOut, Plus, Play, Users, Clock, Trophy, History, Eye, X, Bot, Copy, ChevronDown, ChevronUp, BookOpen, Settings } from 'lucide-react'
+import { LogOut, Plus, Play, Users, Clock, Trophy, History, Eye, X, Bot, Copy, ChevronDown, ChevronUp, BookOpen, Settings, BarChart3 } from 'lucide-react'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import { Input } from '@/components/ui/input'
 import { toast } from 'sonner'
 import CreateGameForm from '@/components/CreateGameForm'
 import type { GameConfig } from '@/components/CreateGameForm'
+import { saveLastGameConfig } from '@/lib/lastGameConfig'
 import LobbyChatPanel from '@/components/LobbyChatPanel'
 
 function getDisplayName(profiles: { display_name: string } | { display_name: string }[] | null): string {
@@ -27,10 +28,11 @@ interface LobbyPageProps {
   onOpenGame: (gameId: string) => void
   onOpenAccount?: () => void
   onOpenOverview?: () => void
+  onOpenStats?: () => void
   onOpenAnalysis?: () => void
 }
 
-export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame, onOpenAccount, onOpenOverview, onOpenAnalysis }: LobbyPageProps) {
+export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame, onOpenAccount, onOpenOverview, onOpenStats, onOpenAnalysis }: LobbyPageProps) {
   const { data: openGames, isLoading: loadingOpen } = useOpenGames()
   const { data: myGames, isLoading: loadingMine } = useMyGames(userId)
   const { data: gameHistory, isLoading: loadingHistory } = useGameHistory(userId)
@@ -61,6 +63,8 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame, 
   const handleCreateGame = async (config: GameConfig) => {
     try {
       const result = await createConfiguredGame.mutateAsync({ userId, config, displayName })
+      // Remember this configuration so the form suggests it again next time.
+      saveLastGameConfig(config)
       setShowCreateForm(false)
       toast.success('Game created!')
       onOpenGame(result.gameId)
@@ -149,6 +153,16 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame, 
               >
                 <BookOpen className="h-5 w-5 mr-2" />
                 Analyze
+              </Button>
+            )}
+            {onOpenStats && (
+              <Button
+                onClick={onOpenStats}
+                variant="outline"
+                className="border-amber-700/50 bg-amber-950/30 hover:bg-amber-900/40 text-amber-200 hover:text-amber-100 font-semibold text-lg px-6 py-6"
+              >
+                <BarChart3 className="h-5 w-5 mr-2" />
+                Stats
               </Button>
             )}
           </div>

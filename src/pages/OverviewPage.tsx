@@ -1,14 +1,15 @@
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ArrowLeft, Trophy, Swords, Users, Bot, Zap } from 'lucide-react'
+import { ArrowLeft, Trophy, Swords, Users, Bot, Zap, BarChart3 } from 'lucide-react'
 import { useOverviewStats } from '@/hooks/useOverviewStats'
 
 interface OverviewPageProps {
   onBack: () => void
+  onOpenStats?: () => void
 }
 
-export default function OverviewPage({ onBack }: OverviewPageProps) {
+export default function OverviewPage({ onBack, onOpenStats }: OverviewPageProps) {
   const { data: stats, isLoading } = useOverviewStats()
 
   return (
@@ -22,7 +23,14 @@ export default function OverviewPage({ onBack }: OverviewPageProps) {
           <h1 className="text-lg font-bold tracking-widest text-amber-400" style={{ fontFamily: "'Playfair Display', serif" }}>
             WORDZ
           </h1>
-          <div className="w-20" />
+          {onOpenStats ? (
+            <Button variant="ghost" size="sm" onClick={onOpenStats} className="text-amber-200 hover:text-white hover:bg-amber-700/50">
+              <BarChart3 className="h-4 w-4 mr-1" />
+              Stats
+            </Button>
+          ) : (
+            <div className="w-20" />
+          )}
         </div>
       </header>
 
