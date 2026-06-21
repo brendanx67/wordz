@@ -10,6 +10,7 @@ import { useCreateConfiguredGame } from '@/hooks/useGames'
 import { configFromComposition } from '@/lib/gameConfigFromType'
 import { saveLastGameConfig } from '@/lib/lastGameConfig'
 import BoxPlot, { type BoxSeries } from '@/components/BoxPlot'
+import BatchSimDialog from '@/components/BatchSimDialog'
 
 interface StatsPageProps {
   onBack: () => void
@@ -50,6 +51,7 @@ export default function StatsPage({ onBack, userId, displayName, initialGroupKey
   const { data, isLoading } = usePlayerStats()
   const createConfiguredGame = useCreateConfiguredGame()
   const [creatingKey, setCreatingKey] = useState<string | null>(null)
+  const [batchGroup, setBatchGroup] = useState<GameTypeGroup | null>(null)
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map())
 
   // Once data is in, scroll the deep-linked matchup card into view (#23).
@@ -118,37 +120,44 @@ export default function StatsPage({ onBack, userId, displayName, initialGroupKey
           </Card>
         ) : (
           <>
-            {data.groups.map(group => (
-              <div
-                key={group.key}
-                ref={el => { if (el) cardRefs.current.set(group.key, el) }}
-                className="scroll-mt-20"
-              >
-                <GameTypeCard
-                  group={group}
-                  highlight={group.key === initialGroupKey}
-                  onOpenGame={onOpenGame}
-                  onNewGame={() => handleNewGame(group)}
-                  creating={creatingKey === group.key}
-                />
-              </div>
-            ))}
+            {data.groups.map(group => {
+              const isAllComputer = group.composition.length >= 2 && group.composition.every(s => s.kind === 'computer')
+              return (
+                <div
+                  key={group.key}
+                  ref={el => { if (el) cardRefs.current.set(group.key, el) }}
+                  className="scroll-mt-20"
+                >
+                  <GameTypeCard
+                    group={group}
+                    highlight={group.key === initialGroupKey}
+                    onOpenGame={onOpenGame}
+                    onNewGame={() => handleNewGame(group)}
+                    creating={creatingKey === group.key}
+                    onMoreGames={isAllComputer ? () => setBatchGroup(group) : undefined}
+                  />
+                </div>
+              )
+            })}
             <p className="text-center text-xs text-amber-500/50 pt-1">
               Based on {data.finishedGames} finished game{data.finishedGames !== 1 ? 's' : ''}.
             </p>
           </>
         )}
       </main>
+
+      <BatchSimDialog group={batchGroup} userId={userId} displayName={displayName} onClose={() => setBatchGroup(null)} />
     </div>
   )
 }
 
-function GameTypeCard({ group, highlight, onOpenGame, onNewGame, creating }: {
+function GameTypeCard({ group, highlight, onOpenGame, onNewGame, creating, onMoreGames }: {
   group: GameTypeGroup
   highlight?: boolean
   onOpenGame?: (gameId: string) => void
   onNewGame?: () => void
   creating?: boolean
+  onMoreGames?: () => void
 }) {
   const [showGames, setShowGames] = useState(false)
   const colors = assignColors(group.participants)
@@ -165,6 +174,18 @@ function GameTypeCard({ group, highlight, onOpenGame, onNewGame, creating }: {
         <CardTitle className="text-amber-300 text-base flex items-center justify-between gap-2">
           <span>{group.label}</span>
           <div className="flex items-center gap-2">
+            {onMoreGames && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={onMoreGames}
+                title="Simulate a batch of games of this type"
+                className="h-7 px-2 text-emerald-300 hover:text-emerald-100 hover:bg-emerald-800/30 text-xs font-medium"
+              >
+                <Bot className="h-3.5 w-3.5 mr-1" />
+                More Games
+              </Button>
+            )}
             {onNewGame && (
               <Button
                 size="sm"
