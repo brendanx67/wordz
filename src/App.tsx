@@ -84,6 +84,8 @@ function App() {
       <>
         <StatsPage
           onBack={() => setShowStats(false)}
+          userId={user.id}
+          displayName={displayName || user.email?.split('@')[0] || 'Player'}
           initialGroupKey={statsTargetKey}
           onOpenGame={(id) => { setShowStats(false); setCurrentGameId(id) }}
         />

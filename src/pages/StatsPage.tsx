@@ -1,14 +1,20 @@
 import { useEffect, useRef, useState } from 'react'
+import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ArrowLeft, BarChart3, Users, Bot, Sparkles, ChevronDown, ChevronUp } from 'lucide-react'
+import { ArrowLeft, BarChart3, Users, Bot, Sparkles, ChevronDown, ChevronUp, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePlayerStats, type GameTypeGroup, type ParticipantKind, type ParticipantSeries } from '@/hooks/usePlayerStats'
+import { useCreateConfiguredGame } from '@/hooks/useGames'
+import { configFromComposition } from '@/lib/gameConfigFromType'
+import { saveLastGameConfig } from '@/lib/lastGameConfig'
 import BoxPlot, { type BoxSeries } from '@/components/BoxPlot'
 
 interface StatsPageProps {
   onBack: () => void
+  userId: string
+  displayName: string
   /** When set, scroll the card for this game-type group into view on load. */
   initialGroupKey?: string
   /** Open a specific game (review) from a card's drill-down list. */
@@ -40,8 +46,10 @@ function kindIcon(kind: ParticipantKind) {
   return <Sparkles className="h-3.5 w-3.5 text-purple-400" />
 }
 
-export default function StatsPage({ onBack, initialGroupKey, onOpenGame }: StatsPageProps) {
+export default function StatsPage({ onBack, userId, displayName, initialGroupKey, onOpenGame }: StatsPageProps) {
   const { data, isLoading } = usePlayerStats()
+  const createConfiguredGame = useCreateConfiguredGame()
+  const [creatingKey, setCreatingKey] = useState<string | null>(null)
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map())
 
   // Once data is in, scroll the deep-linked matchup card into view (#23).
@@ -50,6 +58,21 @@ export default function StatsPage({ onBack, initialGroupKey, onOpenGame }: Stats
     const el = cardRefs.current.get(initialGroupKey)
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [initialGroupKey, data])
+
+  // Start a fresh game of a type's composition, then jump into it.
+  const handleNewGame = async (group: GameTypeGroup) => {
+    setCreatingKey(group.key)
+    try {
+      const config = configFromComposition(group.composition)
+      const result = await createConfiguredGame.mutateAsync({ userId, config, displayName })
+      saveLastGameConfig(config)
+      onOpenGame?.(result.gameId)
+    } catch {
+      toast.error('Failed to create game')
+    } finally {
+      setCreatingKey(null)
+    }
+  }
 
   return (
     <div className="min-h-screen" style={{ background: 'linear-gradient(145deg, #1a1208 0%, #2d1f0e 50%, #1a1208 100%)' }}>
@@ -101,7 +124,13 @@ export default function StatsPage({ onBack, initialGroupKey, onOpenGame }: Stats
                 ref={el => { if (el) cardRefs.current.set(group.key, el) }}
                 className="scroll-mt-20"
               >
-                <GameTypeCard group={group} highlight={group.key === initialGroupKey} onOpenGame={onOpenGame} />
+                <GameTypeCard
+                  group={group}
+                  highlight={group.key === initialGroupKey}
+                  onOpenGame={onOpenGame}
+                  onNewGame={() => handleNewGame(group)}
+                  creating={creatingKey === group.key}
+                />
               </div>
             ))}
             <p className="text-center text-xs text-amber-500/50 pt-1">
@@ -114,7 +143,13 @@ export default function StatsPage({ onBack, initialGroupKey, onOpenGame }: Stats
   )
 }
 
-function GameTypeCard({ group, highlight, onOpenGame }: { group: GameTypeGroup; highlight?: boolean; onOpenGame?: (gameId: string) => void }) {
+function GameTypeCard({ group, highlight, onOpenGame, onNewGame, creating }: {
+  group: GameTypeGroup
+  highlight?: boolean
+  onOpenGame?: (gameId: string) => void
+  onNewGame?: () => void
+  creating?: boolean
+}) {
   const [showGames, setShowGames] = useState(false)
   const colors = assignColors(group.participants)
   const series: BoxSeries[] = group.participants.map(p => ({
@@ -129,16 +164,31 @@ function GameTypeCard({ group, highlight, onOpenGame }: { group: GameTypeGroup; 
       <CardHeader className="pb-3">
         <CardTitle className="text-amber-300 text-base flex items-center justify-between gap-2">
           <span>{group.label}</span>
-          <button
-            type="button"
-            onClick={() => setShowGames(v => !v)}
-            aria-expanded={showGames}
-            title="Show the individual games"
-            className="text-xs font-normal px-2 py-0.5 rounded-full bg-amber-800/40 text-amber-400 hover:bg-amber-800/60 hover:text-amber-200 transition-colors inline-flex items-center gap-1"
-          >
-            {group.gameCount} game{group.gameCount !== 1 ? 's' : ''}
-            {showGames ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
-          </button>
+          <div className="flex items-center gap-2">
+            {onNewGame && (
+              <Button
+                size="sm"
+                variant="ghost"
+                onClick={onNewGame}
+                disabled={creating}
+                title="Start a new game of this type"
+                className="h-7 px-2 text-amber-300 hover:text-amber-100 hover:bg-amber-800/40 text-xs font-medium"
+              >
+                <Plus className="h-3.5 w-3.5 mr-1" />
+                {creating ? 'Creating…' : 'New Game'}
+              </Button>
+            )}
+            <button
+              type="button"
+              onClick={() => setShowGames(v => !v)}
+              aria-expanded={showGames}
+              title="Show the individual games"
+              className="text-xs font-normal px-2 py-0.5 rounded-full bg-amber-800/40 text-amber-400 hover:bg-amber-800/60 hover:text-amber-200 transition-colors inline-flex items-center gap-1"
+            >
+              {group.gameCount} game{group.gameCount !== 1 ? 's' : ''}
+              {showGames ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+            </button>
+          </div>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">

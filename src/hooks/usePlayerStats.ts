@@ -1,7 +1,7 @@
 import { useQuery } from '@tanstack/react-query'
 import { supabase } from '@/lib/supabase'
 import { computeBoxStats, type BoxStats } from '@/lib/boxStats'
-import { classifyGame, type ParticipantKind } from '@/lib/gameType'
+import { classifyGame, seatToSpec, type ParticipantKind, type SeatSpec } from '@/lib/gameType'
 
 // Player statistics, grouped by *game type* (the composition of seats at the
 // board). Within each type we keep one score series per distinct participant so
@@ -38,7 +38,11 @@ export interface GameTypeGroup {
   participants: ParticipantSeries[]
   /** The individual games behind this group, newest first. */
   games: GameSummary[]
+  /** Seat specs for the type, enough to recreate it as a new game (#23). */
+  composition: SeatSpec[]
 }
+
+export type { SeatSpec } from '@/lib/gameType'
 
 export interface PlayerStatsData {
   groups: GameTypeGroup[]
@@ -64,6 +68,7 @@ export function usePlayerStats() {
         gameCount: number
         parts: Map<string, { label: string; kind: ParticipantKind; scores: number[]; wins: number }>
         games: GameSummary[]
+        composition: SeatSpec[]
       }
       const groups = new Map<string, GroupAcc>()
 
@@ -74,7 +79,9 @@ export function usePlayerStats() {
 
         let acc = groups.get(groupKey)
         if (!acc) {
-          acc = { label: groupLabel, gameCount: 0, parts: new Map(), games: [] }
+          // All games of a type share the same seat composition by definition
+          // of the group key, so capture it from the first one we see.
+          acc = { label: groupLabel, gameCount: 0, parts: new Map(), games: [], composition: seats.map(seatToSpec) }
           groups.set(groupKey, acc)
         }
         acc.gameCount++
@@ -111,6 +118,7 @@ export function usePlayerStats() {
           .sort((a, b) => KIND_RANK[a.kind] - KIND_RANK[b.kind] || b.games - a.games || b.stats.mean - a.stats.mean),
         // Newest games first for the drill-down list.
         games: acc.games.sort((a, b) => (b.finishedAt ?? '').localeCompare(a.finishedAt ?? '')),
+        composition: acc.composition,
       }))
 
       // Most-played game types first — that's where the data is richest.

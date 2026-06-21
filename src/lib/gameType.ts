@@ -16,6 +16,23 @@ export interface GameSeat {
   kind: ParticipantKind
   score: number
   isWinner: boolean
+  // Set for computer seats; lets a type be turned back into a GameConfig (#23).
+  strategy?: Strategy
+  strength?: number
+}
+
+/** The minimal description of a seat needed to recreate it in a new game. */
+export interface SeatSpec {
+  kind: ParticipantKind
+  strategy?: Strategy
+  strength?: number
+}
+
+/** Reduce a resolved seat to the spec needed to recreate it. */
+export function seatToSpec(seat: GameSeat): SeatSpec {
+  return seat.kind === 'computer'
+    ? { kind: 'computer', strategy: seat.strategy, strength: seat.strength }
+    : { kind: seat.kind }
 }
 
 // The subset of a finished `games` row the classifier reads. Extra columns on
@@ -80,6 +97,8 @@ export function seatsForGame(game: ClassifiableGame): GameSeat[] {
         kind: 'computer',
         score: cp.score ?? 0,
         isWinner: game.winner === cp.id,
+        strategy,
+        strength,
       })
     }
   }
