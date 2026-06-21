@@ -16,7 +16,14 @@ function App() {
   const [showAccount, setShowAccount] = useState(false)
   const [showOverview, setShowOverview] = useState(false)
   const [showStats, setShowStats] = useState(false)
+  const [statsTargetKey, setStatsTargetKey] = useState<string | undefined>(undefined)
   const [showAnalysis, setShowAnalysis] = useState(false)
+
+  // Open the Stats page, optionally scrolled to a specific game-type card.
+  const openStats = (groupKey?: string) => {
+    setStatsTargetKey(groupKey)
+    setShowStats(true)
+  }
   const [displayName, setDisplayName] = useState('')
 
   useEffect(() => {
@@ -75,7 +82,7 @@ function App() {
   if (showStats) {
     return (
       <>
-        <StatsPage onBack={() => setShowStats(false)} />
+        <StatsPage onBack={() => setShowStats(false)} initialGroupKey={statsTargetKey} />
         <Toaster />
       </>
     )
@@ -86,7 +93,7 @@ function App() {
       <>
         <OverviewPage
           onBack={() => setShowOverview(false)}
-          onOpenStats={() => { setShowOverview(false); setShowStats(true) }}
+          onOpenStats={() => { setShowOverview(false); openStats() }}
         />
         <Toaster />
       </>
@@ -116,6 +123,7 @@ function App() {
           gameId={currentGameId}
           userId={user.id}
           onBack={() => setCurrentGameId(null)}
+          onOpenStats={openStats}
         />
         <Toaster />
       </>
@@ -131,7 +139,7 @@ function App() {
         onOpenGame={setCurrentGameId}
         onOpenAccount={() => setShowAccount(true)}
         onOpenOverview={() => setShowOverview(true)}
-        onOpenStats={() => setShowStats(true)}
+        onOpenStats={() => openStats()}
         onOpenAnalysis={() => setShowAnalysis(true)}
       />
       <Toaster />

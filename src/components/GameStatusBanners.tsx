@@ -1,8 +1,9 @@
 import { Button } from '@/components/ui/button'
-import { Play, History, X, BookOpen } from 'lucide-react'
+import { Play, History, X, BookOpen, BarChart3 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { resolvePlayerName } from '@/hooks/useGames'
 import type { ComputerPlayer } from '@/hooks/useGames'
+import { classifyGame } from '@/lib/gameType'
 
 // Extracted from GamePage.tsx (#16 refactor). Renders the status banners
 // between the desktop header and the board: waiting, game-over, turn
@@ -31,6 +32,8 @@ interface GameStatusBannersProps {
   currentApiPlayer: ComputerPlayer | null | undefined | false
   // Game-over / review
   onStartReview: () => void
+  // Deep-link into the Stats page scrolled to this matchup's card (#23).
+  onOpenStats?: (groupKey: string) => void
   // Waiting room
   isCreator: boolean
   canStart: boolean
@@ -48,7 +51,7 @@ export default function GameStatusBanners({
   gameStatus, players, computerPlayers, userId, isActive, isMyTurn,
   isComputerTurn, isApiTurn, isSpectatingApi, reviewMode, isMobile,
   currentTurnPlayer, currentComputerPlayer, currentApiPlayer,
-  onStartReview, isCreator, canStart, startPending, onStart,
+  onStartReview, onOpenStats, isCreator, canStart, startPending, onStart,
   findWordsEnabled, showInstructional, setShowInstructional,
   hideInstructionalBanner, setHideInstructionalBanner,
 }: GameStatusBannersProps) {
@@ -107,20 +110,37 @@ export default function GameStatusBanners({
           ? `Tied: ${topEntries.map(e => e.name).join(', ')}`
           : `Winner: ${winnerName}`
 
+        // Group key for the stats deep-link (winner is irrelevant to the key).
+        const matchupKey = onOpenStats
+          ? classifyGame({ winner: null, computer_players: computerPlayers, game_players: players })?.groupKey
+          : undefined
+
         return (
           <div className="flex flex-col items-center gap-2">
             <div className="px-8 py-3 rounded-lg text-center border border-amber-600/40" style={{ background: 'linear-gradient(135deg, #5c3a1e 0%, #4a2e15 100%)', boxShadow: '0 0 0 2px #6b4226, 0 4px 16px rgba(0,0,0,0.3)' }}>
               <div className={cn('text-xl font-bold', titleClass)} style={{ fontFamily: "'Playfair Display', serif" }}>{titleText}</div>
               <div className="text-sm mt-1 text-amber-200/80">{subtitle}</div>
             </div>
-            <Button
-              onClick={onStartReview}
-              className="gap-1.5 bg-amber-900/60 hover:bg-amber-800/70 text-amber-200 border border-amber-700/40"
-              size="sm"
-            >
-              <History className="h-4 w-4" />
-              Review Game
-            </Button>
+            <div className="flex flex-wrap items-center justify-center gap-2">
+              <Button
+                onClick={onStartReview}
+                className="gap-1.5 bg-amber-900/60 hover:bg-amber-800/70 text-amber-200 border border-amber-700/40"
+                size="sm"
+              >
+                <History className="h-4 w-4" />
+                Review Game
+              </Button>
+              {matchupKey && onOpenStats && (
+                <Button
+                  onClick={() => onOpenStats(matchupKey)}
+                  className="gap-1.5 bg-amber-900/60 hover:bg-amber-800/70 text-amber-200 border border-amber-700/40"
+                  size="sm"
+                >
+                  <BarChart3 className="h-4 w-4" />
+                  Matchup stats
+                </Button>
+              )}
+            </div>
           </div>
         )
       })()}

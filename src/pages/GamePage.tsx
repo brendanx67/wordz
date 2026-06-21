@@ -40,9 +40,10 @@ interface GamePageProps {
   gameId: string
   userId: string
   onBack: () => void
+  onOpenStats?: (groupKey: string) => void
 }
 
-export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
+export default function GamePage({ gameId, userId, onBack, onOpenStats }: GamePageProps) {
   const { data: game, isLoading } = useGame(gameId)
   const queryClient = useQueryClient()
   const startGame = useStartGame()
@@ -544,6 +545,7 @@ export default function GamePage({ gameId, userId, onBack }: GamePageProps) {
               setReviewMode(true)
               setReviewMoveIndex(moveHistory.length - 1)
             }}
+            onOpenStats={onOpenStats}
             isCreator={game.created_by === userId}
             canStart={players.length + computerPlayers.length >= 2}
             startPending={startGame.isPending}

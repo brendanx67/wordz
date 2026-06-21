@@ -1,12 +1,16 @@
+import { useEffect, useRef } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ArrowLeft, BarChart3, Users, Bot, Sparkles } from 'lucide-react'
+import { cn } from '@/lib/utils'
 import { usePlayerStats, type GameTypeGroup, type ParticipantKind, type ParticipantSeries } from '@/hooks/usePlayerStats'
 import BoxPlot, { type BoxSeries } from '@/components/BoxPlot'
 
 interface StatsPageProps {
   onBack: () => void
+  /** When set, scroll the card for this game-type group into view on load. */
+  initialGroupKey?: string
 }
 
 // Distinct colors per participant, tinted by kind so humans/computers/LLMs read
@@ -34,8 +38,16 @@ function kindIcon(kind: ParticipantKind) {
   return <Sparkles className="h-3.5 w-3.5 text-purple-400" />
 }
 
-export default function StatsPage({ onBack }: StatsPageProps) {
+export default function StatsPage({ onBack, initialGroupKey }: StatsPageProps) {
   const { data, isLoading } = usePlayerStats()
+  const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+
+  // Once data is in, scroll the deep-linked matchup card into view (#23).
+  useEffect(() => {
+    if (!initialGroupKey || !data) return
+    const el = cardRefs.current.get(initialGroupKey)
+    if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
+  }, [initialGroupKey, data])
 
   return (
     <div className="min-h-screen" style={{ background: 'linear-gradient(145deg, #1a1208 0%, #2d1f0e 50%, #1a1208 100%)' }}>
@@ -82,7 +94,13 @@ export default function StatsPage({ onBack }: StatsPageProps) {
         ) : (
           <>
             {data.groups.map(group => (
-              <GameTypeCard key={group.key} group={group} />
+              <div
+                key={group.key}
+                ref={el => { if (el) cardRefs.current.set(group.key, el) }}
+                className="scroll-mt-20"
+              >
+                <GameTypeCard group={group} highlight={group.key === initialGroupKey} />
+              </div>
             ))}
             <p className="text-center text-xs text-amber-500/50 pt-1">
               Based on {data.finishedGames} finished game{data.finishedGames !== 1 ? 's' : ''}.
@@ -94,7 +112,7 @@ export default function StatsPage({ onBack }: StatsPageProps) {
   )
 }
 
-function GameTypeCard({ group }: { group: GameTypeGroup }) {
+function GameTypeCard({ group, highlight }: { group: GameTypeGroup; highlight?: boolean }) {
   const colors = assignColors(group.participants)
   const series: BoxSeries[] = group.participants.map(p => ({
     label: p.label,
@@ -104,7 +122,7 @@ function GameTypeCard({ group }: { group: GameTypeGroup }) {
   }))
 
   return (
-    <Card className="border-amber-900/30 bg-amber-950/30">
+    <Card className={cn('border-amber-900/30 bg-amber-950/30', highlight && 'ring-2 ring-amber-500/60')}>
       <CardHeader className="pb-3">
         <CardTitle className="text-amber-300 text-base flex items-center justify-between gap-2">
           <span>{group.label}</span>
