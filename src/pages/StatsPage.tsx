@@ -1,8 +1,8 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
-import { ArrowLeft, BarChart3, Users, Bot, Sparkles } from 'lucide-react'
+import { ArrowLeft, BarChart3, Users, Bot, Sparkles, ChevronDown, ChevronUp } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { usePlayerStats, type GameTypeGroup, type ParticipantKind, type ParticipantSeries } from '@/hooks/usePlayerStats'
 import BoxPlot, { type BoxSeries } from '@/components/BoxPlot'
@@ -11,6 +11,8 @@ interface StatsPageProps {
   onBack: () => void
   /** When set, scroll the card for this game-type group into view on load. */
   initialGroupKey?: string
+  /** Open a specific game (review) from a card's drill-down list. */
+  onOpenGame?: (gameId: string) => void
 }
 
 // Distinct colors per participant, tinted by kind so humans/computers/LLMs read
@@ -38,7 +40,7 @@ function kindIcon(kind: ParticipantKind) {
   return <Sparkles className="h-3.5 w-3.5 text-purple-400" />
 }
 
-export default function StatsPage({ onBack, initialGroupKey }: StatsPageProps) {
+export default function StatsPage({ onBack, initialGroupKey, onOpenGame }: StatsPageProps) {
   const { data, isLoading } = usePlayerStats()
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map())
 
@@ -99,7 +101,7 @@ export default function StatsPage({ onBack, initialGroupKey }: StatsPageProps) {
                 ref={el => { if (el) cardRefs.current.set(group.key, el) }}
                 className="scroll-mt-20"
               >
-                <GameTypeCard group={group} highlight={group.key === initialGroupKey} />
+                <GameTypeCard group={group} highlight={group.key === initialGroupKey} onOpenGame={onOpenGame} />
               </div>
             ))}
             <p className="text-center text-xs text-amber-500/50 pt-1">
@@ -112,7 +114,8 @@ export default function StatsPage({ onBack, initialGroupKey }: StatsPageProps) {
   )
 }
 
-function GameTypeCard({ group, highlight }: { group: GameTypeGroup; highlight?: boolean }) {
+function GameTypeCard({ group, highlight, onOpenGame }: { group: GameTypeGroup; highlight?: boolean; onOpenGame?: (gameId: string) => void }) {
+  const [showGames, setShowGames] = useState(false)
   const colors = assignColors(group.participants)
   const series: BoxSeries[] = group.participants.map(p => ({
     label: p.label,
@@ -126,9 +129,16 @@ function GameTypeCard({ group, highlight }: { group: GameTypeGroup; highlight?: 
       <CardHeader className="pb-3">
         <CardTitle className="text-amber-300 text-base flex items-center justify-between gap-2">
           <span>{group.label}</span>
-          <span className="text-xs font-normal px-2 py-0.5 rounded-full bg-amber-800/40 text-amber-400">
+          <button
+            type="button"
+            onClick={() => setShowGames(v => !v)}
+            aria-expanded={showGames}
+            title="Show the individual games"
+            className="text-xs font-normal px-2 py-0.5 rounded-full bg-amber-800/40 text-amber-400 hover:bg-amber-800/60 hover:text-amber-200 transition-colors inline-flex items-center gap-1"
+          >
             {group.gameCount} game{group.gameCount !== 1 ? 's' : ''}
-          </span>
+            {showGames ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          </button>
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
@@ -168,6 +178,42 @@ function GameTypeCard({ group, highlight }: { group: GameTypeGroup; highlight?: 
 
         {/* Distribution box plot */}
         <BoxPlot series={series} />
+
+        {/* Drill-down: the individual games behind this type */}
+        {showGames && (
+          <div className="space-y-1.5 pt-3 border-t border-amber-900/20">
+            {group.games.map(g => (
+              <div
+                key={g.gameId}
+                className="flex items-center justify-between gap-3 py-1.5 px-3 rounded-lg bg-amber-950/40 border border-amber-900/20"
+              >
+                <div className="min-w-0">
+                  <div className="text-[11px] text-amber-400/60">
+                    {g.finishedAt
+                      ? new Date(g.finishedAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' })
+                      : 'Unknown date'}
+                  </div>
+                  <div className="text-sm flex flex-wrap gap-x-2 gap-y-0.5">
+                    {g.scores.map((s, i) => (
+                      <span key={i} className={cn('tabular-nums', s.isWinner ? 'text-green-400 font-semibold' : 'text-amber-200/80')}>
+                        {s.label}: {s.score}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+                {onOpenGame && (
+                  <Button
+                    size="sm"
+                    onClick={() => onOpenGame(g.gameId)}
+                    className="shrink-0 bg-amber-900/60 hover:bg-amber-800/70 text-amber-200 border border-amber-700/40 font-semibold"
+                  >
+                    Review
+                  </Button>
+                )}
+              </div>
+            ))}
+          </div>
+        )}
       </CardContent>
     </Card>
   )

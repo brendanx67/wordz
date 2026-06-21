@@ -82,7 +82,11 @@ function App() {
   if (showStats) {
     return (
       <>
-        <StatsPage onBack={() => setShowStats(false)} initialGroupKey={statsTargetKey} />
+        <StatsPage
+          onBack={() => setShowStats(false)}
+          initialGroupKey={statsTargetKey}
+          onOpenGame={(id) => { setShowStats(false); setCurrentGameId(id) }}
+        />
         <Toaster />
       </>
     )
