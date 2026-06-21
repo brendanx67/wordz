@@ -5,10 +5,12 @@
 //
 // - percentile: deterministic. Plays the move at rank
 //   floor((1 - strength/100) * (N - 1)) of the score-descending list.
-//   strength=100 → top move ("Hard"). strength=80 → "Medium",
-//   75 → "Easy". The create-game form's slider only exposes 75–100
-//   because lower values play too softly to be interesting; the engine
-//   still handles them for any legacy game rows below the floor.
+//   strength=100 → top move ("Hard"). strength=95 → "Medium",
+//   90 → "Easy". The create-game form's slider only exposes 90–100:
+//   measured play shows the engine is already a weak player by p90
+//   (it averaged ~70–100 pts/game against a ~300-pt human), so the whole
+//   meaningful difficulty band lives in 90–100. The engine still handles
+//   lower values for any legacy game rows below the floor.
 //
 // - dynamic: catches up to the current leader. Targets a per-turn score of
 //   `gap + (strength/100) * leaderAvgMove` and plays the move closest to it,
@@ -95,8 +97,8 @@ export function countPlaysByPlayer(
 
 /** Named presets exposed in the create-game form. */
 export const PRESETS = [
-  { name: 'Easy', strategy: 'percentile' as Strategy, strength: 75 },
-  { name: 'Medium', strategy: 'percentile' as Strategy, strength: 80 },
+  { name: 'Easy', strategy: 'percentile' as Strategy, strength: 90 },
+  { name: 'Medium', strategy: 'percentile' as Strategy, strength: 95 },
   { name: 'Hard', strategy: 'percentile' as Strategy, strength: 100 },
   { name: 'Competitive', strategy: 'dynamic' as Strategy, strength: 100 },
 ] as const
@@ -117,11 +119,11 @@ export function computerDescription(strategy: Strategy, strength: number): strin
     if (strength === 100) {
       return 'Brute-force algorithm (Hard) — exhaustively searches all legal moves and always plays the highest-scoring one'
     }
-    if (strength === 80) {
-      return 'Algorithm (Medium, percentile 80) — plays the move at the 80th percentile of the score-sorted list'
+    if (strength === 95) {
+      return 'Algorithm (Medium, percentile 95) — plays the move at the 95th percentile of the score-sorted list'
     }
-    if (strength === 75) {
-      return 'Algorithm (Easy, percentile 75) — plays the move at the 75th percentile of the score-sorted list'
+    if (strength === 90) {
+      return 'Algorithm (Easy, percentile 90) — plays the move at the 90th percentile of the score-sorted list'
     }
     return `Algorithm (Custom, percentile ${strength}) — plays the move at the ${strength}th percentile of the score-sorted list`
   }

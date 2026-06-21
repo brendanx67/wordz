@@ -239,13 +239,15 @@ export default function CreateGameForm({ onCreateGame, onCancel, isPending }: Cr
                   const strategy = slot.computerStrategy ?? 'percentile'
                   const strength = slot.computerStrength ?? 100
                   // Tightened ranges: handicapping below these floors is too
-                  // soft to play against. Percentile 75–100 keeps the slider
-                  // in interesting territory (Easy=75 plays a credible move
-                  // every turn). Dynamic 91–100 means a "Competitive" CPU
-                  // never falls more than ~9% of an average move per turn
-                  // behind the leader. Lower values are still accepted by
-                  // the engine for any legacy game rows that have them.
-                  const sliderMin = strategy === 'percentile' ? 75 : 91
+                  // soft to play against. Measured play shows the engine is
+                  // already very weak by p90, so the percentile slider exposes
+                  // only 90–100 (11 stops) — the band where difficulty actually
+                  // changes, with presets Easy=90, Medium=95, Hard=100 landing
+                  // on it. Dynamic 91–100 means a "Competitive" CPU never falls
+                  // more than ~9% of an average move per turn behind the leader.
+                  // Lower values are still accepted by the engine for any legacy
+                  // game rows that have them.
+                  const sliderMin = strategy === 'percentile' ? 90 : 91
                   const label = computerLabel(strategy, strength)
                   return (
                     <div className="space-y-2 px-2.5 py-2 rounded-md bg-emerald-950/20 border border-emerald-800/30">
