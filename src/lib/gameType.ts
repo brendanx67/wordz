@@ -123,7 +123,9 @@ function buildGroupLabel(tagCounts: Map<string, number>): string {
   return tags
     .map(t => {
       const c = tagCounts.get(t)!
-      if (t === 'Human') return `${c} Human${c > 1 ? 's' : ''}`
+      // Drop the "1 " for a lone human in a mixed type: "Human + Computer (P97)"
+      // reads better than "1 Human + Computer (P97)".
+      if (t === 'Human') return c > 1 ? `${c} Humans` : 'Human'
       return c > 1 ? `${c}× ${t}` : t
     })
     .join(' + ')
