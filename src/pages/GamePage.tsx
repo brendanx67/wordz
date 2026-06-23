@@ -272,6 +272,19 @@ export default function GamePage({ gameId, userId, onBack, onOpenStats }: GamePa
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [game?.current_turn, game?.status, game?.updated_at, moveCount])
 
+  // When a game starts (status flips to 'active') or we land directly on an
+  // already-active game, scroll to the top so the turn banner is visible. On
+  // phones the board is tall enough to push the "your turn" banner below the
+  // fold, so without this you'd have to scroll up to see whose turn it is.
+  // Keyed on the primitive status string + gameId so it fires once per
+  // game-start transition — not on every realtime update while active, which
+  // would yank the view to the top mid-game.
+  useEffect(() => {
+    if (isMobile && game?.status === 'active') {
+      window.scrollTo({ top: 0, behavior: 'auto' })
+    }
+  }, [game?.status, gameId, isMobile])
+
   // Move mutations (extracted to useMoveMutations)
   const {
     submitting,
@@ -660,17 +673,24 @@ export default function GamePage({ gameId, userId, onBack, onOpenStats }: GamePa
 
               {isMyTurn && (
                 <>
-                  <GameControls
-                    hasPlacedTiles={placedTiles.size > 0}
-                    submitting={submitting}
-                    isExchangeMode={isExchangeMode}
-                    exchangeSelectionSize={exchangeSelection.size}
-                    onSubmit={handleSubmitMove}
-                    onRecall={handleRecall}
-                    onToggleExchange={toggleExchangeMode}
-                    onPass={handlePass}
-                    onChallenge={handleChallenge}
-                  />
+                  {/* Extra top padding on mobile keeps Submit/Pass a finger-safe
+                      distance below the rack — without it the buttons sit ~4px
+                      under the tiles and get hit by accident while placing the
+                      last tile. Padding (not margin) avoids clashing with the
+                      wrapper's space-y on this same element. */}
+                  <div className={cn(isMobile && 'pt-4')}>
+                    <GameControls
+                      hasPlacedTiles={placedTiles.size > 0}
+                      submitting={submitting}
+                      isExchangeMode={isExchangeMode}
+                      exchangeSelectionSize={exchangeSelection.size}
+                      onSubmit={handleSubmitMove}
+                      onRecall={handleRecall}
+                      onToggleExchange={toggleExchangeMode}
+                      onPass={handlePass}
+                      onChallenge={handleChallenge}
+                    />
+                  </div>
                   {placedTiles.size === 0 && !hidePlayHint && (
                     <div className="flex items-center justify-center gap-1 rounded-lg bg-green-900/15 overflow-hidden">
                       <div className={cn('text-green-400 font-medium', isMobile ? 'text-xs px-3 py-1' : 'text-sm px-4 py-2')}>
