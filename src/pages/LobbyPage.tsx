@@ -13,6 +13,7 @@ import { toast } from 'sonner'
 import CreateGameForm from '@/components/CreateGameForm'
 import type { GameConfig } from '@/components/CreateGameForm'
 import { saveLastGameConfig } from '@/lib/lastGameConfig'
+import { supabase } from '@/lib/supabase'
 import LobbyChatPanel from '@/components/LobbyChatPanel'
 
 function getDisplayName(profiles: { display_name: string } | { display_name: string }[] | null): string {
@@ -41,6 +42,7 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame, 
   const startGame = useStartGame()
   const cancelGame = useCancelGame()
   const [showCreateForm, setShowCreateForm] = useState(false)
+  const [simulating, setSimulating] = useState(false)
   const [resignGameId, setResignGameId] = useState<string | null>(null)
   const resignGame = myGames?.find((g: { id: string }) => g.id === resignGameId)
   const resignLabel = resignGame?.status === 'waiting' ? 'Cancel' : 'Resign'
@@ -60,15 +62,30 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame, 
     })
   }, [])
 
-  const handleCreateGame = async (config: GameConfig) => {
+  const handleCreateGame = async (config: GameConfig, opts?: { simulate?: boolean }) => {
     try {
       const result = await createConfiguredGame.mutateAsync({ userId, config, displayName })
       // Remember this configuration so the form suggests it again next time.
       saveLastGameConfig(config)
+      if (opts?.simulate) {
+        // All-computer game: run it to completion server-side, then open it
+        // in review rather than watching each move. Falls back to watching
+        // live if the simulation call fails (e.g. function not deployed yet).
+        setSimulating(true)
+        const { data, error } = await supabase.functions.invoke('simulate-game', { body: { game_id: result.gameId } })
+        setSimulating(false)
+        if (error || (data && data.error)) {
+          toast.error('Could not simulate — opening the game to watch instead')
+        } else {
+          toast.success('Game simulated!')
+        }
+      } else {
+        toast.success('Game created!')
+      }
       setShowCreateForm(false)
-      toast.success('Game created!')
       onOpenGame(result.gameId)
     } catch {
+      setSimulating(false)
       toast.error('Failed to create game')
     }
   }
@@ -134,7 +151,7 @@ export default function LobbyPage({ userId, displayName, onSignOut, onOpenGame, 
           <CreateGameForm
             onCreateGame={handleCreateGame}
             onCancel={() => setShowCreateForm(false)}
-            isPending={createConfiguredGame.isPending}
+            isPending={createConfiguredGame.isPending || simulating}
           />
         ) : (
           <div className="flex justify-center gap-3">

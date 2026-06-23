@@ -5,7 +5,7 @@ import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Input } from '@/components/ui/input'
 import { Slider } from '@/components/ui/slider'
-import { Bot, User, Play, X, Sparkles, Search, BookOpen } from 'lucide-react'
+import { Bot, User, Play, X, Sparkles, Search, BookOpen, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { computerLabel, PRESETS, type Strategy } from '@/lib/_shared/computerStrategy'
 import { loadLastGameConfig } from '@/lib/lastGameConfig'
@@ -43,7 +43,7 @@ export interface GameConfig {
 }
 
 interface CreateGameFormProps {
-  onCreateGame: (config: GameConfig) => void
+  onCreateGame: (config: GameConfig, opts?: { simulate?: boolean }) => void
   onCancel: () => void
   isPending: boolean
 }
@@ -88,6 +88,9 @@ export default function CreateGameForm({ onCreateGame, onCancel, isPending }: Cr
   const hasApiPlayer = slots.some(s => s.type === 'api-player')
   const activePlayers = slots.filter(s => s.type !== 'none')
   const isValid = activePlayers.length >= 2
+  // An all-computer game has no one on the clock, so it can either be watched
+  // live or simulated to completion in ~a second (#24 simulate-game).
+  const isAllComputer = isValid && activePlayers.every(s => s.type === 'computer')
 
   const updateSlot = (index: number, type: PlayerSlotType) => {
     setSlots(prev => {
@@ -412,16 +415,43 @@ export default function CreateGameForm({ onCreateGame, onCancel, isPending }: Cr
         </div>
 
         {/* Actions */}
-        <div className="flex gap-3">
-          <Button
-            onClick={() => onCreateGame({ players: slots, computerDelay, wordFinderEnabled })}
-            disabled={!isValid || isPending}
-            className="flex-1 bg-amber-700 hover:bg-amber-600 text-amber-50 font-semibold py-5"
-          >
-            <Play className="h-4 w-4 mr-2" />
-            {isPending ? 'Creating...' : 'Start Game'}
-          </Button>
-        </div>
+        {isAllComputer ? (
+          <div className="space-y-2">
+            <div className="flex gap-3">
+              <Button
+                onClick={() => onCreateGame({ players: slots, computerDelay, wordFinderEnabled }, { simulate: true })}
+                disabled={!isValid || isPending}
+                className="flex-1 bg-amber-700 hover:bg-amber-600 text-amber-50 font-semibold py-5"
+              >
+                <Zap className="h-4 w-4 mr-2" />
+                {isPending ? 'Working...' : 'Simulate Game'}
+              </Button>
+              <Button
+                onClick={() => onCreateGame({ players: slots, computerDelay, wordFinderEnabled }, { simulate: false })}
+                disabled={!isValid || isPending}
+                variant="outline"
+                className="flex-1 border-amber-700/50 bg-amber-950/30 hover:bg-amber-900/40 text-amber-200 hover:text-amber-100 font-semibold py-5"
+              >
+                <Play className="h-4 w-4 mr-2" />
+                Watch Live
+              </Button>
+            </div>
+            <p className="text-amber-400/80 text-xs text-center">
+              Simulate plays the whole game instantly, then opens it for review. Watch Live plays move by move.
+            </p>
+          </div>
+        ) : (
+          <div className="flex gap-3">
+            <Button
+              onClick={() => onCreateGame({ players: slots, computerDelay, wordFinderEnabled })}
+              disabled={!isValid || isPending}
+              className="flex-1 bg-amber-700 hover:bg-amber-600 text-amber-50 font-semibold py-5"
+            >
+              <Play className="h-4 w-4 mr-2" />
+              {isPending ? 'Creating...' : 'Start Game'}
+            </Button>
+          </div>
+        )}
 
         {!isValid && (
           <p className="text-red-400/70 text-xs text-center">At least 2 players are required</p>
