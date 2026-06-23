@@ -40,6 +40,10 @@ export interface GameTypeGroup {
   games: GameSummary[]
   /** Seat specs for the type, enough to recreate it as a new game (#23). */
   composition: SeatSpec[]
+  /** Mean of the combined (all-seat) score across this type's games. */
+  meanTotalScore: number
+  /** Highest combined (all-seat) score across this type's games. */
+  maxTotalScore: number
 }
 
 export type { SeatSpec } from '@/lib/gameType'
@@ -102,24 +106,32 @@ export function usePlayerStats() {
         }
       }
 
-      const result: GameTypeGroup[] = [...groups.entries()].map(([key, acc]) => ({
-        key,
-        label: acc.label,
-        gameCount: acc.gameCount,
-        participants: [...acc.parts.entries()]
-          .map(([pk, p]) => ({
-            key: pk,
-            label: p.label,
-            kind: p.kind,
-            games: p.scores.length,
-            wins: p.wins,
-            stats: computeBoxStats(p.scores),
-          }))
-          .sort((a, b) => KIND_RANK[a.kind] - KIND_RANK[b.kind] || b.games - a.games || b.stats.mean - a.stats.mean),
-        // Newest games first for the drill-down list.
-        games: acc.games.sort((a, b) => (b.finishedAt ?? '').localeCompare(a.finishedAt ?? '')),
-        composition: acc.composition,
-      }))
+      const result: GameTypeGroup[] = [...groups.entries()].map(([key, acc]) => {
+        // Combined (all-seat) score per game → mean and max for this type.
+        const totals = acc.games.map(g => g.scores.reduce((s, x) => s + x.score, 0))
+        const meanTotalScore = totals.length ? totals.reduce((a, b) => a + b, 0) / totals.length : 0
+        const maxTotalScore = totals.length ? Math.max(...totals) : 0
+        return {
+          key,
+          label: acc.label,
+          gameCount: acc.gameCount,
+          participants: [...acc.parts.entries()]
+            .map(([pk, p]) => ({
+              key: pk,
+              label: p.label,
+              kind: p.kind,
+              games: p.scores.length,
+              wins: p.wins,
+              stats: computeBoxStats(p.scores),
+            }))
+            .sort((a, b) => KIND_RANK[a.kind] - KIND_RANK[b.kind] || b.games - a.games || b.stats.mean - a.stats.mean),
+          // Newest games first for the drill-down list.
+          games: acc.games.sort((a, b) => (b.finishedAt ?? '').localeCompare(a.finishedAt ?? '')),
+          composition: acc.composition,
+          meanTotalScore,
+          maxTotalScore,
+        }
+      })
 
       // Most-played game types first — that's where the data is richest.
       result.sort((a, b) => b.gameCount - a.gameCount || a.label.localeCompare(b.label))

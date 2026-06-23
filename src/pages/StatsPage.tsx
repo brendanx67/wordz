@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -52,7 +52,16 @@ export default function StatsPage({ onBack, userId, displayName, initialGroupKey
   const createConfiguredGame = useCreateConfiguredGame()
   const [creatingKey, setCreatingKey] = useState<string | null>(null)
   const [batchGroup, setBatchGroup] = useState<GameTypeGroup | null>(null)
+  const [sortBy, setSortBy] = useState<'played' | 'mean' | 'max'>('played')
   const cardRefs = useRef<Map<string, HTMLDivElement>>(new Map())
+
+  const sortedGroups = useMemo(() => {
+    const g = [...(data?.groups ?? [])]
+    if (sortBy === 'mean') g.sort((a, b) => b.meanTotalScore - a.meanTotalScore || a.label.localeCompare(b.label))
+    else if (sortBy === 'max') g.sort((a, b) => b.maxTotalScore - a.maxTotalScore || a.label.localeCompare(b.label))
+    else g.sort((a, b) => b.gameCount - a.gameCount || a.label.localeCompare(b.label))
+    return g
+  }, [data, sortBy])
 
   // Once data is in, scroll the deep-linked matchup card into view (#23).
   useEffect(() => {
@@ -120,7 +129,25 @@ export default function StatsPage({ onBack, userId, displayName, initialGroupKey
           </Card>
         ) : (
           <>
-            {data.groups.map(group => {
+            <div className="flex items-center gap-2 flex-wrap">
+              <span className="text-xs text-amber-400/60 uppercase tracking-wider">Sort by</span>
+              {([['played', 'Most played'], ['mean', 'Mean total'], ['max', 'Max total']] as const).map(([key, label]) => (
+                <button
+                  key={key}
+                  type="button"
+                  onClick={() => setSortBy(key)}
+                  className={cn(
+                    'px-3 py-1 rounded-md text-xs font-semibold border transition-colors',
+                    sortBy === key
+                      ? 'bg-amber-700/70 border-amber-400 text-white'
+                      : 'bg-amber-950/40 border-amber-800/40 text-amber-300/80 hover:text-amber-100 hover:border-amber-600/50'
+                  )}
+                >
+                  {label}
+                </button>
+              ))}
+            </div>
+            {sortedGroups.map(group => {
               const isAllComputer = group.composition.length >= 2 && group.composition.every(s => s.kind === 'computer')
               return (
                 <div
@@ -213,6 +240,10 @@ function GameTypeCard({ group, highlight, onOpenGame, onNewGame, creating, onMor
         </CardTitle>
       </CardHeader>
       <CardContent className="space-y-4">
+        <div className="text-[11px] text-amber-400/60">
+          Game total — avg {Math.round(group.meanTotalScore)} · best {group.maxTotalScore}
+        </div>
+
         {/* Top-line stats table */}
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
