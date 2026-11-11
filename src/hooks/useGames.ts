@@ -95,38 +95,34 @@ export function useMyGames(userId: string | undefined) {
     queryKey: ['games', 'mine', userId],
     enabled: !!userId,
     queryFn: async () => {
-      // Get games where user is a player
-      const { data: playerRows, error: pErr } = await supabase
-        .from('game_players')
-        .select('game_id')
-        .eq('player_id', userId!)
-      if (pErr) throw pErr
+      // Games the user sits in, plus games they created (spectator games).
+      // Both filter on the server by join or column, never by a list of game
+      // IDs in the URL, which the gateway rejects once the list grows long.
+      const [seated, created] = await Promise.all([
+        supabase
+          .from('games')
+          .select(`
+            id, created_by, status, current_turn, created_at, has_computer, computer_players,
+            game_players(player_id, score, find_words_enabled, profiles(display_name)),
+            mine:game_players!inner(player_id)
+          `)
+          .eq('mine.player_id', userId!)
+          .in('status', ['active', 'waiting']),
+        supabase
+          .from('games')
+          .select(`
+            id, created_by, status, current_turn, created_at, has_computer, computer_players,
+            game_players(player_id, score, find_words_enabled, profiles(display_name))
+          `)
+          .eq('created_by', userId!)
+          .in('status', ['active', 'waiting']),
+      ])
+      if (seated.error) throw seated.error
+      if (created.error) throw created.error
 
-      // Also get games where user is the creator (for spectator games)
-      const { data: createdRows, error: cErr } = await supabase
-        .from('games')
-        .select('id')
-        .eq('created_by', userId!)
-        .in('status', ['active', 'waiting'])
-      if (cErr) throw cErr
-
-      const gameIds = [...new Set([
-        ...playerRows.map(r => r.game_id),
-        ...(createdRows || []).map(r => r.id),
-      ])]
-      if (gameIds.length === 0) return []
-
-      const { data, error } = await supabase
-        .from('games')
-        .select(`
-          id, created_by, status, current_turn, created_at, has_computer, computer_players,
-          game_players(player_id, score, find_words_enabled, profiles(display_name))
-        `)
-        .in('id', gameIds)
-        .in('status', ['active', 'waiting'])
-        .order('created_at', { ascending: false })
-      if (error) throw error
-      return data
+      const byId = new Map<string, (typeof created.data)[number]>()
+      for (const game of [...seated.data, ...created.data]) byId.set(game.id, game)
+      return [...byId.values()].sort((a, b) => Date.parse(b.created_at ?? '') - Date.parse(a.created_at ?? ''))
     },
     refetchInterval: 5000,
   })
