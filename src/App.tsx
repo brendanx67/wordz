@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react'
 import { Toaster } from '@/components/ui/sonner'
 import { useAuth } from '@/hooks/useAuth'
 import AuthPage from '@/pages/AuthPage'
+import ResetPasswordPage from '@/pages/ResetPasswordPage'
 import LobbyPage from '@/pages/LobbyPage'
 import GamePage from '@/pages/GamePage'
 import AccountPage from '@/pages/AccountPage'
@@ -11,7 +12,7 @@ import AnalysisPage from '@/pages/AnalysisPage'
 import { supabase } from '@/lib/supabase'
 
 function App() {
-  const { user, loading, signUp, signIn, signOut } = useAuth()
+  const { user, loading, recovering, signUp, signIn, signOut, requestPasswordReset, completePasswordReset, skipPasswordReset } = useAuth()
   const [currentGameId, setCurrentGameId] = useState<string | null>(null)
   const [showAccount, setShowAccount] = useState(false)
   const [showOverview, setShowOverview] = useState(false)
@@ -64,7 +65,18 @@ function App() {
             }
             return signIn(email, password)
           }}
+          onRequestReset={requestPasswordReset}
         />
+        <Toaster />
+      </>
+    )
+  }
+
+  // Opened from a password-reset email: set the new password before anything else.
+  if (recovering) {
+    return (
+      <>
+        <ResetPasswordPage email={user.email ?? ''} onSubmit={completePasswordReset} onSkip={skipPasswordReset} />
         <Toaster />
       </>
     )

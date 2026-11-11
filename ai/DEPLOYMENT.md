@@ -91,4 +91,5 @@ Set in **Supabase Dashboard → Authentication**:
 
 - **URL Configuration → Site URL**: `https://wordz-five.vercel.app`
 - **URL Configuration → Redirect URLs**: include `https://wordz-five.vercel.app/**`, the preview-deploy wildcard `https://wordz-*-brendanx67s-projects.vercel.app/**`, and `http://localhost:3000/**` for local dev.
+- **Password reset**: the sign-in page has a "Forgot password?" link that calls `resetPasswordForEmail` with `redirectTo` set to the origin the app is running on, so that origin must be covered by the Redirect URLs above. The emailed link opens the app signed in with `type=recovery` in the URL fragment; `useAuth` sees that (and the `PASSWORD_RECOVERY` event) and `App.tsx` shows `ResetPasswordPage` to set the new password. The email uses the default "Reset Password" template. Supabase's built-in mailer only delivers to addresses of the project's own team members and allows a few emails per hour; other users need custom SMTP (**Authentication → Emails → SMTP Settings**).
 - **Sign In / Providers → User Signups → Confirm email**: **off**, to keep the public showcase low-friction. Re-enable if abuse becomes an issue.
