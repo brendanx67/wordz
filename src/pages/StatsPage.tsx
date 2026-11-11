@@ -1,11 +1,12 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { ArrowLeft, BarChart3, Users, Bot, Sparkles, ChevronDown, ChevronUp, Plus } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { usePlayerStats, type GameTypeGroup, type ParticipantKind, type ParticipantSeries } from '@/hooks/usePlayerStats'
+import { usePlayerStats, type GameTypeGroup, type ParticipantKind, type ParticipantSeries, type StatsWindow } from '@/hooks/usePlayerStats'
+import { STATS_WINDOWS, loadStatsWindow, saveStatsWindow } from '@/lib/playerStats'
 import { useCreateConfiguredGame } from '@/hooks/useGames'
 import { configFromComposition } from '@/lib/gameConfigFromType'
 import { saveLastGameConfig } from '@/lib/lastGameConfig'
@@ -48,7 +49,8 @@ function kindIcon(kind: ParticipantKind) {
 }
 
 export default function StatsPage({ onBack, userId, displayName, initialGroupKey, onOpenGame }: StatsPageProps) {
-  const { data, isLoading } = usePlayerStats()
+  const [statsWindow, setStatsWindow] = useState<StatsWindow>(loadStatsWindow)
+  const { data, isLoading } = usePlayerStats(statsWindow)
   const createConfiguredGame = useCreateConfiguredGame()
   const [creatingKey, setCreatingKey] = useState<string | null>(null)
   const [batchGroup, setBatchGroup] = useState<GameTypeGroup | null>(null)
@@ -69,6 +71,11 @@ export default function StatsPage({ onBack, userId, displayName, initialGroupKey
     const el = cardRefs.current.get(initialGroupKey)
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }, [initialGroupKey, data])
+
+  const chooseWindow = (w: StatsWindow) => {
+    setStatsWindow(w)
+    saveStatsWindow(w)
+  }
 
   // Start a fresh game of a type's composition, then jump into it.
   const handleNewGame = async (group: GameTypeGroup) => {
@@ -121,7 +128,7 @@ export default function StatsPage({ onBack, userId, displayName, initialGroupKey
               </Card>
             ))}
           </div>
-        ) : !data || data.groups.length === 0 ? (
+        ) : !data || data.totalFinishedGames === 0 ? (
           <Card className="border-amber-900/30 bg-amber-950/30">
             <CardContent className="py-10 text-center text-amber-400/60 text-sm">
               No finished games yet. Play a few rounds and your score distributions will show up here.
@@ -129,24 +136,34 @@ export default function StatsPage({ onBack, userId, displayName, initialGroupKey
           </Card>
         ) : (
           <>
-            <div className="flex items-center gap-2 flex-wrap">
-              <span className="text-xs text-amber-400/60 uppercase tracking-wider">Sort by</span>
-              {([['played', 'Most played'], ['mean', 'Mean total'], ['max', 'Max total']] as const).map(([key, label]) => (
-                <button
-                  key={key}
-                  type="button"
-                  onClick={() => setSortBy(key)}
-                  className={cn(
-                    'px-3 py-1 rounded-md text-xs font-semibold border transition-colors',
-                    sortBy === key
-                      ? 'bg-amber-700/70 border-amber-400 text-white'
-                      : 'bg-amber-950/40 border-amber-800/40 text-amber-300/80 hover:text-amber-100 hover:border-amber-600/50'
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
+            <div className="space-y-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-amber-400/60 uppercase tracking-wider w-14">Games</span>
+                {STATS_WINDOWS.map(w => (
+                  <Chip key={w.id} active={statsWindow.id === w.id} onClick={() => chooseWindow(w)}>
+                    {w.label}
+                  </Chip>
+                ))}
+              </div>
+              <div className="flex items-center gap-2 flex-wrap">
+                <span className="text-xs text-amber-400/60 uppercase tracking-wider w-14">Sort by</span>
+                {([['played', 'Most played'], ['mean', 'Mean total'], ['max', 'Max total']] as const).map(([key, label]) => (
+                  <Chip key={key} active={sortBy === key} onClick={() => setSortBy(key)}>
+                    {label}
+                  </Chip>
+                ))}
+              </div>
+              {windowHint(statsWindow) && (
+                <p className="text-xs text-amber-400/60">{windowHint(statsWindow)}</p>
+              )}
             </div>
+            {sortedGroups.length === 0 && (
+              <Card className="border-amber-900/30 bg-amber-950/30">
+                <CardContent className="py-10 text-center text-amber-400/60 text-sm">
+                  No games in this span. Pick a longer one to see earlier games.
+                </CardContent>
+              </Card>
+            )}
             {sortedGroups.map(group => {
               const isAllComputer = group.composition.length >= 2 && group.composition.every(s => s.kind === 'computer')
               return (
@@ -167,7 +184,9 @@ export default function StatsPage({ onBack, userId, displayName, initialGroupKey
               )
             })}
             <p className="text-center text-xs text-amber-500/50 pt-1">
-              Based on {data.finishedGames} finished game{data.finishedGames !== 1 ? 's' : ''}.
+              {data.finishedGames === data.totalFinishedGames
+                ? `Based on ${data.finishedGames} finished game${data.finishedGames !== 1 ? 's' : ''}.`
+                : `Based on ${data.finishedGames} of ${data.totalFinishedGames} finished games.`}
             </p>
           </>
         )}
@@ -175,6 +194,31 @@ export default function StatsPage({ onBack, userId, displayName, initialGroupKey
 
       <BatchSimDialog group={batchGroup} userId={userId} displayName={displayName} onClose={() => setBatchGroup(null)} />
     </div>
+  )
+}
+
+/** One line saying which games a window covers; null for all time. */
+function windowHint(w: StatsWindow): string | null {
+  if (w.games != null) return `The ${w.games} most recent games of each game type.`
+  if (w.days != null) return `Games finished in the last ${w.days} days.`
+  return null
+}
+
+function Chip({ active, onClick, children }: { active: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      className={cn(
+        'px-3 py-1 rounded-md text-xs font-semibold border transition-colors',
+        active
+          ? 'bg-amber-700/70 border-amber-400 text-white'
+          : 'bg-amber-950/40 border-amber-800/40 text-amber-300/80 hover:text-amber-100 hover:border-amber-600/50'
+      )}
+    >
+      {children}
+    </button>
   )
 }
 
