@@ -69,7 +69,16 @@
   * {
     @apply border-border;
   }
+  /* The document is the board brown, not the navy `background` token. Every
+     page paints its own brown gradient, so this color only shows where the page
+     does not reach: overscroll, and in the iPhone Home Screen app the strip
+     behind the status bar, which iOS fades into the top of the page. In navy
+     that fade read as a dark shadow over the header. */
+  html,
   body {
-    @apply bg-background text-foreground;
+    background-color: #1a1208;
+  }
+  body {
+    @apply text-foreground;
   }
 }
