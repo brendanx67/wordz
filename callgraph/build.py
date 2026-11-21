@@ -3,15 +3,15 @@
 Generate the wordz callgraph HTML from snapshots.json.
 
 Shared pipeline lives in the pwiz-ai repo at ai/scripts/callgraph/core.py.
-That repo must be checked out as a sibling directory next to wordz — the
-same layout the project uses for local development (C:\\proj\\ai, C:\\proj\\wordz).
+That repo must be reachable as a sibling directory of wordz named ai.
 
 Usage:
+    python extract.py                         # writes out/snapshots.json
     python build.py [path/to/snapshots.json]
 
-Default snapshots.json path is the one produced by the extractor under
-ai/.tmp/wordz-timeline/out/snapshots.json. Writes callgraph-YYYY-MM-DD.html +
-callgraph-latest.html alongside this script.
+Default snapshots.json path is out/snapshots.json beside this script, which
+extract.py writes. Writes callgraph-YYYY-MM-DD.html + callgraph-latest.html
+alongside this script.
 
 Regenerating requires the sibling ai/ checkout. The generated HTML + data
 files are fully self-contained (aside from d3 from the CDN) and can be served
@@ -31,16 +31,14 @@ AI_REPO = HERE.parent.parent / "ai"                   # sibling checkout
 SHARED = AI_REPO / "scripts"
 if not (SHARED / "callgraph" / "core.py").exists():
     print(f"Shared core not found at {SHARED / 'callgraph' / 'core.py'}")
-    print("Check out brendanx67/pwiz-ai as a sibling of this repo.")
+    print("Check out ProteoWizard/pwiz-ai as a sibling of this repo, named ai.")
     sys.exit(1)
 sys.path.insert(0, str(SHARED))
 
 from callgraph import core  # noqa: E402
 
 
-DEFAULT_SNAPSHOTS = (
-    AI_REPO / ".tmp" / "wordz-timeline" / "out" / "snapshots.json"
-)
+DEFAULT_SNAPSHOTS = HERE / "out" / "snapshots.json"   # written by extract.py
 WORDZ_REPO = HERE.parent                              # for per-commit lines/tests
 
 

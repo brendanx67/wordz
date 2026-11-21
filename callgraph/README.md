@@ -24,7 +24,12 @@ for HTML — e.g. `raw.githack.com` or `jsdelivr.net`.
 - **`callgraph-YYYY-MM-DD.html`** — dated snapshot for history.
 - **`callgraph-manifest.js`** + **`callgraph-data-0.js`** — the timeline
   data. Must live next to the HTML.
-- **`build.py`** — generator. Loads `snapshots.json`, reclassifies
+- **`extract.py`** — extractor. Walks every commit on `master`, parses the
+  TypeScript with tree-sitter, and writes `out/snapshots.json`: functions,
+  methods, classes, interfaces and types, the files and folders that hold
+  them, and the call and JSX-use edges between them. `out/` is ignored by
+  git; it is rebuilt from history.
+- **`build.py`** — generator. Loads `out/snapshots.json`, reclassifies
   `src/components/ui/*` into a separate `components-ui` group, truncates
   at `end_commit_sha` so the story stays about week-one (later tooling
   commits are excluded), and writes HTML + data via the shared core.
@@ -32,15 +37,16 @@ for HTML — e.g. `raw.githack.com` or `jsdelivr.net`.
 ## Regenerating
 
 ```
+python extract.py
 python build.py
 ```
 
 Requires:
 
-1. `snapshots.json` from the extractor (default path:
-   `../../ai/.tmp/wordz-timeline/out/snapshots.json`).
-2. The **shared core** from the `pwiz-ai` repo checked out as a sibling
-   directory. `build.py` imports from `../../ai/scripts/callgraph/`. If
+1. The tree-sitter packages for the extractor:
+   `pip install tree-sitter tree-sitter-typescript`.
+2. The **shared core** from the `pwiz-ai` repo, reachable as a sibling
+   directory named `ai`. `build.py` imports from `../../ai/scripts/callgraph/`. If
    you only have this `wordz` clone, clone `pwiz-ai` next to it:
 
    ```

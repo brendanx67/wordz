@@ -32,3 +32,8 @@ public/wordz-mcp.zip
 # Supabase CLI local cache — pooler URL, version info, project ref.
 # Created by `supabase link`; per-machine state, never committed.
 supabase/.temp/
+
+# Callgraph: extractor output (rebuilt from history by callgraph/extract.py)
+# and Python's cache.
+callgraph/out/
+__pycache__/
